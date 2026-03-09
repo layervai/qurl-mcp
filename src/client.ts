@@ -89,11 +89,7 @@ export class QURLClient {
     this.baseURL = config.baseURL.replace(/\/$/, "");
   }
 
-  private async request<T>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<T> {
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
@@ -150,20 +146,11 @@ export class QURLClient {
     await this.request("DELETE", `/v1/qurls/${encodeURIComponent(id)}`);
   }
 
-  async extendQURL(
-    id: string,
-    input: ExtendQURLInput,
-  ): Promise<{ data: QURL }> {
-    return this.request(
-      "PATCH",
-      `/v1/qurls/${encodeURIComponent(id)}`,
-      input,
-    );
+  async extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }> {
+    return this.request("PATCH", `/v1/qurls/${encodeURIComponent(id)}`, input);
   }
 
-  async resolveQURL(
-    input: ResolveInput,
-  ): Promise<{ data: ResolveOutput }> {
+  async resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }> {
     return this.request("POST", "/v1/resolve", input);
   }
 

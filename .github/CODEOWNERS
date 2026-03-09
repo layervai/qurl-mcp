@@ -1,0 +1,13 @@
+# Default owners for everything
+* @layervai/platform
+
+# CI/CD
+/.github/workflows/ @layervai/platform
+
+# Source code
+/src/ @layervai/platform
+
+# Config files
+/.github/ @layervai/platform
+/package.json @layervai/platform
+/tsconfig.json @layervai/platform

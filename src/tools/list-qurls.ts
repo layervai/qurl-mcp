@@ -9,10 +9,7 @@ export const listQurlsSchema = z.object({
     .max(100)
     .optional()
     .describe("Maximum number of QURLs to return (default: 20)"),
-  cursor: z
-    .string()
-    .optional()
-    .describe("Pagination cursor from a previous response"),
+  cursor: z.string().optional().describe("Pagination cursor from a previous response"),
 });
 
 export function listQurlsTool(client: QURLClient) {
