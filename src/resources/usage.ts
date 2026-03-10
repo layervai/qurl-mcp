@@ -11,7 +11,7 @@ export function usageResource(client: IQURLClient) {
     handler: async () => {
       const result = await client.getQuota();
       return {
-        contents: [{ uri, mimeType, text: JSON.stringify(result.data, null, 2) }],
+        contents: [{ uri, mimeType, text: JSON.stringify(result.data) }],
       };
     },
   };

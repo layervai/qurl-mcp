@@ -82,7 +82,7 @@ describe("usageResource", () => {
       const resource = usageResource(client);
 
       const result = await resource.handler();
-      expect(result.contents[0].text).toBe(JSON.stringify(sampleQuota, null, 2));
+      expect(result.contents[0].text).toBe(JSON.stringify(sampleQuota));
     });
 
     it("propagates client errors", async () => {

@@ -11,7 +11,7 @@ export function linksResource(client: IQURLClient) {
     handler: async () => {
       const result = await client.listQURLs({ limit: 50 });
       return {
-        contents: [{ uri, mimeType, text: JSON.stringify(result.data, null, 2) }],
+        contents: [{ uri, mimeType, text: JSON.stringify(result.data) }],
       };
     },
   };

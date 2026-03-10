@@ -1,19 +1,22 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../server.js";
 import { makeMockClient } from "./helpers.js";
 
 describe("createServer", () => {
   let client: Client;
+  let server: McpServer;
 
   afterEach(async () => {
     await client?.close();
+    await server?.close();
   });
 
   async function connectServer() {
     const mockClient = makeMockClient();
-    const server = createServer(mockClient);
+    server = createServer(mockClient);
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
@@ -75,14 +78,12 @@ describe("createServer", () => {
       expect(resources).toHaveLength(2);
     });
 
-    it("registers resources with correct URIs and names", async () => {
+    it("registers resources with correct URIs", async () => {
       const { client } = await connectServer();
       const { resources } = await client.listResources();
 
-      // McpServer.resource(name, uri, handler) — name is the identifier
-      const byName = new Map(resources.map((r) => [r.name, r.uri]));
-      expect(byName.has("qurl://links")).toBe(true);
-      expect(byName.has("qurl://usage")).toBe(true);
+      const uris = resources.map((r) => r.uri).sort();
+      expect(uris).toEqual(["qurl://links", "qurl://usage"]);
     });
   });
 });

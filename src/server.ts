@@ -17,45 +17,29 @@ export function createServer(client: IQURLClient): McpServer {
 
   // Register tools
   const create = createQurlTool(client);
-  server.tool(create.name, create.description, createQurlSchema.shape, async (params) => {
-    return create.handler(params);
-  });
+  server.tool(create.name, create.description, createQurlSchema.shape, create.handler);
 
   const resolve = resolveQurlTool(client);
-  server.tool(resolve.name, resolve.description, resolveQurlSchema.shape, async (params) => {
-    return resolve.handler(params);
-  });
+  server.tool(resolve.name, resolve.description, resolveQurlSchema.shape, resolve.handler);
 
   const list = listQurlsTool(client);
-  server.tool(list.name, list.description, listQurlsSchema.shape, async (params) => {
-    return list.handler(params);
-  });
+  server.tool(list.name, list.description, listQurlsSchema.shape, list.handler);
 
   const get = getQurlTool(client);
-  server.tool(get.name, get.description, getQurlSchema.shape, async (params) => {
-    return get.handler(params);
-  });
+  server.tool(get.name, get.description, getQurlSchema.shape, get.handler);
 
   const del = deleteQurlTool(client);
-  server.tool(del.name, del.description, deleteQurlSchema.shape, async (params) => {
-    return del.handler(params);
-  });
+  server.tool(del.name, del.description, deleteQurlSchema.shape, del.handler);
 
   const extend = extendQurlTool(client);
-  server.tool(extend.name, extend.description, extendQurlSchema.shape, async (params) => {
-    return extend.handler(params);
-  });
+  server.tool(extend.name, extend.description, extendQurlSchema.shape, extend.handler);
 
-  // Register resources
+  // Register resources — server.resource(name, uri, handler)
   const links = linksResource(client);
-  server.resource(links.uri, links.name, async () => {
-    return links.handler();
-  });
+  server.resource(links.name, links.uri, links.handler);
 
   const usage = usageResource(client);
-  server.resource(usage.uri, usage.name, async () => {
-    return usage.handler();
-  });
+  server.resource(usage.name, usage.uri, usage.handler);
 
   return server;
 }
