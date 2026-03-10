@@ -1,12 +1,13 @@
 {
   "name": "@layerv/qurl-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for QURL - secure link management for AI agents",
   "type": "module",
   "bin": {
     "qurl-mcp": "./dist/index.js"
   },
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -17,7 +18,13 @@
     "format:check": "prettier --check 'src/**/*.ts'",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["mcp", "qurl", "layerv", "security", "ai-agents"],
+  "keywords": [
+    "mcp",
+    "qurl",
+    "layerv",
+    "security",
+    "ai-agents"
+  ],
   "author": "LayerV AI",
   "license": "MIT",
   "dependencies": {
@@ -26,10 +33,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",
-    "@types/node": "^22.15.3",
+    "@types/node": "^25.4.0",
     "@typescript-eslint/eslint-plugin": "^8.32.1",
     "@typescript-eslint/parser": "^8.32.1",
-    "eslint": "^9.27.0",
+    "eslint": "^10.0.3",
     "prettier": "^3.5.3",
     "typescript": "^5.8.3",
     "vitest": "^3.1.4"
@@ -39,5 +46,8 @@
   },
   "files": [
     "dist/"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { QURLClient } from "../client.js";
+import type { IQURLClient } from "../client.js";
 
 export const resolveQurlSchema = z.object({
   access_token: z
@@ -7,7 +7,7 @@ export const resolveQurlSchema = z.object({
     .describe("The access token from a QURL link (e.g., at_k8xqp9h2sj9lx7r4a)"),
 });
 
-export function resolveQurlTool(client: QURLClient) {
+export function resolveQurlTool(client: IQURLClient) {
   return {
     name: "resolve_qurl",
     description:
@@ -21,7 +21,7 @@ export function resolveQurlTool(client: QURLClient) {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(result.data, null, 2),
+            text: JSON.stringify(result.data),
           },
         ],
       };

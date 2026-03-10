@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { QURLClient } from "../client.js";
+import type { IQURLClient } from "../client.js";
 
 export const createQurlSchema = z.object({
   target_url: z.string().url().describe("The URL to protect with QURL"),
@@ -7,9 +7,10 @@ export const createQurlSchema = z.object({
   expires_in: z.string().optional().describe('Duration string (e.g., "1h", "24h", "168h")'),
   one_time_use: z.boolean().optional().describe("Whether the link can only be used once"),
   max_sessions: z.number().int().positive().optional().describe("Maximum concurrent sessions"),
+  metadata: z.record(z.unknown()).optional().describe("Custom metadata key-value pairs"),
 });
 
-export function createQurlTool(client: QURLClient) {
+export function createQurlTool(client: IQURLClient) {
   return {
     name: "create_qurl",
     description:
@@ -22,7 +23,7 @@ export function createQurlTool(client: QURLClient) {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(result.data, null, 2),
+            text: JSON.stringify(result.data),
           },
         ],
       };
