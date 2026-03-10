@@ -17,7 +17,7 @@ export const secureAServiceArgs = {
     .describe("Whether the link should be single-use"),
   max_sessions: z
     .string()
-    .regex(/^\d+$/, "Must be a positive integer")
+    .regex(/^[1-9]\d*$/, "Must be a positive integer")
     .optional()
     .describe("Maximum number of concurrent sessions (e.g., \"1\", \"5\")"),
 };

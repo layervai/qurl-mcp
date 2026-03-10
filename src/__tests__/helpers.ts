@@ -17,7 +17,9 @@ export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClien
 
 export function getPromptText(result: GetPromptResult, index = 0): string {
   const content = result.messages[index].content;
-  return (content as { type: "text"; text: string }).text;
+  if (typeof content === "string") return content;
+  if (content.type !== "text") throw new Error(`Expected text content, got ${content.type}`);
+  return content.text;
 }
 
 export function sampleQURL(overrides: Partial<QURL> = {}): QURL {
