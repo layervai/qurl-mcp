@@ -8,6 +8,9 @@ import { deleteQurlTool, deleteQurlSchema } from "./tools/delete-qurl.js";
 import { extendQurlTool, extendQurlSchema } from "./tools/extend-qurl.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
+import { secureAServicePrompt } from "./prompts/secure-a-service.js";
+import { auditLinksPrompt } from "./prompts/audit-links.js";
+import { rotateAccessPrompt } from "./prompts/rotate-access.js";
 
 export function createServer(client: IQURLClient, version: string): McpServer {
   const server = new McpServer({
@@ -40,6 +43,16 @@ export function createServer(client: IQURLClient, version: string): McpServer {
 
   const usage = usageResource(client);
   server.resource(usage.name, usage.uri, usage.handler);
+
+  // Register prompts
+  const secure = secureAServicePrompt();
+  server.registerPrompt(secure.name, { description: secure.description, argsSchema: secure.args }, secure.handler);
+
+  const audit = auditLinksPrompt();
+  server.registerPrompt(audit.name, { description: audit.description }, audit.handler);
+
+  const rotate = rotateAccessPrompt();
+  server.registerPrompt(rotate.name, { description: rotate.description, argsSchema: rotate.args }, rotate.handler);
 
   return server;
 }
