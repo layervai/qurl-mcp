@@ -170,6 +170,7 @@ feat(tools)!: rename resolve_qurl to resolve tool
 | `tools` | MCP tool implementations |
 | `client` | API client |
 | `resources` | MCP resources |
+| `prompts` | MCP prompts |
 | `ci` | GitHub Actions workflows |
 | `deps` | Dependencies |
 
