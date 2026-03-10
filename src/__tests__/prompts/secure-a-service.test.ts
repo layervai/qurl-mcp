@@ -66,6 +66,16 @@ describe("secureAServicePrompt", () => {
       expect(getPromptText(result)).toContain("one_time_use: true");
     });
 
+    it("includes one_time_use as false when set to false", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({
+        target_url: "https://example.com",
+        one_time_use: "false",
+      });
+
+      expect(getPromptText(result)).toContain("one_time_use: false");
+    });
+
     it("includes max_sessions when provided", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({

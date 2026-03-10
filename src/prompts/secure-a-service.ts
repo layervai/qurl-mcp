@@ -12,11 +12,12 @@ export const secureAServiceArgs = {
     .optional()
     .describe('How long the link should be valid (e.g., "1h", "24h", "168h")'),
   one_time_use: z
-    .string()
+    .enum(["true", "false"])
     .optional()
-    .describe('Whether the link should be single-use ("true" or "false")'),
+    .describe("Whether the link should be single-use"),
   max_sessions: z
     .string()
+    .regex(/^\d+$/, "Must be a positive integer")
     .optional()
     .describe("Maximum number of concurrent sessions (e.g., \"1\", \"5\")"),
 };

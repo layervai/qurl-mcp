@@ -46,13 +46,13 @@ export function createServer(client: IQURLClient, version: string): McpServer {
 
   // Register prompts
   const secure = secureAServicePrompt();
-  server.registerPrompt(secure.name, { description: secure.description, argsSchema: secure.args }, secure.handler);
+  server.prompt(secure.name, secure.description, secure.args, secure.handler);
 
   const audit = auditLinksPrompt();
-  server.registerPrompt(audit.name, { description: audit.description }, audit.handler);
+  server.prompt(audit.name, audit.description, audit.handler);
 
   const rotate = rotateAccessPrompt();
-  server.registerPrompt(rotate.name, { description: rotate.description, argsSchema: rotate.args }, rotate.handler);
+  server.prompt(rotate.name, rotate.description, rotate.args, rotate.handler);
 
   return server;
 }
