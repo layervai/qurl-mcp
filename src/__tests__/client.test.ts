@@ -11,6 +11,14 @@ function mockFetchResponse(body: unknown, status = 200) {
 
 describe("QURLClient", () => {
   const originalFetch = globalThis.fetch;
+  let client: QURLClient;
+
+  beforeEach(() => {
+    client = new QURLClient({
+      apiKey: "test-key",
+      baseURL: "https://api.test.com",
+    });
+  });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
@@ -18,28 +26,27 @@ describe("QURLClient", () => {
 
   describe("constructor", () => {
     it("stores apiKey and baseURL", async () => {
-      const client = new QURLClient({
-        apiKey: "test-key",
+      const customClient = new QURLClient({
+        apiKey: "custom-key",
         baseURL: "https://api.example.com",
       });
-      // Verify by making a request and checking the URL/headers
       const mockFetch = mockFetchResponse({ data: {} });
       globalThis.fetch = mockFetch;
 
-      await client.getQuota();
+      await customClient.getQuota();
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://api.example.com/v1/quota",
         expect.objectContaining({
           headers: expect.objectContaining({
-            Authorization: "Bearer test-key",
+            Authorization: "Bearer custom-key",
           }),
         }),
       );
     });
 
     it("strips trailing slash from baseURL", async () => {
-      const client = new QURLClient({
+      const customClient = new QURLClient({
         apiKey: "test-key",
         baseURL: "https://api.example.com/",
       });
@@ -47,7 +54,7 @@ describe("QURLClient", () => {
       const mockFetch = mockFetchResponse({ data: {} });
       globalThis.fetch = mockFetch;
 
-      await client.getQuota();
+      await customClient.getQuota();
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://api.example.com/v1/quota",
@@ -58,10 +65,6 @@ describe("QURLClient", () => {
 
   describe("request headers", () => {
     it("sends Authorization bearer header and Content-Type", async () => {
-      const client = new QURLClient({
-        apiKey: "my-api-key",
-        baseURL: "https://api.test.com",
-      });
       const mockFetch = mockFetchResponse({ data: {} });
       globalThis.fetch = mockFetch;
 
@@ -71,7 +74,7 @@ describe("QURLClient", () => {
         expect.any(String),
         expect.objectContaining({
           headers: {
-            Authorization: "Bearer my-api-key",
+            Authorization: "Bearer test-key",
             "Content-Type": "application/json",
           },
         }),
@@ -80,15 +83,6 @@ describe("QURLClient", () => {
   });
 
   describe("error handling", () => {
-    let client: QURLClient;
-
-    beforeEach(() => {
-      client = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.test.com",
-      });
-    });
-
     it("throws QURLAPIError on 4xx response", async () => {
       globalThis.fetch = mockFetchResponse(
         { error: { code: "not_found", message: "Resource not found" } },
@@ -122,7 +116,9 @@ describe("QURLClient", () => {
     it("throws QURLAPIError with defaults when error body has no error field", async () => {
       globalThis.fetch = mockFetchResponse({ some: "data" }, 403);
 
-      await expect(client.getQuota()).rejects.toMatchObject({
+      const err = await client.getQuota().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err).toMatchObject({
         statusCode: 403,
         code: "unknown",
         message: "HTTP 403",
@@ -152,15 +148,32 @@ describe("QURLClient", () => {
         text: () => Promise.resolve(longText),
       });
 
-      try {
-        await client.getQuota();
-        expect.fail("should have thrown");
-      } catch (e) {
-        expect(e).toBeInstanceOf(QURLAPIError);
-        // The message should contain at most 200 chars of the response
-        expect((e as QURLAPIError).message).toContain("x".repeat(200));
-        expect((e as QURLAPIError).message.length).toBeLessThanOrEqual(230);
-      }
+      const err = await client.getQuota().catch((e: unknown) => e) as QURLAPIError;
+      expect(err).toBeInstanceOf(QURLAPIError);
+      // "Failed to parse response: " (26 chars) + 200 chars of text = 226
+      expect(err.message).toContain("x".repeat(200));
+      expect(err.message.length).toBeLessThanOrEqual(230);
+    });
+
+    it("throws on empty response body", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 204,
+        text: () => Promise.resolve(""),
+      });
+
+      const err = await client.deleteQURL("r_abc").catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err).toMatchObject({
+        statusCode: 204,
+        code: "parse_error",
+      });
+    });
+
+    it("propagates network-level fetch failures", async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+
+      await expect(client.listQURLs()).rejects.toThrow("fetch failed");
     });
 
     it("QURLAPIError has correct name property", () => {
@@ -171,15 +184,6 @@ describe("QURLClient", () => {
   });
 
   describe("createQURL", () => {
-    let client: QURLClient;
-
-    beforeEach(() => {
-      client = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.test.com",
-      });
-    });
-
     it("sends POST to /v1/qurl with body", async () => {
       const mockData = {
         data: {
@@ -228,15 +232,6 @@ describe("QURLClient", () => {
   });
 
   describe("getQURL", () => {
-    let client: QURLClient;
-
-    beforeEach(() => {
-      client = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.test.com",
-      });
-    });
-
     it("sends GET to /v1/qurls/:id", async () => {
       const mockData = { data: { resource_id: "r_abc123", status: "active" } };
       const mockFetch = mockFetchResponse(mockData);
@@ -265,15 +260,6 @@ describe("QURLClient", () => {
   });
 
   describe("listQURLs", () => {
-    let client: QURLClient;
-
-    beforeEach(() => {
-      client = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.test.com",
-      });
-    });
-
     it("sends GET to /v1/qurls with no query params by default", async () => {
       const mockData = { data: [], meta: { has_more: false } };
       const mockFetch = mockFetchResponse(mockData);
@@ -325,15 +311,6 @@ describe("QURLClient", () => {
   });
 
   describe("deleteQURL", () => {
-    let client: QURLClient;
-
-    beforeEach(() => {
-      client = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.test.com",
-      });
-    });
-
     it("sends DELETE to /v1/qurls/:id", async () => {
       const mockFetch = mockFetchResponse({});
       globalThis.fetch = mockFetch;
@@ -355,15 +332,6 @@ describe("QURLClient", () => {
   });
 
   describe("extendQURL", () => {
-    let client: QURLClient;
-
-    beforeEach(() => {
-      client = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.test.com",
-      });
-    });
-
     it("sends PATCH to /v1/qurls/:id with extend_by body", async () => {
       const mockData = { data: { resource_id: "r_abc", expires_at: "2026-04-01T00:00:00Z" } };
       const mockFetch = mockFetchResponse(mockData);
@@ -383,15 +351,6 @@ describe("QURLClient", () => {
   });
 
   describe("resolveQURL", () => {
-    let client: QURLClient;
-
-    beforeEach(() => {
-      client = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.test.com",
-      });
-    });
-
     it("sends POST to /v1/resolve with access_token", async () => {
       const mockData = {
         data: {
@@ -422,15 +381,6 @@ describe("QURLClient", () => {
   });
 
   describe("getQuota", () => {
-    let client: QURLClient;
-
-    beforeEach(() => {
-      client = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.test.com",
-      });
-    });
-
     it("sends GET to /v1/quota", async () => {
       const mockData = {
         data: {

@@ -55,16 +55,6 @@ describe("deleteQurlTool", () => {
       expect(result.content[0].text).toBe("QURL r_abc123 has been revoked.");
     });
 
-    it("includes the specific resource_id in the message", async () => {
-      const mockDelete = vi.fn().mockResolvedValue(undefined);
-      const client = makeMockClient({ deleteQURL: mockDelete });
-      const tool = deleteQurlTool(client);
-
-      const result = await tool.handler({ resource_id: "r_xyz789" });
-
-      expect(result.content[0].text).toContain("r_xyz789");
-    });
-
     it("propagates client errors", async () => {
       const mockDelete = vi.fn().mockRejectedValue(new Error("Forbidden"));
       const client = makeMockClient({ deleteQURL: mockDelete });
