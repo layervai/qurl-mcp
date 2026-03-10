@@ -1,6 +1,6 @@
-import type { QURLClient } from "../client.js";
+import type { IQURLClient } from "../client.js";
 
-export function usageResource(client: QURLClient) {
+export function usageResource(client: IQURLClient) {
   const uri = "qurl://usage";
   const mimeType = "application/json";
   return {

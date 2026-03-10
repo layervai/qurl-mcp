@@ -1,12 +1,12 @@
 import { z } from "zod";
-import type { QURLClient } from "../client.js";
+import type { IQURLClient } from "../client.js";
 
 export const extendQurlSchema = z.object({
   resource_id: z.string().describe("The resource ID to extend"),
   extend_by: z.string().describe('Duration to extend by (e.g., "24h", "168h")'),
 });
 
-export function extendQurlTool(client: QURLClient) {
+export function extendQurlTool(client: IQURLClient) {
   return {
     name: "extend_qurl",
     description: "Extend the expiration of an active QURL.",

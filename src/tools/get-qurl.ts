@@ -1,11 +1,11 @@
 import { z } from "zod";
-import type { QURLClient } from "../client.js";
+import type { IQURLClient } from "../client.js";
 
 export const getQurlSchema = z.object({
   resource_id: z.string().describe("The resource ID (e.g., r_a3x9Bk7mQ2)"),
 });
 
-export function getQurlTool(client: QURLClient) {
+export function getQurlTool(client: IQURLClient) {
   return {
     name: "get_qurl",
     description: "Get details of a specific QURL by its resource ID.",

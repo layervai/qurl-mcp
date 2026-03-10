@@ -1,7 +1,7 @@
 import { vi } from "vitest";
-import type { QURLClient, QURL } from "../client.js";
+import type { IQURLClient, QURL } from "../client.js";
 
-export function makeMockClient(overrides: Partial<QURLClient> = {}): QURLClient {
+export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClient {
   return {
     createQURL: vi.fn(),
     getQURL: vi.fn(),
@@ -11,7 +11,7 @@ export function makeMockClient(overrides: Partial<QURLClient> = {}): QURLClient 
     resolveQURL: vi.fn(),
     getQuota: vi.fn(),
     ...overrides,
-  } as unknown as QURLClient;
+  };
 }
 
 export function sampleQURL(overrides: Partial<QURL> = {}): QURL {
