@@ -146,19 +146,28 @@ describe("QURLClient", () => {
       expect(err.message).toBe("Failed to parse response: " + "x".repeat(200));
     });
 
-    // TODO: client.request() should short-circuit on empty 2xx responses
-    // instead of throwing parse_error. Fix in client.ts, then update this test.
-    it("throws on empty response body", async () => {
+    it("handles empty 2xx response body (204 No Content)", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
         ok: true,
         status: 204,
         text: () => Promise.resolve(""),
       }));
 
-      const err = await client.deleteQURL("r_abc").catch((e: unknown) => e);
+      const result = await client.deleteQURL("r_abc");
+      expect(result).toBeUndefined();
+    });
+
+    it("throws on empty non-2xx response body", async () => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: () => Promise.resolve(""),
+      }));
+
+      const err = await client.getQuota().catch((e: unknown) => e);
       expect(err).toBeInstanceOf(QURLAPIError);
       expect(err).toMatchObject({
-        statusCode: 204,
+        statusCode: 502,
         code: "parse_error",
       });
     });

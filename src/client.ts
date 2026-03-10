@@ -103,6 +103,11 @@ export class QURLClient {
     });
 
     const text = await response.text();
+
+    if (!text && response.ok) {
+      return undefined as T;
+    }
+
     let json: Record<string, unknown>;
     try {
       json = JSON.parse(text) as Record<string, unknown>;
