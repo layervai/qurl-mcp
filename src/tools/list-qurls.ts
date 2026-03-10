@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { QURLClient } from "../client.js";
+import type { IQURLClient } from "../client.js";
 
 export const listQurlsSchema = z.object({
   limit: z
@@ -12,7 +12,7 @@ export const listQurlsSchema = z.object({
   cursor: z.string().optional().describe("Pagination cursor from a previous response"),
 });
 
-export function listQurlsTool(client: QURLClient) {
+export function listQurlsTool(client: IQURLClient) {
   return {
     name: "list_qurls",
     description: "List active QURLs with optional pagination.",
@@ -23,7 +23,8 @@ export function listQurlsTool(client: QURLClient) {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(result, null, 2),
+            // Full result (not .data) — includes meta.next_cursor for pagination
+            text: JSON.stringify(result),
           },
         ],
       };

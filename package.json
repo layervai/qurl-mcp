@@ -7,6 +7,7 @@
     "qurl-mcp": "./dist/index.js"
   },
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
@@ -39,5 +40,8 @@
   },
   "files": [
     "dist/"
-  ]
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

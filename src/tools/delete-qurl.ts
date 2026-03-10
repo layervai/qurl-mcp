@@ -1,11 +1,11 @@
 import { z } from "zod";
-import type { QURLClient } from "../client.js";
+import type { IQURLClient } from "../client.js";
 
 export const deleteQurlSchema = z.object({
   resource_id: z.string().describe("The resource ID to delete/revoke"),
 });
 
-export function deleteQurlTool(client: QURLClient) {
+export function deleteQurlTool(client: IQURLClient) {
   return {
     name: "delete_qurl",
     description: "Revoke/delete a QURL. This immediately invalidates the link.",
