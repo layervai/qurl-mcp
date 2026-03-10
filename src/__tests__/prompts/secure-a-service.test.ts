@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { secureAServicePrompt } from "../../prompts/secure-a-service.js";
+import { getPromptText } from "../helpers.js";
 
 describe("secureAServicePrompt", () => {
   describe("metadata", () => {
@@ -31,9 +32,8 @@ describe("secureAServicePrompt", () => {
     it("includes target_url in the message", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({ target_url: "https://example.com/api" });
-      const text = (result.messages[0].content as { text: string }).text;
 
-      expect(text).toContain("https://example.com/api");
+      expect(getPromptText(result)).toContain("https://example.com/api");
     });
 
     it("includes description when provided", () => {
@@ -42,9 +42,8 @@ describe("secureAServicePrompt", () => {
         target_url: "https://example.com",
         description: "My API server",
       });
-      const text = (result.messages[0].content as { text: string }).text;
 
-      expect(text).toContain("My API server");
+      expect(getPromptText(result)).toContain("My API server");
     });
 
     it("includes expires_in when provided", () => {
@@ -53,9 +52,8 @@ describe("secureAServicePrompt", () => {
         target_url: "https://example.com",
         expires_in: "24h",
       });
-      const text = (result.messages[0].content as { text: string }).text;
 
-      expect(text).toContain("24h");
+      expect(getPromptText(result)).toContain("24h");
     });
 
     it("includes one_time_use when set to true", () => {
@@ -64,9 +62,8 @@ describe("secureAServicePrompt", () => {
         target_url: "https://example.com",
         one_time_use: "true",
       });
-      const text = (result.messages[0].content as { text: string }).text;
 
-      expect(text).toContain("one_time_use: true");
+      expect(getPromptText(result)).toContain("one_time_use: true");
     });
 
     it("includes max_sessions when provided", () => {
@@ -75,23 +72,21 @@ describe("secureAServicePrompt", () => {
         target_url: "https://example.com",
         max_sessions: "5",
       });
-      const text = (result.messages[0].content as { text: string }).text;
 
-      expect(text).toContain("max_sessions: 5");
+      expect(getPromptText(result)).toContain("max_sessions: 5");
     });
 
     it("instructs to use create_qurl tool", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({ target_url: "https://example.com" });
-      const text = (result.messages[0].content as { text: string }).text;
 
-      expect(text).toContain("create_qurl");
+      expect(getPromptText(result)).toContain("create_qurl");
     });
 
     it("works with only required args", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({ target_url: "https://example.com" });
-      const text = (result.messages[0].content as { text: string }).text;
+      const text = getPromptText(result);
 
       expect(text).toContain("target_url: https://example.com");
       expect(text).not.toContain("description:");

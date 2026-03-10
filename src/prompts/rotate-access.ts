@@ -9,16 +9,15 @@ export const rotateAccessArgs = {
     .describe('New expiration duration for the replacement QURL (e.g., "24h", "168h")'),
 };
 
+type RotateAccessInput = z.infer<z.ZodObject<typeof rotateAccessArgs>>;
+
 export function rotateAccessPrompt() {
   return {
     name: "rotate-access",
     description:
       "Rotate a QURL by revoking the existing link and creating a fresh one with the same target.",
     args: rotateAccessArgs,
-    handler: (args: {
-      resource_id: string;
-      extend_expiry?: string;
-    }): GetPromptResult => {
+    handler: (args: RotateAccessInput): GetPromptResult => {
       const expiry = args.extend_expiry ?? "24h";
 
       return {

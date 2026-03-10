@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type { IQURLClient, QURL } from "../client.js";
+import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 
 export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClient {
   return {
@@ -12,6 +13,11 @@ export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClien
     getQuota: vi.fn(),
     ...overrides,
   };
+}
+
+export function getPromptText(result: GetPromptResult, index = 0): string {
+  const content = result.messages[index].content;
+  return (content as { type: "text"; text: string }).text;
 }
 
 export function sampleQURL(overrides: Partial<QURL> = {}): QURL {

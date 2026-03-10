@@ -21,19 +21,15 @@ export const secureAServiceArgs = {
     .describe("Maximum number of concurrent sessions (e.g., \"1\", \"5\")"),
 };
 
+type SecureAServiceInput = z.infer<z.ZodObject<typeof secureAServiceArgs>>;
+
 export function secureAServicePrompt() {
   return {
     name: "secure-a-service",
     description:
       "Guide through creating a QURL to protect a service with appropriate security policies.",
     args: secureAServiceArgs,
-    handler: (args: {
-      target_url: string;
-      description?: string;
-      expires_in?: string;
-      one_time_use?: string;
-      max_sessions?: string;
-    }): GetPromptResult => {
+    handler: (args: SecureAServiceInput): GetPromptResult => {
       const parts = [
         `Create a QURL to protect the following service: ${args.target_url}`,
       ];
