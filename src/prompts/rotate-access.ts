@@ -3,7 +3,7 @@ import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 
 export const rotateAccessArgs = {
   resource_id: z.string().describe("The resource ID of the QURL to rotate"),
-  extend_expiry: z
+  expires_in: z
     .string()
     .optional()
     .describe('New expiration duration for the replacement QURL (e.g., "24h", "168h")'),
@@ -18,7 +18,7 @@ export function rotateAccessPrompt() {
       "Rotate a QURL by revoking the existing link and creating a fresh one with the same target.",
     args: rotateAccessArgs,
     handler: (args: RotateAccessInput): GetPromptResult => {
-      const expiry = args.extend_expiry ?? "24h";
+      const expiry = args.expires_in ?? "24h";
 
       return {
         messages: [

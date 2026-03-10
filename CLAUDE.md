@@ -55,7 +55,7 @@ QURL MCP Server is a TypeScript [Model Context Protocol](https://modelcontextpro
 qurl-mcp/
 ├── src/
 │   ├── index.ts           # Entry point, env validation, stdio transport
-│   ├── server.ts          # MCP server factory, tool/resource registration
+│   ├── server.ts          # MCP server factory, tool/resource/prompt registration
 │   ├── client.ts          # TypeScript QURL API client
 │   ├── tools/
 │   │   ├── create-qurl.ts
@@ -64,9 +64,13 @@ qurl-mcp/
 │   │   ├── get-qurl.ts
 │   │   ├── delete-qurl.ts
 │   │   └── extend-qurl.ts
-│   └── resources/
-│       ├── links.ts
-│       └── usage.ts
+│   ├── resources/
+│   │   ├── links.ts
+│   │   └── usage.ts
+│   └── prompts/
+│       ├── secure-a-service.ts
+│       ├── audit-links.ts
+│       └── rotate-access.ts
 ├── dist/                  # Compiled output (gitignored)
 ├── package.json
 └── tsconfig.json

@@ -68,7 +68,7 @@ describe("rotateAccessPrompt", () => {
       const prompt = rotateAccessPrompt();
       const result = prompt.handler({
         resource_id: "r_test123",
-        extend_expiry: "168h",
+        expires_in: "168h",
       });
 
       expect(getPromptText(result)).toContain('"168h"');
