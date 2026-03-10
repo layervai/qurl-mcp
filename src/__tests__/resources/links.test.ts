@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { linksResource } from "../../resources/links.js";
-import { makeMockClient, sampleQURL } from "./helpers.js";
+import { makeMockClient, sampleQURL } from "../helpers.js";
 
 const sampleQURLs = [
   sampleQURL({

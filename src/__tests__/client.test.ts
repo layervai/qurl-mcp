@@ -17,7 +17,7 @@ describe("QURLClient", () => {
   });
 
   describe("constructor", () => {
-    it("stores apiKey and baseURL", () => {
+    it("stores apiKey and baseURL", async () => {
       const client = new QURLClient({
         apiKey: "test-key",
         baseURL: "https://api.example.com",
@@ -26,7 +26,7 @@ describe("QURLClient", () => {
       const mockFetch = mockFetchResponse({ data: {} });
       globalThis.fetch = mockFetch;
 
-      client.getQuota();
+      await client.getQuota();
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://api.example.com/v1/quota",
@@ -38,7 +38,7 @@ describe("QURLClient", () => {
       );
     });
 
-    it("strips trailing slash from baseURL", () => {
+    it("strips trailing slash from baseURL", async () => {
       const client = new QURLClient({
         apiKey: "test-key",
         baseURL: "https://api.example.com/",
@@ -47,7 +47,7 @@ describe("QURLClient", () => {
       const mockFetch = mockFetchResponse({ data: {} });
       globalThis.fetch = mockFetch;
 
-      client.getQuota();
+      await client.getQuota();
 
       expect(mockFetch).toHaveBeenCalledWith(
         "https://api.example.com/v1/quota",
@@ -95,8 +95,9 @@ describe("QURLClient", () => {
         404,
       );
 
-      await expect(client.getQURL("r_nonexistent")).rejects.toThrow(QURLAPIError);
-      await expect(client.getQURL("r_nonexistent")).rejects.toMatchObject({
+      const err = await client.getQURL("r_nonexistent").catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err).toMatchObject({
         statusCode: 404,
         code: "not_found",
         message: "Resource not found",
@@ -109,8 +110,9 @@ describe("QURLClient", () => {
         500,
       );
 
-      await expect(client.getQuota()).rejects.toThrow(QURLAPIError);
-      await expect(client.getQuota()).rejects.toMatchObject({
+      const err = await client.getQuota().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err).toMatchObject({
         statusCode: 500,
         code: "internal_error",
         message: "Server error",
@@ -134,8 +136,9 @@ describe("QURLClient", () => {
         text: () => Promise.resolve("not json at all"),
       });
 
-      await expect(client.getQuota()).rejects.toThrow(QURLAPIError);
-      await expect(client.getQuota()).rejects.toMatchObject({
+      const err = await client.getQuota().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err).toMatchObject({
         statusCode: 200,
         code: "parse_error",
       });
@@ -156,7 +159,7 @@ describe("QURLClient", () => {
         expect(e).toBeInstanceOf(QURLAPIError);
         // The message should contain at most 200 chars of the response
         expect((e as QURLAPIError).message).toContain("x".repeat(200));
-        expect((e as QURLAPIError).message.length).toBeLessThan(300);
+        expect((e as QURLAPIError).message.length).toBeLessThanOrEqual(230);
       }
     });
 

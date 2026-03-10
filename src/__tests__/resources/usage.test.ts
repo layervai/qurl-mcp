@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { usageResource } from "../../resources/usage.js";
 import type { QuotaOutput } from "../../client.js";
-import { makeMockClient } from "./helpers.js";
+import { makeMockClient } from "../helpers.js";
 
 const sampleQuota: QuotaOutput = {
   plan: "pro",
