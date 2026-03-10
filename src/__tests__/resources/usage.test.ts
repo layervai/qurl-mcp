@@ -1,19 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { usageResource } from "../../resources/usage.js";
-import type { QURLClient, QuotaOutput } from "../../client.js";
-
-function makeMockClient(overrides: Partial<QURLClient> = {}): QURLClient {
-  return {
-    createQURL: vi.fn(),
-    getQURL: vi.fn(),
-    listQURLs: vi.fn(),
-    deleteQURL: vi.fn(),
-    extendQURL: vi.fn(),
-    resolveQURL: vi.fn(),
-    getQuota: vi.fn(),
-    ...overrides,
-  } as unknown as QURLClient;
-}
+import type { QuotaOutput } from "../../client.js";
+import { makeMockClient } from "./helpers.js";
 
 const sampleQuota: QuotaOutput = {
   plan: "pro",

@@ -1,33 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { createQurlTool, createQurlSchema } from "../../tools/create-qurl.js";
-import type { QURLClient, QURL } from "../../client.js";
+import { makeMockClient, sampleQURL } from "../helpers.js";
 
-function makeMockClient(overrides: Partial<QURLClient> = {}): QURLClient {
-  return {
-    createQURL: vi.fn(),
-    getQURL: vi.fn(),
-    listQURLs: vi.fn(),
-    deleteQURL: vi.fn(),
-    extendQURL: vi.fn(),
-    resolveQURL: vi.fn(),
-    getQuota: vi.fn(),
-    ...overrides,
-  } as unknown as QURLClient;
-}
-
-const sampleQURL: QURL = {
-  resource_id: "r_test123",
-  qurl_link: "https://qurl.link/at_abc",
-  qurl_site: "https://example.qurl.site",
-  target_url: "https://example.com/protected",
-  description: "Test QURL",
-  expires_at: "2026-03-10T00:00:00Z",
-  created_at: "2026-03-09T00:00:00Z",
-  status: "active",
-  access_count: 0,
-  one_time_use: false,
-  max_sessions: 1,
-};
+const fixture = sampleQURL();
 
 describe("createQurlTool", () => {
   describe("metadata", () => {
@@ -99,7 +74,7 @@ describe("createQurlTool", () => {
 
   describe("handler", () => {
     it("calls client.createQURL with input and returns formatted content", async () => {
-      const mockCreate = vi.fn().mockResolvedValue({ data: sampleQURL });
+      const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
 
@@ -120,7 +95,7 @@ describe("createQurlTool", () => {
     });
 
     it("formats response as pretty JSON", async () => {
-      const mockCreate = vi.fn().mockResolvedValue({ data: sampleQURL });
+      const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
 
@@ -129,7 +104,7 @@ describe("createQurlTool", () => {
 
       // Pretty printed JSON has newlines
       expect(text).toContain("\n");
-      expect(text).toBe(JSON.stringify(sampleQURL, null, 2));
+      expect(text).toBe(JSON.stringify(fixture, null, 2));
     });
 
     it("propagates client errors", async () => {
@@ -143,7 +118,7 @@ describe("createQurlTool", () => {
     });
 
     it("passes all optional fields to the client", async () => {
-      const mockCreate = vi.fn().mockResolvedValue({ data: sampleQURL });
+      const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
 

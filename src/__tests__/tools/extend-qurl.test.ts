@@ -1,32 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
 import { extendQurlTool, extendQurlSchema } from "../../tools/extend-qurl.js";
-import type { QURLClient, QURL } from "../../client.js";
+import { makeMockClient, sampleQURL } from "../helpers.js";
 
-function makeMockClient(overrides: Partial<QURLClient> = {}): QURLClient {
-  return {
-    createQURL: vi.fn(),
-    getQURL: vi.fn(),
-    listQURLs: vi.fn(),
-    deleteQURL: vi.fn(),
-    extendQURL: vi.fn(),
-    resolveQURL: vi.fn(),
-    getQuota: vi.fn(),
-    ...overrides,
-  } as unknown as QURLClient;
-}
-
-const sampleQURL: QURL = {
+const fixture = sampleQURL({
   resource_id: "r_extend1",
   qurl_link: "https://qurl.link/at_ext",
   qurl_site: "https://ext.qurl.site",
   target_url: "https://example.com/extended",
   expires_at: "2026-04-09T00:00:00Z",
-  created_at: "2026-03-09T00:00:00Z",
-  status: "active",
   access_count: 3,
-  one_time_use: false,
-  max_sessions: 1,
-};
+});
 
 describe("extendQurlTool", () => {
   describe("metadata", () => {
@@ -67,7 +50,7 @@ describe("extendQurlTool", () => {
 
   describe("handler", () => {
     it("calls client.extendQURL with resource_id and extend_by", async () => {
-      const mockExtend = vi.fn().mockResolvedValue({ data: sampleQURL });
+      const mockExtend = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ extendQURL: mockExtend });
       const tool = extendQurlTool(client);
 
@@ -77,7 +60,7 @@ describe("extendQurlTool", () => {
     });
 
     it("returns updated QURL data as formatted JSON", async () => {
-      const mockExtend = vi.fn().mockResolvedValue({ data: sampleQURL });
+      const mockExtend = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ extendQURL: mockExtend });
       const tool = extendQurlTool(client);
 
@@ -92,12 +75,12 @@ describe("extendQurlTool", () => {
     });
 
     it("returns only the data object, not the wrapper", async () => {
-      const mockExtend = vi.fn().mockResolvedValue({ data: sampleQURL });
+      const mockExtend = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ extendQURL: mockExtend });
       const tool = extendQurlTool(client);
 
       const result = await tool.handler({ resource_id: "r_extend1", extend_by: "24h" });
-      expect(result.content[0].text).toBe(JSON.stringify(sampleQURL, null, 2));
+      expect(result.content[0].text).toBe(JSON.stringify(fixture, null, 2));
     });
 
     it("propagates client errors", async () => {

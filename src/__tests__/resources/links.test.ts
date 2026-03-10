@@ -1,45 +1,24 @@
 import { describe, it, expect, vi } from "vitest";
 import { linksResource } from "../../resources/links.js";
-import type { QURLClient, QURL } from "../../client.js";
+import { makeMockClient, sampleQURL } from "./helpers.js";
 
-function makeMockClient(overrides: Partial<QURLClient> = {}): QURLClient {
-  return {
-    createQURL: vi.fn(),
-    getQURL: vi.fn(),
-    listQURLs: vi.fn(),
-    deleteQURL: vi.fn(),
-    extendQURL: vi.fn(),
-    resolveQURL: vi.fn(),
-    getQuota: vi.fn(),
-    ...overrides,
-  } as unknown as QURLClient;
-}
-
-const sampleQURLs: QURL[] = [
-  {
+const sampleQURLs = [
+  sampleQURL({
     resource_id: "r_link1",
     qurl_link: "https://qurl.link/at_1",
     qurl_site: "https://1.qurl.site",
     target_url: "https://example.com/1",
     expires_at: "2026-03-15T00:00:00Z",
-    created_at: "2026-03-09T00:00:00Z",
-    status: "active",
-    access_count: 0,
-    one_time_use: false,
-    max_sessions: 1,
-  },
-  {
+  }),
+  sampleQURL({
     resource_id: "r_link2",
     qurl_link: "https://qurl.link/at_2",
     qurl_site: "https://2.qurl.site",
     target_url: "https://example.com/2",
     expires_at: "2026-03-20T00:00:00Z",
-    created_at: "2026-03-09T00:00:00Z",
-    status: "active",
     access_count: 3,
     one_time_use: true,
-    max_sessions: 1,
-  },
+  }),
 ];
 
 describe("linksResource", () => {

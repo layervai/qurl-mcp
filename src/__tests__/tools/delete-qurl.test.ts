@@ -1,19 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { deleteQurlTool, deleteQurlSchema } from "../../tools/delete-qurl.js";
-import type { QURLClient } from "../../client.js";
-
-function makeMockClient(overrides: Partial<QURLClient> = {}): QURLClient {
-  return {
-    createQURL: vi.fn(),
-    getQURL: vi.fn(),
-    listQURLs: vi.fn(),
-    deleteQURL: vi.fn(),
-    extendQURL: vi.fn(),
-    resolveQURL: vi.fn(),
-    getQuota: vi.fn(),
-    ...overrides,
-  } as unknown as QURLClient;
-}
+import { makeMockClient } from "../helpers.js";
 
 describe("deleteQurlTool", () => {
   describe("metadata", () => {
