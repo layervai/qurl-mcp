@@ -114,6 +114,8 @@ export class QURLClient implements IQURLClient {
 
     const text = await response.text();
 
+    // Handle empty 2xx responses (e.g., 204 No Content from DELETE).
+    // Only deleteQURL hits this path — T is void there, so undefined is correct.
     if (!text && response.ok) {
       return undefined as T;
     }
