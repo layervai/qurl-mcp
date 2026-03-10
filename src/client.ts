@@ -69,6 +69,16 @@ export interface QuotaOutput {
   usage: Record<string, number>;
 }
 
+export interface IQURLClient {
+  createQURL(input: CreateQURLInput): Promise<{ data: QURL }>;
+  getQURL(id: string): Promise<{ data: QURL }>;
+  listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput>;
+  deleteQURL(id: string): Promise<void>;
+  extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }>;
+  resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }>;
+  getQuota(): Promise<{ data: QuotaOutput }>;
+}
+
 export class QURLAPIError extends Error {
   constructor(
     public statusCode: number,
@@ -80,7 +90,7 @@ export class QURLAPIError extends Error {
   }
 }
 
-export class QURLClient {
+export class QURLClient implements IQURLClient {
   private apiKey: string;
   private baseURL: string;
 
@@ -93,8 +103,10 @@ export class QURLClient {
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
-      "Content-Type": "application/json",
     };
+    if (body !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
 
     const response = await fetch(url, {
       method,
@@ -103,6 +115,13 @@ export class QURLClient {
     });
 
     const text = await response.text();
+
+    // Handle empty 2xx responses (e.g., 204 No Content from DELETE).
+    // Only deleteQURL hits this path — T is void there, so undefined is correct.
+    if (!text && response.ok) {
+      return undefined as T;
+    }
+
     let json: Record<string, unknown>;
     try {
       json = JSON.parse(text) as Record<string, unknown>;
@@ -136,7 +155,7 @@ export class QURLClient {
 
   async listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput> {
     const params = new URLSearchParams();
-    if (input?.limit) params.set("limit", String(input.limit));
+    if (input?.limit !== undefined) params.set("limit", String(input.limit));
     if (input?.cursor) params.set("cursor", input.cursor);
     const query = params.toString();
     return this.request("GET", `/v1/qurls${query ? `?${query}` : ""}`);
