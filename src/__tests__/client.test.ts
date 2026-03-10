@@ -143,11 +143,11 @@ describe("QURLClient", () => {
 
       const err = await client.getQuota().catch((e: unknown) => e) as QURLAPIError;
       expect(err).toBeInstanceOf(QURLAPIError);
-      // "Failed to parse response: " (26 chars) + 200 chars of text = 226
-      expect(err.message).toContain("x".repeat(200));
-      expect(err.message.length).toBeLessThanOrEqual(230);
+      expect(err.message).toBe("Failed to parse response: " + "x".repeat(200));
     });
 
+    // TODO: client.request() should short-circuit on empty 2xx responses
+    // instead of throwing parse_error. Fix in client.ts, then update this test.
     it("throws on empty response body", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
         ok: true,
