@@ -16,7 +16,7 @@ describe("createServer", () => {
 
   async function connectServer() {
     const mockClient = makeMockClient();
-    server = createServer(mockClient);
+    server = createServer(mockClient, "0.1.0");
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);

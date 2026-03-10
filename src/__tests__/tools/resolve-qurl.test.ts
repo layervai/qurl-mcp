@@ -82,7 +82,7 @@ describe("resolveQurlTool", () => {
       const tool = resolveQurlTool(client);
 
       const result = await tool.handler({ access_token: "at_token123" });
-      expect(result.content[0].text).toBe(JSON.stringify(sampleResolveOutput, null, 2));
+      expect(result.content[0].text).toBe(JSON.stringify(sampleResolveOutput));
     });
 
     it("propagates client errors", async () => {

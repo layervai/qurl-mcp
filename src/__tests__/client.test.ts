@@ -58,7 +58,7 @@ describe("QURLClient", () => {
   });
 
   describe("request headers", () => {
-    it("sends Authorization bearer header and Content-Type", async () => {
+    it("sends Authorization bearer header on all requests", async () => {
       const mock = stubFetch({ data: {} });
 
       await client.getQuota();
@@ -66,12 +66,35 @@ describe("QURLClient", () => {
       expect(mock).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          headers: {
+          headers: expect.objectContaining({
             Authorization: "Bearer test-key",
-            "Content-Type": "application/json",
-          },
+          }),
         }),
       );
+    });
+
+    it("sends Content-Type only when request has a body", async () => {
+      const mock = stubFetch({ data: {} });
+
+      await client.createQURL({ target_url: "https://example.com" });
+
+      expect(mock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+          }),
+        }),
+      );
+    });
+
+    it("omits Content-Type on GET requests", async () => {
+      const mock = stubFetch({ data: {} });
+
+      await client.getQuota();
+
+      const headers = (mock.mock.calls[0][1] as { headers: Record<string, string> }).headers;
+      expect(headers).not.toHaveProperty("Content-Type");
     });
   });
 
