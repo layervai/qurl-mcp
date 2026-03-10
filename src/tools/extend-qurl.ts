@@ -19,7 +19,7 @@ export function extendQurlTool(client: IQURLClient) {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(result.data, null, 2),
+            text: JSON.stringify(result.data),
           },
         ],
       };

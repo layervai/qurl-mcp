@@ -103,8 +103,10 @@ export class QURLClient implements IQURLClient {
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
-      "Content-Type": "application/json",
     };
+    if (body !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
 
     const response = await fetch(url, {
       method,
@@ -153,7 +155,7 @@ export class QURLClient implements IQURLClient {
 
   async listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput> {
     const params = new URLSearchParams();
-    if (input?.limit) params.set("limit", String(input.limit));
+    if (input?.limit !== undefined) params.set("limit", String(input.limit));
     if (input?.cursor) params.set("cursor", input.cursor);
     const query = params.toString();
     return this.request("GET", `/v1/qurls${query ? `?${query}` : ""}`);

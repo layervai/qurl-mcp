@@ -9,10 +9,10 @@ import { extendQurlTool, extendQurlSchema } from "./tools/extend-qurl.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
 
-export function createServer(client: IQURLClient): McpServer {
+export function createServer(client: IQURLClient, version: string): McpServer {
   const server = new McpServer({
     name: "qurl",
-    version: "0.1.0",
+    version,
   });
 
   // Register tools

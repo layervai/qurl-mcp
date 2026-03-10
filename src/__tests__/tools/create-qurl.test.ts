@@ -43,6 +43,15 @@ describe("createQurlTool", () => {
         expires_in: "24h",
         one_time_use: true,
         max_sessions: 5,
+        metadata: { env: "prod", team: "platform" },
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts metadata as a record of unknown values", () => {
+      const result = createQurlSchema.safeParse({
+        target_url: "https://example.com",
+        metadata: { count: 42, nested: { a: 1 }, tags: ["x", "y"] },
       });
       expect(result.success).toBe(true);
     });
@@ -94,17 +103,14 @@ describe("createQurlTool", () => {
       expect(parsed.target_url).toBe("https://example.com/protected");
     });
 
-    it("formats response as pretty JSON", async () => {
+    it("formats response as compact JSON", async () => {
       const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
 
       const result = await tool.handler({ target_url: "https://example.com" });
-      const text = result.content[0].text;
 
-      // Pretty printed JSON has newlines
-      expect(text).toContain("\n");
-      expect(text).toBe(JSON.stringify(fixture, null, 2));
+      expect(result.content[0].text).toBe(JSON.stringify(fixture));
     });
 
     it("propagates client errors", async () => {
@@ -128,6 +134,7 @@ describe("createQurlTool", () => {
         expires_in: "1h",
         one_time_use: true,
         max_sessions: 3,
+        metadata: { env: "test" },
       };
       await tool.handler(input);
 

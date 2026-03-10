@@ -73,7 +73,7 @@ describe("getQurlTool", () => {
       const text = result.content[0].text;
 
       // Should be the QURL object directly, not { data: ... }
-      expect(text).toBe(JSON.stringify(fixture, null, 2));
+      expect(text).toBe(JSON.stringify(fixture));
     });
 
     it("propagates client errors", async () => {

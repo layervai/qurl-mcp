@@ -23,7 +23,8 @@ export function listQurlsTool(client: IQURLClient) {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(result, null, 2),
+            // Full result (not .data) — includes meta.next_cursor for pagination
+            text: JSON.stringify(result),
           },
         ],
       };

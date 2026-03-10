@@ -80,7 +80,7 @@ describe("extendQurlTool", () => {
       const tool = extendQurlTool(client);
 
       const result = await tool.handler({ resource_id: "r_extend1", extend_by: "24h" });
-      expect(result.content[0].text).toBe(JSON.stringify(fixture, null, 2));
+      expect(result.content[0].text).toBe(JSON.stringify(fixture));
     });
 
     it("propagates client errors", async () => {

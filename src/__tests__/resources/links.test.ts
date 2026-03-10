@@ -37,6 +37,11 @@ describe("linksResource", () => {
       const resource = linksResource(makeMockClient());
       expect(resource.mimeType).toBe("application/json");
     });
+
+    it("has a description", () => {
+      const resource = linksResource(makeMockClient());
+      expect(resource.description).toBeTruthy();
+    });
   });
 
   describe("handler", () => {
