@@ -86,4 +86,30 @@ describe("createServer", () => {
       expect(uris).toEqual(["qurl://links", "qurl://usage"]);
     });
   });
+
+  describe("prompts", () => {
+    it("registers all 3 prompts", async () => {
+      const { client } = await connectServer();
+      const { prompts } = await client.listPrompts();
+
+      expect(prompts).toHaveLength(3);
+    });
+
+    it("registers prompts with correct names", async () => {
+      const { client } = await connectServer();
+      const { prompts } = await client.listPrompts();
+      const names = prompts.map((p) => p.name).sort();
+
+      expect(names).toEqual(["audit-links", "rotate-access", "secure-a-service"]);
+    });
+
+    it("each prompt has a description", async () => {
+      const { client } = await connectServer();
+      const { prompts } = await client.listPrompts();
+
+      for (const prompt of prompts) {
+        expect(prompt.description, `${prompt.name} missing description`).toBeTruthy();
+      }
+    });
+  });
 });
