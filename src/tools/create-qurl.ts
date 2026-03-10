@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { QURLClient } from "../client.js";
+import type { IQURLClient } from "../client.js";
 
 export const createQurlSchema = z.object({
   target_url: z.string().url().describe("The URL to protect with QURL"),
@@ -9,7 +9,7 @@ export const createQurlSchema = z.object({
   max_sessions: z.number().int().positive().optional().describe("Maximum concurrent sessions"),
 });
 
-export function createQurlTool(client: QURLClient) {
+export function createQurlTool(client: IQURLClient) {
   return {
     name: "create_qurl",
     description:
