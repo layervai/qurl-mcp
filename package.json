@@ -1,6 +1,6 @@
 {
   "name": "@layerv/qurl-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server for QURL - secure link management for AI agents",
   "type": "module",
   "bin": {
@@ -18,7 +18,13 @@
     "format:check": "prettier --check 'src/**/*.ts'",
     "prepublishOnly": "npm run build"
   },
-  "keywords": ["mcp", "qurl", "layerv", "security", "ai-agents"],
+  "keywords": [
+    "mcp",
+    "qurl",
+    "layerv",
+    "security",
+    "ai-agents"
+  ],
   "author": "LayerV AI",
   "license": "MIT",
   "dependencies": {
