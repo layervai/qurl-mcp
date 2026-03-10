@@ -156,7 +156,7 @@ export class QURLClient implements IQURLClient {
   async listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput> {
     const params = new URLSearchParams();
     if (input?.limit !== undefined) params.set("limit", String(input.limit));
-    if (input?.cursor !== undefined) params.set("cursor", input.cursor);
+    if (input?.cursor) params.set("cursor", input.cursor);
     const query = params.toString();
     return this.request("GET", `/v1/qurls${query ? `?${query}` : ""}`);
   }
