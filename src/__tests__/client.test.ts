@@ -305,6 +305,15 @@ describe("QURLClient", () => {
       expect(calledUrl).toContain("cursor=cur_xyz");
     });
 
+    it("sends limit=0 as query param", async () => {
+      const mock = stubFetch({ data: [], meta: { has_more: false } });
+
+      await client.listQURLs({ limit: 0 });
+
+      const calledUrl = mock.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("limit=0");
+    });
+
     it("sends only limit when cursor is not provided", async () => {
       const mock = stubFetch({ data: [], meta: { has_more: false } });
 
