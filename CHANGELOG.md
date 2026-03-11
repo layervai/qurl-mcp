@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.1.1...qurl-mcp-v0.1.2) (2026-03-11)
+
+
+### Features
+
+* **prompts:** add MCP prompts for guided QURL workflows ([#17](https://github.com/layervai/qurl-mcp/issues/17)) ([a89609d](https://github.com/layervai/qurl-mcp/commit/a89609de4e890ebeb7df935dd73b0768e42f916a))
+
+
+### Bug Fixes
+
+* **deps:** add repository URL for npm provenance ([#19](https://github.com/layervai/qurl-mcp/issues/19)) ([c5536f1](https://github.com/layervai/qurl-mcp/commit/c5536f1f6dcc4b8b7ca7fa4355826668b9058342))
+
 ## [0.1.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.1.0...qurl-mcp-v0.1.1) (2026-03-10)
 
 
