@@ -1,6 +1,6 @@
 {
   "name": "@layerv/qurl-mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "MCP server for QURL - secure link management for AI agents",
   "type": "module",
   "bin": {
