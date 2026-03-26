@@ -220,7 +220,7 @@ export class QURLClient implements IQURLClient {
     const response = await fetch(url, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     });
 
     const text = await response.text();

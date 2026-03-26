@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
+import { createQurlSchema } from "./create-qurl.js";
 
-const batchItemSchema = z.object({
-  target_url: z.string().url().describe("The URL to protect with QURL"),
-  label: z.string().optional().describe("Human-readable label identifying who this QURL is for"),
-  expires_in: z.string().optional().describe('Duration string (e.g., "1h", "24h", "7d")'),
-  one_time_use: z.boolean().optional().describe("Whether the link can only be used once"),
-  max_sessions: z.number().int().min(0).optional().describe("Maximum concurrent sessions (0 = unlimited)"),
+const batchItemSchema = createQurlSchema.pick({
+  target_url: true,
+  label: true,
+  expires_in: true,
+  one_time_use: true,
+  max_sessions: true,
 });
 
 export const batchCreateSchema = z.object({

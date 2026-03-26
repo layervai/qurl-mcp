@@ -53,6 +53,14 @@ describe("batchCreateTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("rejects more than 20 items", () => {
+      const items = Array.from({ length: 21 }, (_, i) => ({
+        target_url: `https://example${i}.com`,
+      }));
+      const result = batchCreateSchema.safeParse({ items });
+      expect(result.success).toBe(false);
+    });
+
     it("validates each item requires target_url", () => {
       const result = batchCreateSchema.safeParse({
         items: [{ label: "No URL" }],
