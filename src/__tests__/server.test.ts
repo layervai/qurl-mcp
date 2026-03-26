@@ -28,11 +28,11 @@ describe("createServer", () => {
   }
 
   describe("tools", () => {
-    it("registers all 6 tools", async () => {
+    it("registers all 8 tools", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();
 
-      expect(tools).toHaveLength(6);
+      expect(tools).toHaveLength(8);
     });
 
     it("registers tools with correct names", async () => {
@@ -41,12 +41,14 @@ describe("createServer", () => {
       const names = tools.map((t) => t.name).sort();
 
       expect(names).toEqual([
+        "batch_create_qurls",
         "create_qurl",
         "delete_qurl",
-        "extend_qurl",
         "get_qurl",
         "list_qurls",
+        "mint_link",
         "resolve_qurl",
+        "update_qurl",
       ]);
     });
 

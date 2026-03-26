@@ -4,7 +4,7 @@ export function auditLinksPrompt() {
   return {
     name: "audit-links",
     description:
-      "Review all active QURLs and identify expiring links, high-usage links, or potential issues.",
+      "Review all active QURLs and identify expiring links, missing metadata, or potential issues.",
     handler: (): GetPromptResult => {
       return {
         messages: [
@@ -18,11 +18,11 @@ export function auditLinksPrompt() {
                 "1. Use the list_qurls tool to fetch all active QURLs.",
                 "2. For each QURL, evaluate:",
                 "   - Is it expiring within the next 24 hours?",
-                "   - Does it have a high access_count relative to its max_sessions?",
-                "   - Is it a one_time_use link that has already been accessed?",
-                "   - Is it missing a description?",
-                "3. Summarize findings in a table with columns: resource_id, target_url, status, expires_at, access_count, and any flags.",
-                "4. Recommend actions for any issues found (extend, delete, or add description).",
+                "   - Is the status revoked but still present?",
+                "   - Is it missing tags for organization?",
+                "   - Is it using a custom domain?",
+                "3. Summarize findings in a table with columns: resource_id, target_url, status, tags, expires_at, custom_domain, and any flags.",
+                "4. Recommend actions for any issues found (use update_qurl to extend, add tags, or update description; use delete_qurl to revoke).",
               ].join("\n"),
             },
           },

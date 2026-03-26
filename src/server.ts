@@ -5,7 +5,9 @@ import { resolveQurlTool, resolveQurlSchema } from "./tools/resolve-qurl.js";
 import { listQurlsTool, listQurlsSchema } from "./tools/list-qurls.js";
 import { getQurlTool, getQurlSchema } from "./tools/get-qurl.js";
 import { deleteQurlTool, deleteQurlSchema } from "./tools/delete-qurl.js";
-import { extendQurlTool, extendQurlSchema } from "./tools/extend-qurl.js";
+import { updateQurlTool, updateQurlSchema } from "./tools/update-qurl.js";
+import { mintLinkTool, mintLinkSchema } from "./tools/mint-link.js";
+import { batchCreateTool, batchCreateSchema } from "./tools/batch-create.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
@@ -34,8 +36,14 @@ export function createServer(client: IQURLClient, version: string): McpServer {
   const del = deleteQurlTool(client);
   server.tool(del.name, del.description, deleteQurlSchema.shape, del.handler);
 
-  const extend = extendQurlTool(client);
-  server.tool(extend.name, extend.description, extendQurlSchema.shape, extend.handler);
+  const update = updateQurlTool(client);
+  server.tool(update.name, update.description, updateQurlSchema.shape, update.handler);
+
+  const mint = mintLinkTool(client);
+  server.tool(mint.name, mint.description, mintLinkSchema.shape, mint.handler);
+
+  const batch = batchCreateTool(client);
+  server.tool(batch.name, batch.description, batchCreateSchema.shape, batch.handler);
 
   // Register resources — server.resource(name, uri, handler)
   const links = linksResource(client);

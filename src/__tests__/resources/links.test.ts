@@ -1,23 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
 import { linksResource } from "../../resources/links.js";
-import { makeMockClient, sampleQURL } from "../helpers.js";
+import { makeMockClient, sampleQurlData } from "../helpers.js";
 
 const sampleQURLs = [
-  sampleQURL({
+  sampleQurlData({
     resource_id: "r_link1",
-    qurl_link: "https://qurl.link/at_1",
     qurl_site: "https://1.qurl.site",
     target_url: "https://example.com/1",
     expires_at: "2026-03-15T00:00:00Z",
   }),
-  sampleQURL({
+  sampleQurlData({
     resource_id: "r_link2",
-    qurl_link: "https://qurl.link/at_2",
     qurl_site: "https://2.qurl.site",
     target_url: "https://example.com/2",
     expires_at: "2026-03-20T00:00:00Z",
-    access_count: 3,
-    one_time_use: true,
+    tags: ["prod"],
   }),
 ];
 

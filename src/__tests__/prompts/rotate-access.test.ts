@@ -57,6 +57,13 @@ describe("rotateAccessPrompt", () => {
       expect(getPromptText(result)).toContain("create_qurl");
     });
 
+    it("mentions mint_link as alternative", () => {
+      const prompt = rotateAccessPrompt();
+      const result = prompt.handler({ resource_id: "r_test123" });
+
+      expect(getPromptText(result)).toContain("mint_link");
+    });
+
     it("defaults to 24h expiry when not specified", () => {
       const prompt = rotateAccessPrompt();
       const result = prompt.handler({ resource_id: "r_test123" });

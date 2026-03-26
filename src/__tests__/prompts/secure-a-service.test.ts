@@ -36,14 +36,14 @@ describe("secureAServicePrompt", () => {
       expect(getPromptText(result)).toContain("https://example.com/api");
     });
 
-    it("includes description when provided", () => {
+    it("includes label when provided", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({
         target_url: "https://example.com",
-        description: "My API server",
+        label: "Alice from Acme",
       });
 
-      expect(getPromptText(result)).toContain("My API server");
+      expect(getPromptText(result)).toContain("Alice from Acme");
     });
 
     it("includes expires_in when provided", () => {
@@ -56,34 +56,24 @@ describe("secureAServicePrompt", () => {
       expect(getPromptText(result)).toContain("24h");
     });
 
-    it("includes one_time_use when set to true", () => {
+    it("includes session_duration when provided", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({
         target_url: "https://example.com",
-        one_time_use: "true",
+        session_duration: "1h",
       });
 
-      expect(getPromptText(result)).toContain("one_time_use: true");
+      expect(getPromptText(result)).toContain("session_duration: 1h");
     });
 
-    it("includes one_time_use as false when set to false", () => {
+    it("includes tags when provided", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({
         target_url: "https://example.com",
-        one_time_use: "false",
+        tags: "prod,api",
       });
 
-      expect(getPromptText(result)).toContain("one_time_use: false");
-    });
-
-    it("includes max_sessions when provided", () => {
-      const prompt = secureAServicePrompt();
-      const result = prompt.handler({
-        target_url: "https://example.com",
-        max_sessions: "5",
-      });
-
-      expect(getPromptText(result)).toContain("max_sessions: 5");
+      expect(getPromptText(result)).toContain("prod,api");
     });
 
     it("instructs to use create_qurl tool", () => {
@@ -93,13 +83,20 @@ describe("secureAServicePrompt", () => {
       expect(getPromptText(result)).toContain("create_qurl");
     });
 
+    it("mentions qurl_link is ephemeral", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({ target_url: "https://example.com" });
+
+      expect(getPromptText(result)).toContain("ephemeral");
+    });
+
     it("works with only required args", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({ target_url: "https://example.com" });
       const text = getPromptText(result);
 
       expect(text).toContain("target_url: https://example.com");
-      expect(text).not.toContain("description:");
+      expect(text).not.toContain("label:");
       expect(text).not.toContain("expires_in:");
     });
   });

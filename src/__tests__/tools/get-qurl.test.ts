@@ -1,17 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { getQurlTool, getQurlSchema } from "../../tools/get-qurl.js";
-import { makeMockClient, sampleQURL } from "../helpers.js";
+import { makeMockClient, sampleQurlData } from "../helpers.js";
 
-const fixture = sampleQURL({
+const fixture = sampleQurlData({
   resource_id: "r_test456",
-  qurl_link: "https://qurl.link/at_xyz",
   qurl_site: "https://test.qurl.site",
   target_url: "https://example.com/page",
   description: "A test link",
   expires_at: "2026-03-15T00:00:00Z",
-  access_count: 5,
-  max_sessions: 2,
-  metadata: { tag: "test" },
+  tags: ["test"],
 });
 
 describe("getQurlTool", () => {
@@ -60,8 +57,7 @@ describe("getQurlTool", () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.resource_id).toBe("r_test456");
       expect(parsed.target_url).toBe("https://example.com/page");
-      expect(parsed.access_count).toBe(5);
-      expect(parsed.metadata).toEqual({ tag: "test" });
+      expect(parsed.tags).toEqual(["test"]);
     });
 
     it("returns only the data object, not the wrapper", async () => {
@@ -72,7 +68,7 @@ describe("getQurlTool", () => {
       const result = await tool.handler({ resource_id: "r_test456" });
       const text = result.content[0].text;
 
-      // Should be the QURL object directly, not { data: ... }
+      // Should be the QurlData object directly, not { data: ... }
       expect(text).toBe(JSON.stringify(fixture));
     });
 

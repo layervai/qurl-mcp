@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { createQurlTool, createQurlSchema } from "../../tools/create-qurl.js";
-import { makeMockClient, sampleQURL } from "../helpers.js";
+import { makeMockClient, sampleCreateQurlData } from "../helpers.js";
 
-const fixture = sampleQURL();
+const fixture = sampleCreateQurlData();
 
 describe("createQurlTool", () => {
   describe("metadata", () => {
@@ -39,19 +39,28 @@ describe("createQurlTool", () => {
     it("accepts all optional fields", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
-        description: "My link",
+        label: "Alice from Acme",
         expires_in: "24h",
         one_time_use: true,
         max_sessions: 5,
-        metadata: { env: "prod", team: "platform" },
+        session_duration: "1h",
+        custom_domain: "app.example.com",
+        access_policy: {
+          ip_allowlist: ["192.168.1.0/24"],
+          geo_allowlist: ["US"],
+        },
       });
       expect(result.success).toBe(true);
     });
 
-    it("accepts metadata as a record of unknown values", () => {
+    it("accepts access_policy with ai_agent_policy", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
-        metadata: { count: 42, nested: { a: 1 }, tags: ["x", "y"] },
+        access_policy: {
+          ai_agent_policy: {
+            deny_categories: ["gptbot", "commoncrawl"],
+          },
+        },
       });
       expect(result.success).toBe(true);
     });
@@ -64,12 +73,12 @@ describe("createQurlTool", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects non-positive max_sessions", () => {
+    it("accepts max_sessions of 0 (unlimited)", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
         max_sessions: 0,
       });
-      expect(result.success).toBe(false);
+      expect(result.success).toBe(true);
     });
 
     it("rejects negative max_sessions", () => {
@@ -89,7 +98,7 @@ describe("createQurlTool", () => {
 
       const input = {
         target_url: "https://example.com/protected",
-        description: "Test QURL",
+        label: "Test QURL",
       };
       const result = await tool.handler(input);
 
@@ -99,8 +108,8 @@ describe("createQurlTool", () => {
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.resource_id).toBe("r_test123");
-      expect(parsed.qurl_link).toBe("https://qurl.link/at_abc");
-      expect(parsed.target_url).toBe("https://example.com/protected");
+      expect(parsed.qurl_link).toBe("https://qurl.link/at_abc123def456ghi789");
+      expect(parsed.qurl_id).toBe("q_3a7f2c8e91b");
     });
 
     it("formats response as compact JSON", async () => {
@@ -130,11 +139,12 @@ describe("createQurlTool", () => {
 
       const input = {
         target_url: "https://example.com",
-        description: "desc",
+        label: "Test",
         expires_in: "1h",
         one_time_use: true,
         max_sessions: 3,
-        metadata: { env: "test" },
+        session_duration: "30m",
+        custom_domain: "app.example.com",
       };
       await tool.handler(input);
 

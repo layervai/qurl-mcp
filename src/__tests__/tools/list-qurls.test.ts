@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { listQurlsTool, listQurlsSchema } from "../../tools/list-qurls.js";
 import type { ListQURLsOutput } from "../../client.js";
-import { makeMockClient, sampleQURL } from "../helpers.js";
+import { makeMockClient, sampleQurlData } from "../helpers.js";
 
-const fixture = sampleQURL({ resource_id: "r_abc", qurl_link: "https://qurl.link/at_abc" });
+const fixture = sampleQurlData({ resource_id: "r_abc" });
 
 describe("listQurlsTool", () => {
   describe("metadata", () => {
@@ -52,6 +52,19 @@ describe("listQurlsTool", () => {
 
     it("accepts limit and cursor together", () => {
       const result = listQurlsSchema.safeParse({ limit: 20, cursor: "cur_abc" });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts filter fields", () => {
+      const result = listQurlsSchema.safeParse({
+        status: "active",
+        created_after: "2026-01-01T00:00:00Z",
+        created_before: "2026-12-31T23:59:59Z",
+        expires_before: "2026-06-01T00:00:00Z",
+        expires_after: "2026-03-01T00:00:00Z",
+        sort: "created_at:desc",
+        q: "dashboard",
+      });
       expect(result.success).toBe(true);
     });
   });

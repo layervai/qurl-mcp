@@ -10,12 +10,20 @@ export const listQurlsSchema = z.object({
     .optional()
     .describe("Maximum number of QURLs to return (default: 20)"),
   cursor: z.string().optional().describe("Pagination cursor from a previous response"),
+  status: z.string().optional().describe("Filter by status (comma-separated, e.g., 'active,revoked')"),
+  created_after: z.string().optional().describe("Filter: created after this date (RFC 3339)"),
+  created_before: z.string().optional().describe("Filter: created before this date (RFC 3339)"),
+  expires_before: z.string().optional().describe("Filter: expires before this date (RFC 3339)"),
+  expires_after: z.string().optional().describe("Filter: expires after this date (RFC 3339)"),
+  sort: z.string().optional().describe("Sort field and direction (e.g., 'created_at:desc')"),
+  q: z.string().optional().describe("Search query (searches description and target_url)"),
 });
 
 export function listQurlsTool(client: IQURLClient) {
   return {
     name: "list_qurls",
-    description: "List active QURLs with optional pagination.",
+    description:
+      "List QURLs with optional filtering by status, date ranges, and search query.",
     inputSchema: listQurlsSchema,
     handler: async (input: z.infer<typeof listQurlsSchema>) => {
       const result = await client.listQURLs(input);

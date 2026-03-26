@@ -38,18 +38,18 @@ describe("auditLinksPrompt", () => {
       expect(getPromptText(result)).toContain("expiring");
     });
 
-    it("includes access count evaluation", () => {
+    it("includes tags check", () => {
       const prompt = auditLinksPrompt();
       const result = prompt.handler();
 
-      expect(getPromptText(result)).toContain("access_count");
+      expect(getPromptText(result)).toContain("tags");
     });
 
-    it("includes one_time_use check", () => {
+    it("includes custom_domain check", () => {
       const prompt = auditLinksPrompt();
       const result = prompt.handler();
 
-      expect(getPromptText(result)).toContain("one_time_use");
+      expect(getPromptText(result)).toContain("custom domain");
     });
 
     it("asks for a summary table", () => {
@@ -59,11 +59,11 @@ describe("auditLinksPrompt", () => {
       expect(getPromptText(result)).toContain("table");
     });
 
-    it("recommends actions", () => {
+    it("recommends actions using update_qurl", () => {
       const prompt = auditLinksPrompt();
       const result = prompt.handler();
 
-      expect(getPromptText(result)).toContain("Recommend actions");
+      expect(getPromptText(result)).toContain("update_qurl");
     });
   });
 });
