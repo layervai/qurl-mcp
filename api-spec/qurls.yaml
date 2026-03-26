@@ -1521,7 +1521,7 @@ paths:
                 data:
                   webhook_id: "wh_abc123def456ghij"
                   url: "https://example.com/webhooks/qurl"
-                  secret: "whsec_K8xQp9H2sJ9Lx7R4AaBbCcDdEeFf..."
+                  secret: "whsec_EXAMPLE000000000000000000..."
                   events: ["qurl.created", "qurl.accessed", "qurl.revoked"]
                   status: "active"
                   description: "Production webhook for QURL events"
@@ -1809,8 +1809,8 @@ paths:
               example:
                 data:
                   key_id: "key_abc123def456"
-                  api_key: "lv_live_a3x9Kp2mN8qR5sT7wY0zBcDfGhJkLmNp"
-                  key_prefix: "lv_live_a3x9"
+                  api_key: "lv_test_EXAMPLE00000000000000000000"
+                  key_prefix: "lv_test_EXAM"
                   name: "Production integration"
                   scopes: ["qurl:read", "qurl:write"]
                   status: "active"
@@ -1876,7 +1876,7 @@ paths:
               example:
                 data:
                   - key_id: "key_abc123def456"
-                    key_prefix: "lv_live_a3x9"
+                    key_prefix: "lv_test_EXAM"
                     name: "Production integration"
                     scopes: ["qurl:read", "qurl:write"]
                     status: "active"
@@ -1936,7 +1936,7 @@ paths:
               example:
                 data:
                   key_id: "key_abc123def456"
-                  key_prefix: "lv_live_a3x9"
+                  key_prefix: "lv_test_EXAM"
                   name: "Updated key name"
                   scopes: ["qurl:read"]
                   status: "active"
@@ -3206,7 +3206,7 @@ components:
           readOnly: true
           description: >-
             First 12 characters of the key for identification.
-            Includes the environment prefix (e.g., "lv_live_a3x9").
+            Includes the environment prefix (e.g., "lv_test_EXAM").
         name:
           type: string
         scopes:
@@ -3541,7 +3541,7 @@ components:
               description: |
                 HMAC signing secret (only returned on create or regenerate).
                 Use this to verify the QURL-Signature header on incoming webhooks.
-              example: "whsec_K8xQp9H2sJ9Lx7R4AaBbCcDdEeFf..."
+              example: "whsec_EXAMPLE000000000000000000..."
 
     WebhookResponse:
       type: object
