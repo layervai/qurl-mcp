@@ -10,11 +10,12 @@ export const listQurlsSchema = z.object({
     .optional()
     .describe("Maximum number of QURLs to return (default: 20)"),
   cursor: z.string().optional().describe("Pagination cursor from a previous response"),
+  // Plain string (not z.enum) because the API accepts comma-separated values like "active,revoked"
   status: z.string().optional().describe("Filter by status (comma-separated, e.g., 'active,revoked')"),
-  created_after: z.string().optional().describe("Filter: created after this date (RFC 3339)"),
-  created_before: z.string().optional().describe("Filter: created before this date (RFC 3339)"),
-  expires_before: z.string().optional().describe("Filter: expires before this date (RFC 3339)"),
-  expires_after: z.string().optional().describe("Filter: expires after this date (RFC 3339)"),
+  created_after: z.string().datetime().optional().describe("Filter: created after this date (RFC 3339)"),
+  created_before: z.string().datetime().optional().describe("Filter: created before this date (RFC 3339)"),
+  expires_before: z.string().datetime().optional().describe("Filter: expires before this date (RFC 3339)"),
+  expires_after: z.string().datetime().optional().describe("Filter: expires after this date (RFC 3339)"),
   sort: z.string().optional().describe("Sort field and direction (e.g., 'created_at:desc')"),
   q: z.string().optional().describe("Search query (searches description and target_url)"),
 });

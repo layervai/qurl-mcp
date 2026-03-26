@@ -60,22 +60,35 @@ describe("updateQurlTool", () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it("rejects both extend_by and expires_at", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        extend_by: "24h",
+        expires_at: "2026-04-01T00:00:00Z",
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toBe(
+          "Provide either extend_by or expires_at, not both",
+        );
+      }
+    });
+
+    it("rejects update with no update fields", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toBe(
+          "At least one update field (extend_by, expires_at, tags, or description) is required",
+        );
+      }
+    });
   });
 
   describe("handler", () => {
-    it("rejects both extend_by and expires_at", async () => {
-      const client = makeMockClient();
-      const tool = updateQurlTool(client);
-
-      await expect(
-        tool.handler({
-          resource_id: "r_abc",
-          extend_by: "24h",
-          expires_at: "2026-04-01T00:00:00Z",
-        }),
-      ).rejects.toThrow("Provide either extend_by or expires_at, not both");
-    });
-
     it("calls client.updateQURL with resource_id and body", async () => {
       const mockUpdate = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ updateQURL: mockUpdate });

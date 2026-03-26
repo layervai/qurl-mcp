@@ -43,6 +43,17 @@ describe("mintLinkTool", () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it("accepts access_policy", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: "r_abc123",
+        access_policy: {
+          geo_allowlist: ["US", "CA"],
+          ip_denylist: ["10.0.0.0/8"],
+        },
+      });
+      expect(result.success).toBe(true);
+    });
   });
 
   describe("handler", () => {

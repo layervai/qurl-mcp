@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 
-const aiAgentPolicySchema = z.object({
+export const aiAgentPolicySchema = z.object({
   block_all: z.boolean().optional().describe("Block all recognized AI agents"),
   deny_categories: z
     .array(z.string())
@@ -13,7 +13,7 @@ const aiAgentPolicySchema = z.object({
     .describe("AI agent categories to permit (all others blocked)"),
 });
 
-const accessPolicySchema = z.object({
+export const accessPolicySchema = z.object({
   ip_allowlist: z
     .array(z.string())
     .optional()
