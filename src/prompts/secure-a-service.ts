@@ -15,10 +15,6 @@ export const secureAServiceArgs = {
     .string()
     .optional()
     .describe('How long access lasts after clicking (e.g., "1h")'),
-  tags: z
-    .string()
-    .optional()
-    .describe("Comma-separated tags for categorization (e.g., \"prod,api\")"),
 };
 
 type SecureAServiceInput = z.infer<z.ZodObject<typeof secureAServiceArgs>>;
@@ -50,9 +46,6 @@ export function secureAServicePrompt() {
       }
       if (args.session_duration) {
         parts.push(`- session_duration: ${args.session_duration}`);
-      }
-      if (args.tags) {
-        parts.push(`- tags: [${args.tags}]`);
       }
 
       parts.push("");

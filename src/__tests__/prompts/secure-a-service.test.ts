@@ -66,16 +66,6 @@ describe("secureAServicePrompt", () => {
       expect(getPromptText(result)).toContain("session_duration: 1h");
     });
 
-    it("includes tags when provided", () => {
-      const prompt = secureAServicePrompt();
-      const result = prompt.handler({
-        target_url: "https://example.com",
-        tags: "prod,api",
-      });
-
-      expect(getPromptText(result)).toContain("prod,api");
-    });
-
     it("instructs to use create_qurl tool", () => {
       const prompt = secureAServicePrompt();
       const result = prompt.handler({ target_url: "https://example.com" });

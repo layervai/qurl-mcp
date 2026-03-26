@@ -62,6 +62,7 @@ describe("updateQurlTool", () => {
     });
   });
 
+  describe("handler", () => {
     it("rejects both extend_by and expires_at", async () => {
       const client = makeMockClient();
       const tool = updateQurlTool(client);
@@ -75,7 +76,6 @@ describe("updateQurlTool", () => {
       ).rejects.toThrow("Provide either extend_by or expires_at, not both");
     });
 
-  describe("handler", () => {
     it("calls client.updateQURL with resource_id and body", async () => {
       const mockUpdate = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ updateQURL: mockUpdate });
