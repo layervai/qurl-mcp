@@ -18,13 +18,14 @@ jobs:
   check-drift:
     name: Check for API spec drift
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Fetch current API spec
         id: fetch
         run: |
-          HTTP_CODE=$(curl -s -w '%{http_code}' -o /tmp/current-spec.yaml "$SPEC_URL" 2>/dev/null)
+          HTTP_CODE=$(curl -s --max-time 30 -w '%{http_code}' -o /tmp/current-spec.yaml "$SPEC_URL" 2>/dev/null)
           if [ "$HTTP_CODE" != "200" ]; then
             echo "::warning::Failed to fetch API spec (HTTP $HTTP_CODE). Skipping drift check."
             echo "skip=true" >> "$GITHUB_OUTPUT"
