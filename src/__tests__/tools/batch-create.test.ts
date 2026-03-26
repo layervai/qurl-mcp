@@ -53,6 +53,20 @@ describe("batchCreateTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("accepts items with session_duration, custom_domain, and access_policy", () => {
+      const result = batchCreateSchema.safeParse({
+        items: [
+          {
+            target_url: "https://example.com",
+            session_duration: "1h",
+            custom_domain: "app.example.com",
+            access_policy: { geo_allowlist: ["US"] },
+          },
+        ],
+      });
+      expect(result.success).toBe(true);
+    });
+
     it("rejects more than 20 items", () => {
       const items = Array.from({ length: 21 }, (_, i) => ({
         target_url: `https://example${i}.com`,

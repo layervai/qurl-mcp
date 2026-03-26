@@ -8,6 +8,9 @@ const batchItemSchema = createQurlSchema.pick({
   expires_in: true,
   one_time_use: true,
   max_sessions: true,
+  session_duration: true,
+  custom_domain: true,
+  access_policy: true,
 });
 
 export const batchCreateSchema = z.object({

@@ -17,6 +17,9 @@ export function updateQurlTool(client: IQURLClient) {
       "Do not provide both extend_by and expires_at.",
     inputSchema: updateQurlSchema,
     handler: async (input: z.infer<typeof updateQurlSchema>) => {
+      if (input.extend_by && input.expires_at) {
+        throw new Error("Provide either extend_by or expires_at, not both");
+      }
       const { resource_id, ...body } = input;
       const result = await client.updateQURL(resource_id, body);
       return {
