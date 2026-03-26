@@ -1,0 +1,4273 @@
+# OpenAPI 3.0.3 is used instead of 3.1.0 for compatibility with oapi-codegen.
+# oapi-codegen v2.x does not fully support OpenAPI 3.1 features.
+openapi: 3.0.3
+info:
+  title: QURL Service API
+  description: |
+    API for managing QURL resources - secure, time-limited access links to protected resources.
+
+    ## Authentication
+    The public API requires Auth0 JWT tokens or API keys with appropriate scopes:
+    - `qurl:read` - Read access to QURLs and quota
+    - `qurl:write` - Create, update, and delete QURLs
+    - `qurl:resolve` - Resolve access tokens and trigger firewall access (headless)
+    - `qurl:write` also covers webhook management
+
+    ## Rate Limiting
+    - Per-owner: Configurable limit (default varies by plan)
+    - Per-IP: Configurable limit for internal endpoints
+
+    Rate limit exceeded responses include a `Retry-After` header.
+
+    ## Idempotency
+    Mutating endpoints (POST, PUT, PATCH) support idempotency via the `Idempotency-Key` header.
+    When provided, the response is cached and subsequent requests with the same key return
+    the cached response with `Idempotency-Replayed: true` header.
+
+    ## Response Envelope
+    All responses use a consistent envelope format:
+    ```json
+    {
+      "data": { ... },      // For success responses
+      "error": { ... },     // For error responses (RFC 7807 format)
+      "meta": {
+        "request_id": "...",
+        "page_size": 20,    // For list responses
+        "has_more": true,   // For list responses
+        "next_cursor": "..."// For list responses
+      }
+    }
+    ```
+
+    ## Error Responses (RFC 7807)
+    Error responses follow [RFC 7807 Problem Details](https://datatracker.ietf.org/doc/html/rfc7807)
+    with `Content-Type: application/problem+json`:
+    ```json
+    {
+      "error": {
+        "type": "https://api.qurl.link/problems/invalid_request",
+        "title": "Invalid Request",
+        "status": 400,
+        "detail": "The target_url field must be a valid HTTPS URL",
+        "instance": "/v1/qurls",
+        "code": "invalid_request"
+      },
+      "meta": { "request_id": "..." }
+    }
+    ```
+    For validation errors, an additional `invalid_fields` map is included.
+
+    ## Caching
+    GET endpoints support ETag-based caching. Include `If-None-Match` header with
+    the ETag value to receive a 304 Not Modified response when content hasn't changed.
+
+    ## Webhooks
+    Subscribe to events via webhook endpoints. Webhook payloads are signed with
+    HMAC-SHA256 using your webhook secret. Verify the `QURL-Signature` header.
+  version: 1.0.0
+  contact:
+    name: LayerV
+    url: https://layerv.ai
+
+servers:
+  - url: https://api.layerv.ai
+    description: Production
+  - url: https://api.layerv.xyz
+    description: Sandbox
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: QURLs
+    description: QURL resource management
+  - name: Quota
+    description: Usage quota information
+  - name: Webhooks
+    description: Webhook endpoint management
+  - name: API Keys
+    description: API key management (JWT-only, API keys cannot manage API keys)
+  - name: Usage
+    description: Usage and billing period information (JWT-only)
+  - name: Customer
+    description: Customer profile and billing settings (JWT-only)
+  - name: Billing
+    description: Stripe checkout, portal, and invoices (JWT-only)
+  - name: Resolution
+    description: Headless QURL resolution for AI agents and programmatic clients
+  - name: Domains
+    description: Custom domain management (enterprise plan)
+  - name: Access Codes
+    description: Access code management for protected resource sharing
+  - name: Resources
+    description: Resource management (dashboard-only, groups QURLs by target URL)
+
+paths:
+  /v1/resolve:
+    post:
+      tags:
+        - Resolution
+      summary: Resolve a QURL access token (headless)
+      description: |
+        Resolves a QURL access token and triggers an NHP knock to open firewall access
+        for the caller's IP address. Returns the target URL that the caller can access
+        directly for the duration of the access grant.
+
+        This endpoint is designed for AI agents and programmatic clients that cannot
+        follow the browser-based QURL flow.
+
+        **Important:** The firewall is opened for the IP address making this request.
+        The `src_ip` in the response reflects which IP was granted access.
+
+        **One-time tokens:** If the token is one-time-use and the NHP knock fails after
+        token resolution, the token is consumed but no access is granted. Multi-use
+        tokens can be retried.
+      operationId: resolveQurl
+      security:
+        - bearerAuth: [qurl:resolve]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveQurlRequest'
+            example:
+              access_token: "at_k8xqp9h2sj9lx7r4abcdef"
+      responses:
+        '200':
+          description: Token resolved and firewall access granted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveQurlResponse'
+              example:
+                data:
+                  target_url: "https://api.example.com/data"
+                  resource_id: "r_k8xqp9h2sj9"
+                  access_grant:
+                    expires_in: 305
+                    granted_at: "2026-03-09T15:30:00Z"
+                    src_ip: "203.0.113.42"
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '410':
+          $ref: '#/components/responses/Gone'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
+  /v1/qurls:
+    post:
+      tags:
+        - QURLs
+      summary: Create a new QURL
+      description: Creates a new QURL resource that provides secure access to a target URL.
+      operationId: createQurl
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateQurlRequest'
+            example:
+              target_url: "https://internal.example.com/dashboard"
+              expires_in: "7d"
+              one_time_use: false
+              max_sessions: 5
+              description: "Admin dashboard access for external contractor"
+              metadata:
+                customer_id: "cust_123"
+                ticket: "JIRA-456"
+              access_policy:
+                ip_allowlist: ["192.168.1.0/24"]
+                geo_allowlist: ["US", "CA"]
+                ai_agent_policy:
+                  deny_categories: ["gptbot", "commoncrawl", "bytedance"]
+      responses:
+        '201':
+          description: QURL created successfully
+          headers:
+            Location:
+              description: URL of the created QURL resource
+              schema:
+                type: string
+                format: uri
+                example: "https://api.qurl.link/v1/qurls/r_k8xqp9h2sj9"
+            Idempotency-Replayed:
+              description: Present and set to "true" if response was replayed from cache
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateQurlResponse'
+              example:
+                data:
+                  resource_id: "r_k8xqp9h2sj9"
+                  qurl_link: "https://qurl.link/at_abc123def456ghi789"
+                  qurl_site: "https://r_k8xqp9h2sj9.qurl.site"
+                  expires_at: "2024-01-15T10:30:00Z"
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - QURLs
+      summary: List QURLs
+      description: |
+        Lists QURL resources owned by the authenticated user.
+        Supports filtering by status and date ranges, with cursor-based pagination.
+      operationId: listQurls
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of results to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: |
+            Pagination cursor from previous response.
+            Changing the sort parameter resets pagination to the first page.
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by status (comma-separated for multiple)
+          schema:
+            type: string
+            example: "active,revoked"
+        - name: created_after
+          in: query
+          description: Filter by creation date (RFC3339)
+          schema:
+            type: string
+            format: date-time
+        - name: created_before
+          in: query
+          description: Filter by creation date (RFC3339)
+          schema:
+            type: string
+            format: date-time
+        - name: expires_before
+          in: query
+          description: Filter by expiration date (RFC3339)
+          schema:
+            type: string
+            format: date-time
+        - name: expires_after
+          in: query
+          description: Filter by expiration date (RFC3339)
+          schema:
+            type: string
+            format: date-time
+        - name: sort
+          in: query
+          description: |
+            Sort field and direction (field:direction).
+            Valid fields: created_at, expires_at.
+            Direction: asc or desc (default: desc).
+            Sort order is consistent across pages.
+          schema:
+            type: string
+            example: "created_at:desc"
+        - name: q
+          in: query
+          description: |
+            Search query string (case-insensitive).
+            Searches across description and target_url fields.
+          schema:
+            type: string
+            maxLength: 200
+            example: "dashboard"
+      responses:
+        '200':
+          description: List of QURLs
+          headers:
+            ETag:
+              description: Entity tag for caching
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QurlListResponse'
+              example:
+                data:
+                  - resource_id: "r_k8xqp9h2sj9"
+                    target_url: "https://internal.example.com/dashboard"
+                    status: "active"
+                    created_at: "2024-01-08T10:30:00Z"
+                    expires_at: "2024-01-15T10:30:00Z"
+                    description: "Admin dashboard access"
+                    qurl_site: "https://r_k8xqp9h2sj9.qurl.site"
+                  - resource_id: "r_lm2np4q8rt7"
+                    target_url: "https://api.example.com/reports"
+                    status: "active"
+                    created_at: "2024-01-07T14:00:00Z"
+                    expires_at: "2024-01-14T14:00:00Z"
+                    qurl_site: "https://r_lm2np4q8rt7.qurl.site"
+                meta:
+                  request_id: "req_abc123"
+                  page_size: 2
+                  has_more: true
+                  next_cursor: "eyJyIjoicl9MbTJOcDRROHJUNyJ9"
+        '304':
+          description: Not Modified (ETag match)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/qurls/{id}:
+    get:
+      tags:
+        - QURLs
+      summary: Get a QURL
+      description: Retrieves a single QURL resource by ID.
+      operationId: getQurl
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - $ref: '#/components/parameters/QurlId'
+      responses:
+        '200':
+          description: QURL details
+          headers:
+            ETag:
+              description: Entity tag for caching
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QurlResponse'
+              example:
+                data:
+                  resource_id: "r_k8xqp9h2sj9"
+                  target_url: "https://internal.example.com/dashboard"
+                  status: "active"
+                  created_at: "2024-01-08T10:30:00Z"
+                  expires_at: "2024-01-15T10:30:00Z"
+                  description: "Admin dashboard access"
+                  qurl_site: "https://r_k8xqp9h2sj9.qurl.site"
+                meta:
+                  request_id: "req_abc123"
+        '304':
+          description: Not Modified (ETag match)
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - QURLs
+      summary: Delete a QURL
+      description: Revokes a QURL resource (soft delete).
+      operationId: deleteQurl
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/QurlId'
+      responses:
+        '204':
+          description: QURL deleted successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      tags:
+        - QURLs
+      summary: Update a QURL
+      description: Updates a QURL resource. Can extend expiration and/or update tags and description.
+      operationId: updateQurl
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/QurlId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQurlRequest'
+            examples:
+              relative:
+                summary: Extend by relative duration
+                value:
+                  extend_by: "7d"
+              absolute:
+                summary: Set absolute expiration
+                value:
+                  expires_at: "2024-01-22T10:30:00Z"
+      responses:
+        '200':
+          description: QURL updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QurlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/qurls/{id}/mint_link:
+    post:
+      tags:
+        - QURLs
+      summary: Mint an access link
+      description: |
+        Creates a single-use access link for a QURL resource.
+        The link can be shared with users who need temporary access to the resource.
+      operationId: mintLink
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/QurlId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MintLinkRequest'
+            example:
+              expires_at: "2024-01-10T10:30:00Z"
+      responses:
+        '201':
+          description: Access link created
+          headers:
+            Location:
+              description: The minted access link URL
+              schema:
+                type: string
+                format: uri
+                example: "https://qurl.link/at_xyz789abc123def456"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MintLinkResponse'
+              example:
+                data:
+                  qurl_link: "https://qurl.link/at_xyz789abc123def456"
+                  expires_at: "2024-01-10T10:30:00Z"
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/qurls/batch:
+    post:
+      tags:
+        - QURLs
+      summary: Batch create QURLs
+      description: |
+        Creates multiple QURL resources in a single request.
+        Returns 201 if all succeed, 207 Multi-Status if mixed results, or 400 if all fail.
+
+        **Validation is atomic:** if any item fails input validation (e.g. invalid tags,
+        description too long), the entire batch is rejected with per-item error details.
+        Items that passed validation are marked as "skipped" in the results.
+      operationId: batchCreateQurls
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchCreateRequest'
+            example:
+              items:
+                - target_url: "https://app1.example.com"
+                  expires_in: "7d"
+                  access_policy:
+                    ai_agent_policy:
+                      allow_categories: ["claude", "perplexity"]
+                - target_url: "https://app2.example.com"
+                  expires_in: "24h"
+                  one_time_use: true
+      responses:
+        '201':
+          description: All QURLs created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreateResponse'
+              example:
+                data:
+                  succeeded: 2
+                  failed: 0
+                  results:
+                    - index: 0
+                      success: true
+                      resource_id: "r_k8xqp9h2sj9"
+                      qurl_link: "https://qurl.link/at_abc123"
+                      qurl_site: "https://r_k8xqp9h2sj9.qurl.site"
+                      expires_at: "2024-01-15T10:30:00Z"
+                    - index: 1
+                      success: true
+                      resource_id: "r_lm2np4q8rt7"
+                      qurl_link: "https://qurl.link/at_def456"
+                      qurl_site: "https://r_lm2np4q8rt7.qurl.site"
+                      expires_at: "2024-01-09T10:30:00Z"
+                meta:
+                  request_id: "req_abc123"
+        '207':
+          description: Mixed results (some succeeded, some failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreateResponse'
+              example:
+                data:
+                  succeeded: 1
+                  failed: 1
+                  results:
+                    - index: 0
+                      success: true
+                      resource_id: "r_k8xqp9h2sj9"
+                      qurl_link: "https://qurl.link/at_abc123"
+                      qurl_site: "https://r_k8xqp9h2sj9.qurl.site"
+                      expires_at: "2024-01-15T10:30:00Z"
+                    - index: 1
+                      success: false
+                      error:
+                        code: "invalid_target_url"
+                        message: "target_url must be a valid HTTPS URL"
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          description: All items failed or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchCreateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/resources:
+    get:
+      tags:
+        - Resources
+      summary: List resources
+      description: |
+        Lists all resources (target URL groupings) for the authenticated user.
+        Each resource groups QURLs that share the same target URL. The response
+        includes a `qurl_count` for each resource showing how many active QURLs
+        exist for it. Use GET /v1/resources/{id} to see the individual QURLs.
+      operationId: listResources
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: cursor
+          in: query
+          description: Pagination cursor from a previous response
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Maximum number of items to return (1-100, default 20)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Resource list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags:
+        - Resources
+      summary: Create resource
+      description: |
+        Explicitly create a resource (register a target URL before creating
+        QURLs for it). If a resource already exists for the same target URL
+        and owner, the existing resource is returned (idempotent).
+      operationId: createResource
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateResourceRequest'
+      responses:
+        '201':
+          description: Resource created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/resources/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource ID
+        schema:
+          type: string
+          pattern: '^r_[a-z0-9_-]{11}$'
+    get:
+      tags:
+        - Resources
+      summary: Get resource details
+      description: |
+        Get resource details including all QURLs associated with it.
+        Each QURL has its own label, expiry, access policy, and NHP
+        firewall rules — independent of other QURLs on the same resource.
+      operationId: getResource
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Resource details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags:
+        - Resources
+      summary: Update resource metadata
+      description: Update resource metadata (tags, description, custom_domain).
+      operationId: updateResource
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateResourceRequest'
+      responses:
+        '200':
+          description: Resource updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - Resources
+      summary: Revoke resource and all its QURLs
+      description: |
+        Revokes a resource. All QURLs associated with the resource become
+        inaccessible because token resolution checks the resource status.
+      operationId: deleteResource
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Resource revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/resources/{id}/qurls/{qurl_id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Resource ID
+        schema:
+          type: string
+          pattern: '^r_[a-z0-9_-]{11}$'
+      - name: qurl_id
+        in: path
+        required: true
+        description: QURL display ID (q_ + 11 hex chars)
+        schema:
+          type: string
+          pattern: '^q_[0-9a-f]{11}$'
+    delete:
+      tags:
+        - Resources
+      summary: Revoke a specific QURL
+      description: |
+        Revokes a specific QURL token. The QURL must be active. Other QURLs
+        on the same resource are not affected.
+      operationId: revokeResourceQurl
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: QURL revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: QURL is not active
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags:
+        - Resources
+      summary: Update a specific QURL
+      description: |
+        Update expiry, label, access policy, or max_sessions on a specific QURL token.
+        The QURL must be active. At least one field must be provided.
+      operationId: updateResourceQurl
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateQurlTokenRequest'
+      responses:
+        '200':
+          description: QURL updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QurlSummaryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: QURL is not active
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/resources/{id}/sessions:
+    get:
+      tags:
+        - Sessions
+      operationId: listResourceSessions
+      summary: List active sessions for a resource
+      description: Returns all active access sessions for the specified resource.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Active sessions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - Sessions
+      operationId: terminateAllResourceSessions
+      summary: Terminate all active sessions for a resource
+      description: Immediately terminates all active sessions for the specified resource.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sessions terminated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionTerminateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/resources/{id}/sessions/{session_id}:
+    delete:
+      tags:
+        - Sessions
+      operationId: terminateResourceSession
+      summary: Terminate a specific session
+      description: Immediately terminates a specific active session.
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Session terminated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/quota:
+    get:
+      tags:
+        - Quota
+      summary: Get quota information
+      description: Retrieves usage quota for the authenticated user.
+      operationId: getQuota
+      security:
+        - bearerAuth: [qurl:read]
+      responses:
+        '200':
+          description: Quota information
+          headers:
+            ETag:
+              description: Entity tag for caching
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuotaResponse'
+              example:
+                data:
+                  plan: "growth"
+                  period_start: "2024-01-01T00:00:00Z"
+                  period_end: "2024-02-01T00:00:00Z"
+                  rate_limits:
+                    create_per_minute: 200
+                    create_per_hour: 10000
+                    list_per_minute: 120
+                    resolve_per_minute: 300
+                    max_active_qurls: 1000
+                    max_tokens_per_qurl: 50
+                    max_expiry_seconds: 2592000
+                  usage:
+                    qurls_created: 150
+                    active_qurls: 45
+                    active_qurls_percent: 0.45
+                    total_accesses: 1250
+                meta:
+                  request_id: "req_abc123"
+        '304':
+          description: Not Modified (ETag match)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/usage/current-period:
+    get:
+      tags:
+        - Usage
+      summary: Get current billing period usage
+      description: |
+        Returns usage statistics for the current billing period, including
+        the number of QURLs created, the user's tier, period dates, and a
+        cost estimate for usage-based plans (Growth tier).
+        Requires JWT authentication (dashboard endpoint).
+      operationId: getUsageCurrentPeriod
+      security:
+        - bearerAuth: [qurl:read]
+      responses:
+        '200':
+          description: Current period usage information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageCurrentPeriodResponse'
+              example:
+                data:
+                  tier: "growth"
+                  period_start: "2026-03-01T00:00:00Z"
+                  period_end: "2026-03-31T23:59:59Z"
+                  qurls_created: 150
+                  active_qurls: 45
+                  cost_estimate:
+                    currency: "usd"
+                    amount_cents: 1500
+                    description: "150 QURLs x $0.10/QURL"
+                meta:
+                  request_id: "req_abc123"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/usage/daily:
+    get:
+      tags:
+        - Usage
+      summary: Get daily usage breakdown
+      description: |
+        Returns a daily breakdown of QURL creation counts for the current
+        billing period. Intended for dashboard chart rendering.
+        Requires JWT authentication (dashboard endpoint).
+      operationId: getUsageDaily
+      security:
+        - bearerAuth: [qurl:read]
+      responses:
+        '200':
+          description: Daily usage breakdown
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageDailyResponse'
+              example:
+                data:
+                  tier: "growth"
+                  period_start: "2026-03-01T00:00:00Z"
+                  period_end: "2026-03-31T23:59:59Z"
+                  daily:
+                    - date: "2026-03-01"
+                      qurls_created: 12
+                    - date: "2026-03-02"
+                      qurls_created: 8
+                    - date: "2026-03-03"
+                      qurls_created: 15
+                meta:
+                  request_id: "req_abc123"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/customer:
+    get:
+      tags:
+        - Customer
+      summary: Get customer profile
+      description: |
+        Returns the authenticated user's customer profile including tier,
+        spending cap, usage count, and frozen status.
+        Creates a free-tier record on first access (lazy provisioning).
+        Requires JWT authentication (dashboard endpoint). API key authentication is not supported.
+      operationId: getCustomer
+      security:
+        - bearerAuth: [qurl:read]
+      responses:
+        '200':
+          description: Customer profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+              example:
+                data:
+                  tier: "growth"
+                  spending_cap_cents: 5000
+                  current_period_usage: 42
+                  frozen: false
+                meta:
+                  request_id: "req_abc123"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      tags:
+        - Customer
+      summary: Update customer settings
+      description: |
+        Updates customer settings. Currently supports spending cap.
+        Requires JWT authentication and growth or enterprise tier. API key authentication is not supported.
+      operationId: updateCustomer
+      security:
+        - bearerAuth: [qurl:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerRequest'
+      responses:
+        '200':
+          description: Updated customer profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/billing/checkout:
+    post:
+      tags:
+        - Billing
+      summary: Create Stripe checkout session
+      description: |
+        Creates a Stripe Checkout session for plan upgrade.
+        Returns a URL to redirect the user to Stripe's hosted checkout page.
+        Requires JWT authentication (dashboard endpoint). API key authentication is not supported.
+      operationId: createBillingCheckout
+      security:
+        - bearerAuth: [qurl:write]
+      responses:
+        '200':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutSessionResponse'
+              example:
+                data:
+                  url: "https://checkout.stripe.com/c/pay/cs_test_..."
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/billing/portal:
+    post:
+      tags:
+        - Billing
+      summary: Create Stripe billing portal session
+      description: |
+        Creates a Stripe Billing Portal session for managing subscriptions,
+        payment methods, and invoices. Returns a URL to redirect the user.
+        Requires JWT authentication (dashboard endpoint). API key authentication is not supported.
+      operationId: createBillingPortal
+      security:
+        - bearerAuth: [qurl:write]
+      responses:
+        '200':
+          description: Portal session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PortalSessionResponse'
+              example:
+                data:
+                  url: "https://billing.stripe.com/p/session/..."
+                meta:
+                  request_id: "req_abc123"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/billing/invoices:
+    get:
+      tags:
+        - Billing
+      summary: List invoices
+      description: |
+        Returns the authenticated user's Stripe invoices.
+        Requires JWT authentication (dashboard endpoint). API key authentication is not supported.
+      operationId: listBillingInvoices
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of invoices to return (default 25, max 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Invoice list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvoiceListResponse'
+              example:
+                data:
+                  invoices:
+                    - id: "in_1234"
+                      amount_cents: 1500
+                      status: "paid"
+                      created_at: "2026-02-01T00:00:00Z"
+                      pdf_url: "https://pay.stripe.com/invoice/..."
+                meta:
+                  request_id: "req_abc123"
+                  has_more: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/domains:
+    post:
+      tags:
+        - Domains
+      summary: Register a custom domain
+      description: |
+        Registers a new custom domain for the authenticated user.
+        Returns DNS records that must be configured before verification.
+        Requires enterprise plan.
+      operationId: registerDomain
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDomainRequest'
+      responses:
+        '201':
+          description: Domain registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Domain already registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Domains
+      summary: List domains
+      description: Lists custom domains for the authenticated user.
+      operationId: listDomains
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of domains to return per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of domains
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/domains/{domain}:
+    get:
+      tags:
+        - Domains
+      summary: Get domain status
+      description: Retrieves the status and DNS configuration for a custom domain.
+      operationId: getDomain
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - $ref: '#/components/parameters/DomainName'
+      responses:
+        '200':
+          description: Domain details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - Domains
+      summary: Remove domain
+      description: Removes a custom domain registration.
+      operationId: deleteDomain
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/DomainName'
+      responses:
+        '204':
+          description: Domain removed successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/domains/{domain}/verify:
+    post:
+      tags:
+        - Domains
+      summary: Trigger DNS verification
+      description: |
+        Triggers DNS verification for a custom domain.
+        Checks TXT record, ACME CNAME, and traffic routing configuration.
+      operationId: verifyDomain
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/DomainName'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainVerifyResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/webhooks:
+    get:
+      tags:
+        - Webhooks
+      summary: List webhooks
+      description: Lists webhook endpoints owned by the authenticated user.
+      operationId: listWebhooks
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of webhooks to return per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookListResponse'
+              example:
+                data:
+                  - webhook_id: "wh_abc123def456ghij"
+                    url: "https://example.com/webhooks/qurl"
+                    events: ["qurl.created", "qurl.accessed"]
+                    status: "active"
+                    created_at: "2024-01-01T10:00:00Z"
+                    updated_at: "2024-01-01T10:00:00Z"
+                    failure_count: 0
+                    last_delivery_success: true
+                meta:
+                  request_id: "req_abc123"
+                  page_size: 1
+                  has_more: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      tags:
+        - Webhooks
+      summary: Create a webhook
+      description: |
+        Creates a new webhook endpoint. The secret is returned only once in the response.
+        Store it securely - it cannot be retrieved later (only regenerated).
+      operationId: createWebhook
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+            example:
+              url: "https://example.com/webhooks/qurl"
+              events: ["qurl.created", "qurl.accessed", "qurl.revoked"]
+              description: "Production webhook for QURL events"
+      responses:
+        '201':
+          description: Webhook created successfully
+          headers:
+            Location:
+              description: URL of the created webhook resource
+              schema:
+                type: string
+                format: uri
+                example: "https://api.qurl.link/v1/webhooks/wh_abc123def456ghij"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponseWithSecret'
+              example:
+                data:
+                  webhook_id: "wh_abc123def456ghij"
+                  url: "https://example.com/webhooks/qurl"
+                  secret: "whsec_K8xQp9H2sJ9Lx7R4AaBbCcDdEeFf..."
+                  events: ["qurl.created", "qurl.accessed", "qurl.revoked"]
+                  status: "active"
+                  description: "Production webhook for QURL events"
+                  created_at: "2024-01-08T10:30:00Z"
+                  updated_at: "2024-01-08T10:30:00Z"
+                  failure_count: 0
+                  last_delivery_success: false
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+      callbacks:
+        onEvent:
+          '{$request.body#/url}':
+            post:
+              summary: Webhook event delivery
+              description: |
+                Event payload delivered to your webhook URL.
+                Verify authenticity using the QURL-Signature header with HMAC-SHA256.
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      $ref: '#/components/schemas/WebhookPayload'
+              responses:
+                '200':
+                  description: Event received successfully
+
+  /v1/webhooks/events:
+    get:
+      tags:
+        - Webhooks
+      summary: List available event types
+      description: Returns all available webhook event types with descriptions.
+      operationId: listWebhookEventTypes
+      security:
+        - bearerAuth: [qurl:read]
+      responses:
+        '200':
+          description: List of event types
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookEventTypesResponse'
+              example:
+                data:
+                  - type: "qurl.created"
+                    category: "resource"
+                    description: "A new QURL was created"
+                  - type: "qurl.accessed"
+                    category: "access"
+                    description: "A QURL was successfully accessed"
+                  - type: "qurl.access_denied"
+                    category: "access"
+                    description: "Access to a QURL was denied by policy"
+                  - type: "quota.exceeded"
+                    category: "quota"
+                    description: "Quota limit reached, action blocked"
+                meta:
+                  request_id: "req_abc123"
+
+  /v1/webhooks/{id}:
+    get:
+      tags:
+        - Webhooks
+      summary: Get a webhook
+      description: Retrieves a single webhook by ID.
+      operationId: getWebhook
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+      responses:
+        '200':
+          description: Webhook details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      tags:
+        - Webhooks
+      summary: Update a webhook
+      description: Updates a webhook's configuration.
+      operationId: updateWebhook
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWebhookRequest'
+            example:
+              events: ["qurl.created", "qurl.accessed", "qurl.revoked", "token.minted"]
+              status: "active"
+      responses:
+        '200':
+          description: Webhook updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      tags:
+        - Webhooks
+      summary: Delete a webhook
+      description: Deletes a webhook endpoint.
+      operationId: deleteWebhook
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+      responses:
+        '204':
+          description: Webhook deleted successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/webhooks/{id}/secret:
+    post:
+      tags:
+        - Webhooks
+      summary: Regenerate webhook secret
+      description: |
+        Regenerates the signing secret for a webhook. The old secret is immediately
+        invalidated. The new secret is returned only once - store it securely.
+      operationId: regenerateWebhookSecret
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+      responses:
+        '200':
+          description: Secret regenerated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponseWithSecret'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/webhooks/{id}/deliveries:
+    get:
+      tags:
+        - Webhooks
+      summary: List webhook deliveries
+      description: Lists recent delivery attempts for a webhook.
+      operationId: listWebhookDeliveries
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+        - name: limit
+          in: query
+          description: Maximum number of deliveries to return per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of delivery attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDeliveryListResponse'
+              example:
+                data:
+                  - delivery_id: "wd_abc123def456ghij"
+                    webhook_id: "wh_abc123def456ghij"
+                    event_type: "qurl.accessed"
+                    status: "success"
+                    response_code: 200
+                    duration_ms: 145
+                    retry_count: 0
+                    created_at: "2024-01-08T10:35:00Z"
+                    completed_at: "2024-01-08T10:35:00Z"
+                meta:
+                  request_id: "req_abc123"
+                  page_size: 1
+                  has_more: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/api-keys:
+    post:
+      tags:
+        - API Keys
+      summary: Create a new API key
+      description: |
+        Creates a new API key for the authenticated user.
+        The plaintext API key is returned only once in the response - store it securely.
+        Requires JWT authentication (API keys cannot create API keys).
+      operationId: createApiKey
+      security:
+        - bearerAuth: [qurl:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+            example:
+              name: "Production integration"
+              scopes: ["qurl:read", "qurl:write"]
+      responses:
+        '201':
+          description: API key created successfully
+          headers:
+            Location:
+              description: URL of the created API key resource
+              schema:
+                type: string
+                format: uri
+                example: "https://api.qurl.link/v1/api-keys/key_abc123def456"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateApiKeyResponse'
+              example:
+                data:
+                  key_id: "key_abc123def456"
+                  api_key: "lv_live_a3x9Kp2mN8qR5sT7wY0zBcDfGhJkLmNp"
+                  key_prefix: "lv_live_a3x9"
+                  name: "Production integration"
+                  scopes: ["qurl:read", "qurl:write"]
+                  status: "active"
+                  created_at: "2024-01-08T10:30:00Z"
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Forbidden. Either:
+            - API key auth was used (JWT required for key management), or
+            - Plan key limit reached (free: 3, growth: 50). Error code: `api_key_limit`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - API Keys
+      summary: List API keys
+      description: |
+        Lists API keys owned by the authenticated user.
+        The plaintext API key is never returned in list responses.
+        Requires JWT authentication (API keys cannot list API keys).
+      operationId: listApiKeys
+      security:
+        - bearerAuth: [qurl:read]
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of results to return (1-100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: Filter by key status. Defaults to "active" to exclude revoked keys.
+          schema:
+            type: string
+            enum: [active, revoked, all]
+            default: active
+      responses:
+        '200':
+          description: List of API keys
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyListResponse'
+              example:
+                data:
+                  - key_id: "key_abc123def456"
+                    key_prefix: "lv_live_a3x9"
+                    name: "Production integration"
+                    scopes: ["qurl:read", "qurl:write"]
+                    status: "active"
+                    created_at: "2024-01-08T10:30:00Z"
+                    last_used_at: "2024-01-10T14:22:00Z"
+                meta:
+                  request_id: "req_abc123"
+                  page_size: 1
+                  has_more: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/api-keys/{key_id}:
+    patch:
+      tags:
+        - API Keys
+      summary: Update an API key
+      description: |
+        Updates the name or scopes of an existing API key.
+        Requires JWT authentication (API keys cannot update API keys).
+        If neither name nor scopes are provided, the existing key is returned unchanged (no-op).
+      operationId: updateApiKey
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          description: API key identifier
+          schema:
+            type: string
+            pattern: '^key_[A-Za-z0-9]{12}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateApiKeyRequest'
+            example:
+              name: "Updated key name"
+              scopes: ["qurl:read"]
+      responses:
+        '200':
+          description: API key updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiKeyResponse'
+              example:
+                data:
+                  key_id: "key_abc123def456"
+                  key_prefix: "lv_live_a3x9"
+                  name: "Updated key name"
+                  scopes: ["qurl:read"]
+                  status: "active"
+                  created_at: "2024-01-08T10:30:00Z"
+                  last_used_at: "2024-01-10T14:22:00Z"
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - API Keys
+      summary: Revoke an API key
+      description: |
+        Revokes an API key (soft delete). The key status is set to "revoked"
+        and a TTL is set for automatic cleanup after 30 days.
+        Requires JWT authentication (API keys cannot revoke API keys).
+      operationId: revokeApiKey
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - name: key_id
+          in: path
+          required: true
+          description: API key identifier
+          schema:
+            type: string
+            pattern: '^key_[A-Za-z0-9]{12}$'
+      responses:
+        '204':
+          description: API key revoked successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/access-codes/redeem:
+    post:
+      tags:
+        - Access Codes
+      summary: Redeem an access code
+      description: |
+        Redeems an access code to obtain a time-limited access link to a protected resource.
+        This endpoint is public and does not require authentication.
+
+        The response contains a redirect URL. The client should redirect the user to this URL
+        to complete resource access.
+
+        Bot protection is applied: submissions with a non-empty honeypot field or elapsed time
+        under 3 seconds receive a fake success response.
+      operationId: redeemAccessCode
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeemAccessCodeRequest'
+            example:
+              code: "ac_k8xqp9h2sj9lx7r4abcdef"
+              honeypot: ""
+              elapsed_ms: 5200
+      responses:
+        '200':
+          description: Access code redeemed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RedeemAccessCodeResponse'
+              example:
+                data:
+                  redirect_url: "https://qurl.link/#at_k8xqp9h2sj9lx7r4abcdef"
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/access-codes:
+    post:
+      tags:
+        - Access Codes
+      summary: Create an access code
+      description: |
+        Creates a new access code for a QURL resource. The plaintext code is returned only
+        once in the response - store it securely.
+
+        Requires system-tier account. The resource must exist and be owned by the authenticated user.
+      operationId: createAccessCode
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAccessCodeRequest'
+            example:
+              resource_id: "r_k8xqp9h2sj9"
+              name: "Investor Stats Q1"
+              max_uses: 10
+      responses:
+        '201':
+          description: Access code created successfully
+          headers:
+            Location:
+              description: URL of the created access code resource
+              schema:
+                type: string
+                format: uri
+                example: "https://api.layerv.ai/v1/access-codes/acd_k8xqp9h2sj9"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAccessCodeResponse'
+              example:
+                data:
+                  access_code_id: "acd_k8xqp9h2sj9"
+                  code: "ac_k8xqp9h2sj9lx7r4abcdef"
+                  resource_id: "r_k8xqp9h2sj9"
+                  name: "Investor Stats Q1"
+                  status: "active"
+                  max_uses: 10
+                  use_count: 0
+                  created_at: "2026-03-14T12:00:00Z"
+                meta:
+                  request_id: "req_abc123"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      tags:
+        - Access Codes
+      summary: List access codes
+      description: |
+        Lists access codes owned by the authenticated user, sorted by creation date (newest first).
+        Requires system-tier account.
+      operationId: listAccessCodes
+      security:
+        - bearerAuth: [qurl:read]
+      responses:
+        '200':
+          description: List of access codes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessCodeListResponse'
+              example:
+                data:
+                  - access_code_id: "acd_k8xqp9h2sj9"
+                    resource_id: "r_k8xqp9h2sj9"
+                    name: "Investor Stats Q1"
+                    status: "active"
+                    max_uses: 10
+                    use_count: 3
+                    created_at: "2026-03-14T12:00:00Z"
+                meta:
+                  request_id: "req_abc123"
+                  page_size: 1
+                  has_more: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /v1/access-codes/{id}:
+    delete:
+      tags:
+        - Access Codes
+      summary: Revoke an access code
+      description: |
+        Revokes an access code, preventing further redemptions.
+        Requires system-tier account. The code must be owned by the authenticated user.
+      operationId: revokeAccessCode
+      security:
+        - bearerAuth: [qurl:write]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: "Access code ID (format: acd_ + 11 chars)"
+          schema:
+            type: string
+            pattern: '^acd_[a-z0-9_-]{11}$'
+      responses:
+        '204':
+          description: Access code revoked successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimitExceeded'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: oauth2
+      description: |
+        OAuth 2.1 compliant authentication via Auth0.
+
+        Uses Authorization Code flow with PKCE (RFC 7636) as required by OAuth 2.1.
+        Tokens must be passed via Authorization header only (RFC 6750 Section 2.1).
+        Query parameter and form body token transmission are explicitly rejected.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.layerv.ai/authorize
+          tokenUrl: https://auth.layerv.ai/oauth/token
+          scopes:
+            qurl:read: Read access to QURLs and quota
+            qurl:write: Create, update, and delete QURLs
+            qurl:resolve: Resolve access tokens and trigger firewall access
+
+  parameters:
+    QurlId:
+      name: id
+      in: path
+      required: true
+      description: QURL resource ID
+      schema:
+        type: string
+        pattern: '^r_[a-z0-9_-]{11}$'
+        example: "r_k8xqp9h2sj9"
+
+    WebhookId:
+      name: id
+      in: path
+      required: true
+      description: Webhook ID
+      schema:
+        type: string
+        pattern: '^wh_[A-Za-z0-9_-]{16}$'
+        example: "wh_abc123def456ghij"
+
+    DomainName:
+      name: domain
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Custom domain name
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Unique key to ensure idempotent request processing.
+        If provided, duplicate requests with the same key return the cached response.
+        Maximum length: 256 characters.
+      schema:
+        type: string
+        maxLength: 256
+        example: "req_abc123_create_dashboard"
+
+  schemas:
+    CreateQurlRequest:
+      type: object
+      required:
+        - target_url
+      properties:
+        target_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: The URL to protect with QURL (max 2048 characters)
+          example: "https://internal.example.com/dashboard"
+        expires_in:
+          type: string
+          description: |
+            Duration until expiration. Supports: hours (24h), days (7d), weeks (1w).
+            Minimum: 1 minute. Maximum varies by plan: free=3 days, growth/enterprise=30 days. Default: 24h.
+          example: "7d"
+        one_time_use:
+          type: boolean
+          description: Whether this QURL expires after a single use
+          default: false
+        max_sessions:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: |
+            Maximum concurrent sessions allowed.
+            0 = unlimited (default), 1-1000 = hard limit.
+        session_duration:
+          type: string
+          description: |
+            How long access lasts after someone clicks this QURL.
+            Controls the session/cookie lifetime, separate from the QURL link expiration (expires_in).
+            Supports: minutes (5m), hours (1h), days (1d). Minimum: 5 minutes. Maximum: 24 hours.
+            Default: server default (typically 1 hour).
+          example: "1h"
+        access_policy:
+          $ref: '#/components/schemas/AccessPolicy'
+        label:
+          type: string
+          description: Human-readable label identifying who this QURL is for
+          maxLength: 500
+          example: "Alice from Acme"
+        custom_domain:
+          type: string
+          maxLength: 253
+          description: |
+            Optional custom domain to assign to the auto-created resource.
+            The domain must be registered, active, and owned by the caller.
+            Only allowed when the target URL creates a new resource — rejected
+            if a resource already exists for this target URL.
+          example: "app.example.com"
+
+    CreateResourceRequest:
+      type: object
+      required:
+        - target_url
+      properties:
+        target_url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: The URL to protect
+        description:
+          type: string
+          maxLength: 500
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 50
+          maxItems: 10
+        custom_domain:
+          type: string
+
+    UpdateResourceRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          maxLength: 500
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 50
+          maxItems: 10
+        custom_domain:
+          type: string
+        preserve_host:
+          type: boolean
+          description: |
+            Whether to preserve the original Host header when proxying to the origin
+            via a custom domain. When true, the custom domain is sent as the Host header.
+            When false (default), the target server's hostname is used.
+            Only meaningful when custom_domain is set.
+
+    ResourceData:
+      type: object
+      properties:
+        resource_id:
+          type: string
+          pattern: '^r_[a-z0-9_-]{11}$'
+        target_url:
+          type: string
+        status:
+          type: string
+          enum: [active, revoked]
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        custom_domain:
+          type: string
+          nullable: true
+        preserve_host:
+          type: boolean
+          description: Whether to preserve the original Host header when proxying via custom domain
+          default: false
+        qurl_count:
+          type: integer
+          description: Number of active QURLs for this resource
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    ResourceDetailData:
+      type: object
+      properties:
+        resource:
+          $ref: '#/components/schemas/ResourceData'
+        qurls:
+          type: array
+          items:
+            $ref: '#/components/schemas/QurlSummary'
+
+    QurlSummary:
+      type: object
+      properties:
+        qurl_id:
+          type: string
+        label:
+          type: string
+        status:
+          type: string
+          enum: [active, consumed, expired, revoked]
+        one_time_use:
+          type: boolean
+        max_sessions:
+          type: integer
+        session_duration:
+          type: integer
+          description: Session lifetime in seconds (0 = server default)
+        use_count:
+          type: integer
+        qurl_site:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        access_policy:
+          $ref: '#/components/schemas/AccessPolicy'
+
+    UpdateQurlTokenRequest:
+      type: object
+      minProperties: 1
+      description: |
+        Update a specific QURL token. Can extend expiration, update label,
+        access policy, or max_sessions. At least one field must be provided.
+        For expiry: provide exactly one of extend_by (relative) or expires_at (absolute).
+      properties:
+        extend_by:
+          type: string
+          description: |
+            Duration to extend by (e.g., "24h", "7d").
+            Minimum: 1 minute. Maximum: 30 days.
+            Mutually exclusive with expires_at.
+          example: "7d"
+        expires_at:
+          type: string
+          format: date-time
+          description: |
+            Absolute expiration timestamp (RFC 3339).
+            Must be in the future and within 30 days.
+            Mutually exclusive with extend_by.
+        label:
+          type: string
+          maxLength: 500
+          description: Human-readable label for this QURL.
+        access_policy:
+          $ref: '#/components/schemas/AccessPolicy'
+        max_sessions:
+          type: integer
+          minimum: 0
+          maximum: 1000
+          description: Maximum concurrent sessions (0 = unlimited).
+        session_duration:
+          type: string
+          description: |
+            How long access lasts after clicking. Minimum: 5 minutes. Maximum: 24 hours.
+          example: "1h"
+
+    QurlSummaryResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/QurlSummary'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SessionData:
+      type: object
+      properties:
+        session_id:
+          type: string
+          description: Unique session identifier
+        qurl_id:
+          type: string
+          description: QURL display ID (q_ prefix) that created this session
+        src_ip:
+          type: string
+          description: Client IP that created the session
+        user_agent:
+          type: string
+          description: Client user agent
+        created_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+
+    SessionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SessionData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    SessionTerminateResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            terminated:
+              type: integer
+              description: Number of sessions terminated
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ResourceResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/ResourceData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ResourceDetailResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/ResourceDetailData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ResourceListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceData'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    UpdateQurlRequest:
+      type: object
+      description: |
+        Update a QURL resource. Can extend expiration (via extend_by or expires_at)
+        and/or update tags and description. At least one field must be provided.
+      properties:
+        extend_by:
+          type: string
+          description: |
+            Duration to extend by (e.g., "24h", "7d", "1w").
+            Minimum: 1 minute. Maximum: 30 days.
+            Mutually exclusive with expires_at.
+          example: "7d"
+        expires_at:
+          type: string
+          format: date-time
+          description: |
+            Absolute expiration time. Mutually exclusive with extend_by.
+            Must be in the future and within 30 days from now.
+        tags:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
+            pattern: '^[a-zA-Z0-9][a-zA-Z0-9 _-]*$'
+          maxItems: 10
+          uniqueItems: true
+          description: |
+            Replace all tags on this resource. Tags are lowercased and trimmed
+            server-side. Duplicates are silently removed. Pass an empty array
+            to clear all tags.
+        description:
+          type: string
+          maxLength: 500
+          description: Replace the resource description. Pass an empty string to clear.
+
+    MintLinkRequest:
+      type: object
+      description: |
+        Optionally provide expires_in (relative) or expires_at (absolute) — not both.
+        If neither is specified, defaults to 24 hours from now.
+      properties:
+        expires_in:
+          type: string
+          description: |
+            Duration until expiration. Supports: minutes (5m), hours (24h), days (7d), weeks (1w).
+            Minimum: 1 minute. Maximum: 30 days.
+          example: "5m"
+        expires_at:
+          type: string
+          format: date-time
+          description: |
+            Absolute expiration timestamp. Must be in the future and within 30 days from now.
+            Mutually exclusive with expires_in.
+        label:
+          type: string
+          description: Human-readable label identifying who this QURL is for
+          maxLength: 500
+          example: "Alice from Acme"
+        one_time_use:
+          type: boolean
+          description: Whether this QURL can only be used once
+          default: false
+        max_sessions:
+          type: integer
+          description: Maximum concurrent sessions (0 = unlimited)
+          minimum: 0
+          maximum: 1000
+          default: 0
+        session_duration:
+          type: string
+          description: |
+            How long access lasts after clicking. Minimum: 5 minutes. Maximum: 24 hours.
+          example: "1h"
+        access_policy:
+          $ref: '#/components/schemas/AccessPolicy'
+
+    AccessPolicy:
+      type: object
+      description: Access control policy for the QURL
+      x-go-type: domain.AccessPolicy
+      x-go-type-import:
+        path: github.com/layervai/qurl-service/internal/domain
+      properties:
+        ip_allowlist:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+          description: List of allowed IP addresses or CIDR ranges (max 100 entries)
+          example: ["192.168.1.0/24", "10.0.0.1"]
+        ip_denylist:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+          description: List of denied IP addresses or CIDR ranges (max 100 entries)
+        geo_allowlist:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            pattern: '^[A-Z]{2}$'
+          description: List of allowed country codes (ISO 3166-1 alpha-2, max 50 entries)
+          example: ["US", "CA", "GB"]
+        geo_denylist:
+          type: array
+          maxItems: 50
+          items:
+            type: string
+            pattern: '^[A-Z]{2}$'
+          description: List of denied country codes (ISO 3166-1 alpha-2, max 50 entries)
+          example: ["CN", "RU"]
+        user_agent_allow_regex:
+          type: string
+          maxLength: 256
+          description: Regular expression to allow matching user agents (max 256 characters)
+          example: "^Mozilla.*"
+        user_agent_deny_regex:
+          type: string
+          maxLength: 256
+          description: Regular expression to deny matching user agents (max 256 characters)
+          example: ".*bot.*"
+        ai_agent_policy:
+          $ref: '#/components/schemas/AIAgentPolicy'
+
+    AIAgentCategory:
+      type: string
+      description: A well-known AI agent category identifier
+      enum:
+        - chatgpt
+        - gptbot
+        - claude
+        - gemini
+        - perplexity
+        - cohere
+        - meta
+        - bytedance
+        - amazon
+        - apple
+        - commoncrawl
+        - mistral
+        - generic_ai
+
+    AIAgentPolicy:
+      type: object
+      x-go-type: domain.AIAgentPolicy
+      x-go-type-import:
+        path: github.com/layervai/qurl-service/internal/domain
+      description: |
+        Structured policy for controlling AI agent access.
+        Users select well-known categories by name instead of crafting regex patterns.
+        The server maintains the user-agent patterns for each category.
+
+        **Important:** This blocks agents that self-identify via their User-Agent header.
+        It does not prevent agents that spoof or omit their identity.
+
+        Evaluation order: AI agent policy is evaluated after IP/Geo rules but before
+        generic user_agent_deny_regex / user_agent_allow_regex. A bot allowed by this
+        policy can still be blocked by user_agent_deny_regex. A bot blocked here cannot
+        be rescued by user_agent_allow_regex.
+
+        Common examples:
+
+        Block all AI agents:
+          { "block_all": true }
+
+        Block specific crawlers (e.g., GPTBot and Common Crawl) while allowing others:
+          { "deny_categories": ["gptbot", "commoncrawl"] }
+
+        Allow only Claude and Perplexity, block all other AI agents:
+          { "allow_categories": ["claude", "perplexity"] }
+
+        Block ByteDance and Meta crawlers but allow ChatGPT and Claude:
+          { "deny_categories": ["bytedance", "meta"], "allow_categories": ["chatgpt", "claude"] }
+
+        Note: deny always takes precedence over allow. If an agent appears in both lists, it is blocked.
+      properties:
+        block_all:
+          type: boolean
+          description: Block all recognized AI agents regardless of category lists
+          default: false
+        deny_categories:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/AIAgentCategory'
+          description: |
+            AI agent categories to block. Ignored if block_all is true.
+            Deny takes precedence over allow.
+          example: ["gptbot", "commoncrawl", "bytedance"]
+        allow_categories:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/AIAgentCategory'
+          description: |
+            AI agent categories to permit. When set, all other AI agents are blocked.
+            Deny takes precedence. Ignored if block_all is true.
+          example: ["claude", "chatgpt", "perplexity"]
+
+    QurlData:
+      type: object
+      description: |
+        Resource-level data for a protected URL. Per-QURL fields (one_time_use,
+        max_sessions, access_policy) are available in QurlSummary objects returned
+        by the resource detail endpoint.
+      properties:
+        resource_id:
+          type: string
+          pattern: '^r_[a-z0-9_-]{11}$'
+          readOnly: true
+          description: Unique resource identifier (generated by server)
+        target_url:
+          type: string
+          format: uri
+          description: The protected backend URL
+        status:
+          type: string
+          enum: [active, revoked]
+          readOnly: true
+          description: |
+            Current lifecycle status. Computed at response time — resources past
+            their expires_at are reported as "expired" even if not explicitly revoked.
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the QURL was created
+        expires_at:
+          type: string
+          format: date-time
+          description: When the QURL expires
+        description:
+          type: string
+          description: Human-readable description
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 50
+          description: Tags for categorization and filtering
+        qurl_site:
+          type: string
+          format: uri
+          readOnly: true
+          description: The QURL site URL for accessing this resource
+        custom_domain:
+          type: string
+          nullable: true
+          readOnly: true
+          description: Custom domain associated with this QURL
+
+    CreateQurlData:
+      type: object
+      description: Response data for QURL creation
+      properties:
+        qurl_id:
+          type: string
+          pattern: '^q_[a-f0-9]{11}$'
+          readOnly: true
+          description: |
+            Unique QURL identifier (q_ + first 11 hex chars of token hash).
+            Used as NHP resource ID and qurl_site subdomain. Each QURL gets
+            its own firewall rules keyed by this ID.
+          example: "q_3a7f2c8e91b"
+        resource_id:
+          type: string
+          pattern: '^r_[a-z0-9_-]{11}$'
+          readOnly: true
+          description: Parent resource ID (auto-created grouping by target URL)
+        qurl_link:
+          type: string
+          format: uri
+          readOnly: true
+          description: Ephemeral access link (shown once, cannot be recovered)
+        qurl_site:
+          type: string
+          format: uri
+          readOnly: true
+          description: Per-QURL site URL (https://{qurl_id}.qurl.site)
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+          description: Human-readable label for this QURL
+
+    QurlResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/QurlData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CreateQurlResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CreateQurlData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ResolveQurlRequest:
+      type: object
+      required:
+        - access_token
+      properties:
+        access_token:
+          type: string
+          description: QURL access token (e.g., "at_k8xqp9h2sj9lx7r4abcdef")
+          pattern: '^at_[a-z0-9_-]{22}$'
+          example: "at_k8xqp9h2sj9lx7r4abcdef"
+
+    ResolveQurlResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/ResolveQurlData'
+        error:
+          $ref: '#/components/schemas/Error'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ResolveQurlData:
+      type: object
+      properties:
+        target_url:
+          type: string
+          format: uri
+          description: The URL that is now accessible from the caller's IP
+          example: "https://api.example.com/data"
+        resource_id:
+          type: string
+          description: QURL resource identifier
+          example: "r_k8xqp9h2sj9"
+        access_grant:
+          $ref: '#/components/schemas/AccessGrant'
+
+    AccessGrant:
+      type: object
+      description: Details of the firewall access that was granted
+      properties:
+        expires_in:
+          type: integer
+          description: Seconds until firewall access expires
+          example: 305
+        granted_at:
+          type: string
+          format: date-time
+          description: When the access was granted
+          example: "2026-03-09T15:30:00Z"
+        src_ip:
+          type: string
+          description: The IP address that was granted access
+          example: "203.0.113.42"
+
+    QurlListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/QurlData'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    MintLinkData:
+      type: object
+      properties:
+        qurl_link:
+          type: string
+          format: uri
+          readOnly: true
+          description: Single-use access link
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    MintLinkResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/MintLinkData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    BatchCreateRequest:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Array of QURL creation requests (1-100 items)
+          items:
+            $ref: '#/components/schemas/CreateQurlRequest'
+
+    BatchCreateResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            succeeded:
+              type: integer
+              readOnly: true
+              description: Number of successfully created QURLs
+            failed:
+              type: integer
+              readOnly: true
+              description: Number of failed creations
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/BatchItemResult'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    BatchItemResult:
+      type: object
+      properties:
+        index:
+          type: integer
+          readOnly: true
+          description: Original index in the request array
+        success:
+          type: boolean
+          readOnly: true
+        resource_id:
+          type: string
+          readOnly: true
+          description: Created resource ID (if success)
+        qurl_link:
+          type: string
+          format: uri
+          readOnly: true
+          description: Access link (if success)
+        qurl_site:
+          type: string
+          format: uri
+          readOnly: true
+          description: QURL site URL (if success)
+        expires_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Expiration time (if success)
+        error:
+          type: object
+          readOnly: true
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          description: Error details (if failed)
+
+    QuotaData:
+      type: object
+      properties:
+        plan:
+          type: string
+          enum: [free, growth, enterprise]
+          readOnly: true
+        period_start:
+          type: string
+          format: date-time
+          readOnly: true
+        period_end:
+          type: string
+          format: date-time
+          readOnly: true
+        rate_limits:
+          type: object
+          readOnly: true
+          properties:
+            create_per_minute:
+              type: integer
+            create_per_hour:
+              type: integer
+            list_per_minute:
+              type: integer
+            resolve_per_minute:
+              type: integer
+              description: Rate limit for internal token resolution (used by access infrastructure)
+            max_active_qurls:
+              type: integer
+              description: Maximum active QURLs allowed (-1 = unlimited)
+            max_tokens_per_qurl:
+              type: integer
+              description: Maximum tokens per QURL (-1 = unlimited)
+            max_expiry_seconds:
+              type: integer
+              description: Maximum expiry duration in seconds (free=259200/3d, growth=2592000/30d, enterprise=2592000/30d)
+        usage:
+          type: object
+          readOnly: true
+          properties:
+            qurls_created:
+              type: integer
+              description: Total QURLs created this period
+            active_qurls:
+              type: integer
+              description: Currently active QURLs
+            active_qurls_percent:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 100
+              nullable: true
+              description: Percentage of max_active_qurls used (0-100, null if unlimited)
+            total_accesses:
+              type: integer
+              description: Total access attempts this period
+
+    QuotaResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/QuotaData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # Usage schemas
+    UsageCostEstimate:
+      type: object
+      required:
+        - currency
+        - amount_cents
+        - description
+      properties:
+        currency:
+          type: string
+          description: Currency code (e.g. "usd")
+          example: "usd"
+        amount_cents:
+          type: integer
+          description: Cost in cents
+          example: 1500
+        description:
+          type: string
+          description: Human-readable breakdown
+          example: "150 QURLs x $0.10/QURL"
+
+    UsageCurrentPeriodData:
+      type: object
+      required:
+        - tier
+        - period_start
+        - period_end
+        - qurls_created
+        - active_qurls
+      properties:
+        tier:
+          type: string
+          enum: [free, growth, enterprise]
+          description: Current billing tier
+        period_start:
+          type: string
+          format: date-time
+          description: Start of the current billing period (UTC)
+        period_end:
+          type: string
+          format: date-time
+          description: End of the current billing period (UTC)
+        qurls_created:
+          type: integer
+          description: Number of QURLs created in this period
+        active_qurls:
+          type: integer
+          description: Number of currently active (non-expired, non-revoked) QURLs
+        cost_estimate:
+          $ref: '#/components/schemas/UsageCostEstimate'
+
+    UsageCurrentPeriodResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/UsageCurrentPeriodData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    UsageDailyEntry:
+      type: object
+      required:
+        - date
+        - qurls_created
+      properties:
+        date:
+          type: string
+          format: date
+          description: Calendar date (YYYY-MM-DD)
+        qurls_created:
+          type: integer
+          description: QURLs created on this date
+
+    UsageDailyData:
+      type: object
+      required:
+        - tier
+        - period_start
+        - period_end
+        - daily
+      properties:
+        tier:
+          type: string
+          enum: [free, growth, enterprise]
+          description: Current billing tier
+        period_start:
+          type: string
+          format: date-time
+          description: Start of the current billing period (UTC)
+        period_end:
+          type: string
+          format: date-time
+          description: End of the current billing period (UTC)
+        daily:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageDailyEntry'
+          description: One entry per day from period_start to today
+
+    UsageDailyResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/UsageDailyData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # API Key schemas
+    CreateApiKeyRequest:
+      type: object
+      required:
+        - name
+        - scopes
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          description: Human-readable name for the API key
+        scopes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [qurl:read, qurl:write, qurl:resolve]
+          description: Permissions granted to this API key
+
+    UpdateApiKeyRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          description: Updated name for the API key
+        scopes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [qurl:read, qurl:write, qurl:resolve]
+          description: |
+            Updated permissions for the API key.
+            Omit this field to leave scopes unchanged.
+            When provided, replaces all existing scopes (not a merge).
+
+    ApiKeyData:
+      type: object
+      properties:
+        key_id:
+          type: string
+          pattern: '^key_[A-Za-z0-9]{12}$'
+          readOnly: true
+        key_prefix:
+          type: string
+          readOnly: true
+          description: >-
+            First 12 characters of the key for identification.
+            Includes the environment prefix (e.g., "lv_live_a3x9").
+        name:
+          type: string
+        scopes:
+          type: array
+          items:
+            type: string
+          description: >-
+            Permissions granted to this API key.
+            Returned in alphabetical order for deterministic responses.
+        status:
+          type: string
+          enum: [active, revoked]
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: >-
+            Timestamp of the last update to name or scopes.
+            Omitted if the key has never been updated.
+        last_used_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    CreateApiKeyData:
+      allOf:
+        - $ref: '#/components/schemas/ApiKeyData'
+        - type: object
+          properties:
+            api_key:
+              type: string
+              readOnly: true
+              description: |
+                The plaintext API key. This is returned only once at creation time.
+                Store it securely - it cannot be retrieved again.
+
+    CreateApiKeyResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CreateApiKeyData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ApiKeyResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/ApiKeyData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ApiKeyListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApiKeyData'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    # --- Access Codes ---
+
+    RedeemAccessCodeRequest:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          description: The plaintext access code to redeem
+          pattern: '^ac_[a-z0-9_-]{22}$'
+          example: "ac_k8xqp9h2sj9lx7r4abcdef"
+        honeypot:
+          type: string
+          description: Honeypot field for bot detection (must be empty)
+          default: ""
+        elapsed_ms:
+          type: integer
+          description: Milliseconds elapsed since page load (for bot detection)
+          example: 5200
+
+    RedeemAccessCodeData:
+      type: object
+      properties:
+        redirect_url:
+          type: string
+          format: uri
+          readOnly: true
+          description: URL to redirect the user to for resource access
+          example: "https://qurl.link/#at_k8xqp9h2sj9lx7r4abcdef"
+
+    RedeemAccessCodeResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/RedeemAccessCodeData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    CreateAccessCodeRequest:
+      type: object
+      required:
+        - resource_id
+      properties:
+        resource_id:
+          type: string
+          description: ID of the QURL resource this code grants access to
+          pattern: '^r_[a-z0-9_-]{11}$'
+          example: "r_k8xqp9h2sj9"
+        name:
+          type: string
+          description: Human-readable label for the access code
+          maxLength: 100
+          example: "Investor Stats Q1"
+        max_uses:
+          type: integer
+          description: Maximum number of times this code can be redeemed (0 = unlimited)
+          minimum: 0
+          default: 0
+          example: 10
+        expires_at:
+          type: string
+          format: date-time
+          description: Optional expiration time for the access code
+
+    AccessCodeData:
+      type: object
+      properties:
+        access_code_id:
+          type: string
+          readOnly: true
+          description: Unique identifier for the access code
+          pattern: '^acd_[a-z0-9_-]{11}$'
+          example: "acd_k8xqp9h2sj9"
+        resource_id:
+          type: string
+          description: ID of the QURL resource this code grants access to
+          example: "r_k8xqp9h2sj9"
+        name:
+          type: string
+          description: Human-readable label
+          example: "Investor Stats Q1"
+        status:
+          type: string
+          enum: [active, revoked]
+          readOnly: true
+          description: Current status of the access code
+        max_uses:
+          type: integer
+          description: Maximum redemptions allowed (0 = unlimited)
+          example: 10
+        use_count:
+          type: integer
+          readOnly: true
+          description: Number of times this code has been redeemed
+          example: 3
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+
+    CreateAccessCodeData:
+      allOf:
+        - $ref: '#/components/schemas/AccessCodeData'
+        - type: object
+          properties:
+            code:
+              type: string
+              readOnly: true
+              description: |
+                The plaintext access code. This is returned only once at creation time
+                and cannot be retrieved later (it is stored as a SHA-256 hash).
+              pattern: '^ac_[a-z0-9_-]{22}$'
+              example: "ac_k8xqp9h2sj9lx7r4abcdef"
+
+    CreateAccessCodeResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CreateAccessCodeData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    AccessCodeListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessCodeData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    # Webhook schemas
+    WebhookEventType:
+      type: string
+      enum:
+        - qurl.created
+        - qurl.expired
+        - qurl.revoked
+        - qurl.updated
+        - qurl.accessed
+        - qurl.access_denied
+        - qurl.token_exhausted
+        - quota.warning
+        - quota.exceeded
+        - token.minted
+        - token.expired
+        - domain.verified
+        - domain.failed
+        - domain.deleted
+      description: |
+        Webhook event types:
+        - **qurl.created** - A new QURL was created
+        - **qurl.expired** - A QURL has expired
+        - **qurl.revoked** - A QURL was manually revoked
+        - **qurl.updated** - A QURL was updated (expiration, tags, or description)
+        - **qurl.accessed** - A QURL was successfully accessed
+        - **qurl.access_denied** - Access to a QURL was denied by policy
+        - **qurl.token_exhausted** - A one-time-use token was fully consumed
+        - **quota.warning** - Approaching quota limit (80%)
+        - **quota.exceeded** - Quota limit reached, action blocked
+        - **token.minted** - A new access token was created
+        - **token.expired** - An access token has expired
+        - **domain.verified** - A custom domain was successfully verified
+        - **domain.failed** - Custom domain verification or cert provisioning failed
+        - **domain.deleted** - A custom domain was deleted
+
+    CreateWebhookRequest:
+      type: object
+      required:
+        - url
+        - events
+      properties:
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          description: HTTPS endpoint URL to receive webhook events (max 2048 characters)
+          example: "https://example.com/webhooks/qurl"
+        events:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+          description: Event types to subscribe to
+        description:
+          type: string
+          maxLength: 500
+          description: Human-readable description
+
+    UpdateWebhookRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+        events:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        description:
+          type: string
+          maxLength: 500
+        status:
+          type: string
+          enum: [active, disabled]
+
+    WebhookData:
+      type: object
+      properties:
+        webhook_id:
+          type: string
+          pattern: '^wh_[A-Za-z0-9_-]{16}$'
+          readOnly: true
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEventType'
+        status:
+          type: string
+          enum: [active, disabled]
+          readOnly: true
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        failure_count:
+          type: integer
+          readOnly: true
+          description: Consecutive delivery failures
+        last_delivery_success:
+          type: boolean
+          readOnly: true
+        last_delivery_time:
+          type: integer
+          readOnly: true
+          description: Unix timestamp of last delivery attempt
+
+    WebhookDataWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/WebhookData'
+        - type: object
+          properties:
+            secret:
+              type: string
+              readOnly: true
+              description: |
+                HMAC signing secret (only returned on create or regenerate).
+                Use this to verify the QURL-Signature header on incoming webhooks.
+              example: "whsec_K8xQp9H2sJ9Lx7R4AaBbCcDdEeFf..."
+
+    WebhookResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/WebhookData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    WebhookResponseWithSecret:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/WebhookDataWithSecret'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    WebhookListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookData'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    WebhookDeliveryData:
+      type: object
+      properties:
+        delivery_id:
+          type: string
+          pattern: '^wd_[A-Za-z0-9_-]{16}$'
+          readOnly: true
+        webhook_id:
+          type: string
+          readOnly: true
+        event_type:
+          $ref: '#/components/schemas/WebhookEventType'
+        status:
+          type: string
+          enum: [pending, success, failed, retrying, abandoned]
+          readOnly: true
+        response_code:
+          type: integer
+          readOnly: true
+        response_body:
+          type: string
+          readOnly: true
+          description: Truncated response body (max 8KB)
+        error_message:
+          type: string
+          readOnly: true
+        duration_ms:
+          type: integer
+          readOnly: true
+        retry_count:
+          type: integer
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        completed_at:
+          type: string
+          format: date-time
+          readOnly: true
+
+    WebhookDeliveryListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookDeliveryData'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    WebhookEventTypeInfo:
+      type: object
+      properties:
+        type:
+          $ref: '#/components/schemas/WebhookEventType'
+        category:
+          type: string
+          enum: [resource, access, quota, token]
+        description:
+          type: string
+
+    WebhookEventTypesResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEventTypeInfo'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    WebhookPayload:
+      type: object
+      description: |
+        Webhook event payload sent to your endpoint.
+        Verify authenticity using the QURL-Signature header.
+      properties:
+        id:
+          type: string
+          description: Unique event ID
+        type:
+          $ref: '#/components/schemas/WebhookEventType'
+        owner_id:
+          type: string
+          description: Owner who triggered the event
+        timestamp:
+          type: string
+          format: date-time
+        api_version:
+          type: string
+          description: API version (e.g., "2024-01-01")
+        data:
+          type: object
+          additionalProperties: true
+          description: Event-specific data
+      example:
+        id: "evt_abc123def456"
+        type: "qurl.accessed"
+        owner_id: "auth0|user123"
+        timestamp: "2024-01-08T10:35:00Z"
+        api_version: "2024-01-01"
+        data:
+          resource_id: "r_k8xqp9h2sj9"
+          access_token_id: "at_xyz789"
+          src_ip: "192.168.1.100"
+          user_agent: "Mozilla/5.0..."
+
+    # Customer schemas
+    CustomerData:
+      type: object
+      required:
+        - tier
+        - spending_cap_cents
+        - current_period_usage
+        - frozen
+      properties:
+        tier:
+          type: string
+          enum: [free, growth, enterprise]
+          description: Customer's billing tier
+        spending_cap_cents:
+          type: integer
+          format: int64
+          description: Spending cap in cents (0 = no cap)
+        current_period_usage:
+          type: integer
+          format: int64
+          description: Usage count in current billing period
+        frozen:
+          type: boolean
+          description: Whether the account is frozen
+        frozen_reason:
+          type: string
+          nullable: true
+          description: Reason for account freeze
+          enum: [spending_cap, payment_failed, manual]
+
+    CustomerResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CustomerData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    UpdateCustomerRequest:
+      type: object
+      required:
+        - spending_cap_cents
+      properties:
+        spending_cap_cents:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 10000000
+          description: New spending cap in cents (0 = no cap)
+
+    # Billing schemas
+    CheckoutSessionData:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Stripe Checkout URL to redirect user to
+
+    CheckoutSessionResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/CheckoutSessionData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    PortalSessionData:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+          format: uri
+          description: Stripe Billing Portal URL to redirect user to
+
+    PortalSessionResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/PortalSessionData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    InvoiceData:
+      type: object
+      required:
+        - id
+        - amount_cents
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Stripe invoice ID
+        amount_cents:
+          type: integer
+          format: int64
+          description: Invoice amount in cents
+        status:
+          type: string
+          enum: [paid, open, void, draft]
+          description: Invoice status
+        created_at:
+          type: string
+          format: date-time
+          description: When the invoice was created
+        pdf_url:
+          type: string
+          format: uri
+          nullable: true
+          description: URL to download the invoice PDF
+
+    InvoiceListData:
+      type: object
+      required:
+        - invoices
+      properties:
+        invoices:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceData'
+
+    InvoiceListResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/InvoiceListData'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    # Custom Domain schemas
+    RegisterDomainRequest:
+      type: object
+      required:
+        - domain
+      properties:
+        domain:
+          type: string
+          description: The custom domain name to register
+          example: "secure.example.com"
+
+    DomainData:
+      type: object
+      properties:
+        domain:
+          type: string
+          readOnly: true
+          description: The custom domain name
+        status:
+          type: string
+          enum: [pending_verification, verified, provisioning_tls, active, failed]
+          readOnly: true
+          description: Current domain status
+        verification_token:
+          type: string
+          readOnly: true
+          description: TXT record value for DNS verification
+        acme_cname_target:
+          type: string
+          readOnly: true
+          description: CNAME target for ACME certificate provisioning
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        verified_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        activated_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        ready_for_qurls:
+          type: boolean
+          readOnly: true
+          description: Whether this domain is ready to be used with QURLs (status is verified, provisioning_tls, or active)
+        dns_records:
+          type: array
+          readOnly: true
+          items:
+            $ref: '#/components/schemas/DnsRecord'
+          description: Required DNS records for domain setup
+
+    DnsRecord:
+      type: object
+      properties:
+        type:
+          type: string
+          description: DNS record type (TXT, CNAME)
+        name:
+          type: string
+          description: DNS record name
+        value:
+          type: string
+          description: DNS record value
+        verified:
+          type: boolean
+          description: Whether this record has been verified
+
+    DomainResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/DomainData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    DomainListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DomainData'
+        meta:
+          $ref: '#/components/schemas/ListMeta'
+
+    CheckDetail:
+      type: object
+      readOnly: true
+      required:
+        - verified
+      properties:
+        verified:
+          type: boolean
+        error:
+          type: string
+          description: Error message when the check fails (omitted when verified).
+        found:
+          type: string
+          description: The actual value found in DNS (omitted when nothing was found).
+
+    DomainVerifyData:
+      type: object
+      properties:
+        domain:
+          type: string
+          readOnly: true
+        status:
+          type: string
+          enum: [pending_verification, verified, provisioning_tls, active, failed]
+          readOnly: true
+        checks:
+          type: object
+          readOnly: true
+          properties:
+            txt:
+              $ref: '#/components/schemas/CheckDetail'
+            acme_cname:
+              $ref: '#/components/schemas/CheckDetail'
+            traffic_routing:
+              $ref: '#/components/schemas/CheckDetail'
+
+    DomainVerifyResponse:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/DomainVerifyData'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    Meta:
+      type: object
+      required:
+        - request_id
+      properties:
+        request_id:
+          type: string
+          description: Unique request identifier for tracing
+
+    ListMeta:
+      type: object
+      required:
+        - request_id
+      properties:
+        request_id:
+          type: string
+        page_size:
+          type: integer
+          description: Number of items returned
+        has_more:
+          type: boolean
+          description: Whether more items exist
+        next_cursor:
+          type: string
+          description: Cursor for next page (empty if no more pages)
+
+    Error:
+      type: object
+      description: |
+        Error response following RFC 7807 Problem Details for HTTP APIs.
+        See: https://datatracker.ietf.org/doc/html/rfc7807
+      required:
+        - type
+        - title
+        - status
+        - code
+      properties:
+        type:
+          type: string
+          format: uri
+          description: |
+            URI reference that identifies the problem type (RFC 7807).
+            When dereferenced, it should provide human-readable documentation.
+          example: "https://api.qurl.link/problems/invalid_request"
+        title:
+          type: string
+          description: |
+            Short, human-readable summary of the problem type (RFC 7807).
+            This should not change from occurrence to occurrence.
+          example: "Invalid Request"
+        status:
+          type: integer
+          description: HTTP status code for this occurrence (RFC 7807).
+          example: 400
+        detail:
+          type: string
+          description: |
+            Human-readable explanation specific to this occurrence (RFC 7807).
+          example: "The target_url field must be a valid HTTPS URL"
+        instance:
+          type: string
+          format: uri-reference
+          description: |
+            URI reference that identifies the specific occurrence (RFC 7807).
+            Typically the request path.
+          example: "/v1/qurls"
+        code:
+          type: string
+          description: |
+            Machine-readable error code (extension field for backward compatibility).
+            Maps to the problem type slug.
+          example: "invalid_request"
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          properties:
+            invalid_fields:
+              type: object
+              additionalProperties:
+                type: string
+              description: Map of field names to validation error messages
+              example:
+                target_url: "must be a valid HTTPS URL"
+                description: "must not exceed 500 characters"
+
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+    ValidationErrorEnvelope:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/ValidationError'
+        meta:
+          $ref: '#/components/schemas/Meta'
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorEnvelope'
+          examples:
+            invalidLimit:
+              summary: Invalid limit parameter
+              value:
+                error:
+                  type: "https://api.qurl.link/problems/invalid_request"
+                  title: "Invalid Request"
+                  status: 400
+                  detail: "limit must be an integer between 1 and 100"
+                  instance: "/v1/qurls"
+                  code: "invalid_request"
+                meta:
+                  request_id: "abc123def456"
+            validationError:
+              summary: Multiple field validation errors
+              value:
+                error:
+                  type: "https://api.qurl.link/problems/validation_error"
+                  title: "Validation Error"
+                  status: 400
+                  detail: "One or more fields are invalid"
+                  instance: "/v1/qurls"
+                  code: "validation_error"
+                  invalid_fields:
+                    target_url: "must be a valid HTTPS URL"
+                    expires_in: "must be between 1m and 30d"
+                meta:
+                  request_id: "abc123def456"
+
+    Unauthorized:
+      description: Missing or invalid authentication
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              type: "https://api.qurl.link/problems/invalid_token"
+              title: "Invalid Token"
+              status: 401
+              detail: "Token validation failed"
+              instance: "/v1/qurls"
+              code: "invalid_token"
+            meta:
+              request_id: "abc123def456"
+
+    Forbidden:
+      description: Insufficient permissions or quota exceeded
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            insufficientScope:
+              summary: Missing required scopes
+              value:
+                error:
+                  type: "https://api.qurl.link/problems/insufficient_scope"
+                  title: "Insufficient Scope"
+                  status: 403
+                  detail: "Missing required permissions: qurl:write"
+                  instance: "/v1/qurls"
+                  code: "insufficient_scope"
+                meta:
+                  request_id: "abc123def456"
+            quotaExceeded:
+              summary: Quota limit reached
+              value:
+                error:
+                  type: "https://api.qurl.link/problems/quota_exceeded"
+                  title: "Quota Exceeded"
+                  status: 403
+                  detail: "Active QURL limit reached (10/10)"
+                  instance: "/v1/qurls"
+                  code: "quota_exceeded"
+                meta:
+                  request_id: "abc123def456"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              type: "https://api.qurl.link/problems/not_found"
+              title: "Resource Not Found"
+              status: 404
+              detail: "QURL not found"
+              instance: "/v1/qurls/01ABC123"
+              code: "not_found"
+            meta:
+              request_id: "abc123def456"
+
+    Gone:
+      description: Resource is no longer available (consumed, expired, or revoked)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          examples:
+            tokenConsumed:
+              summary: Access token already used
+              value:
+                error:
+                  type: "https://api.qurl.link/problems/token_consumed"
+                  title: "Token Consumed"
+                  status: 410
+                  detail: "Access token has already been used"
+                  instance: "/v1/resolve"
+                  code: "token_consumed"
+                meta:
+                  request_id: "abc123def456"
+            tokenExpired:
+              summary: Access token has expired
+              value:
+                error:
+                  type: "https://api.qurl.link/problems/token_expired"
+                  title: "Token Expired"
+                  status: 410
+                  detail: "Access token has expired"
+                  instance: "/v1/resolve"
+                  code: "token_expired"
+                meta:
+                  request_id: "abc123def456"
+
+    BadGateway:
+      description: Upstream NHP knock failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              type: "https://api.qurl.link/problems/knock_failed"
+              title: "Knock Failed"
+              status: 502
+              detail: "Failed to open firewall access. The token may have been consumed."
+              instance: "/v1/resolve"
+              code: "knock_failed"
+            meta:
+              request_id: "abc123def456"
+
+    RateLimitExceeded:
+      description: Rate limit exceeded
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+        RateLimit-Limit:
+          description: Maximum requests allowed
+          schema:
+            type: integer
+        RateLimit-Remaining:
+          description: Requests remaining in window
+          schema:
+            type: integer
+        RateLimit-Reset:
+          description: Unix timestamp when limit resets
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              type: "https://api.qurl.link/problems/rate_limit_exceeded"
+              title: "Rate Limit Exceeded"
+              status: 429
+              detail: "Too many requests. Please try again later."
+              instance: "/v1/qurls"
+              code: "rate_limit_exceeded"
+            meta:
+              request_id: "abc123def456"
+
+    ServiceUnavailable:
+      description: Upstream service temporarily unavailable (e.g. Stripe rate limit)
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              type: "https://api.qurl.link/problems/service_unavailable"
+              title: "Service Unavailable"
+              status: 503
+              detail: "Billing service temporarily unavailable, please retry"
+              instance: "/v1/billing/checkout"
+              code: "rate_limited"
+            meta:
+              request_id: "abc123def456"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              type: "https://api.qurl.link/problems/internal_error"
+              title: "Internal Server Error"
+              status: 500
+              detail: "An unexpected error occurred. Please try again later."
+              instance: "/v1/quota"
+              code: "internal_error"
+            meta:
+              request_id: "abc123def456"

@@ -174,6 +174,16 @@ feat(tools)!: rename resolve_qurl to resolve tool
 | `ci` | GitHub Actions workflows |
 | `deps` | Dependencies |
 
+## API Spec Maintenance
+
+The repository includes an API spec drift detection system:
+
+- **Snapshot:** `api-spec/qurls.yaml` contains the current API spec that the MCP tools are built against.
+- **Workflow:** `.github/workflows/api-spec-check.yml` runs weekly (Monday 9am UTC) and on manual dispatch.
+- **Detection:** The workflow fetches the live spec, diffs it against the snapshot, and opens a GitHub Issue with the diff when changes are detected.
+- **Action:** When an issue is opened, review the diff, update `api-spec/qurls.yaml`, update client types/tools as needed, and verify with `npm run build && npm run lint && npm test`.
+- **Spec URL:** Configurable via the `QURL_API_SPEC_URL` repository variable. Defaults to `https://api.layerv.ai/v1/openapi.yaml`.
+
 ## Security Notes
 
 - Never commit API keys or secrets
