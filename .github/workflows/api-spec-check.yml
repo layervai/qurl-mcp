@@ -40,8 +40,7 @@ jobs:
           if ! diff -q "$SPEC_SNAPSHOT" /tmp/current-spec.yaml > /dev/null 2>&1; then
             echo "drift=true" >> "$GITHUB_OUTPUT"
             diff -u "$SPEC_SNAPSHOT" /tmp/current-spec.yaml > /tmp/spec-diff.txt || true
-            # Truncate diff for issue body (max 60000 chars to stay within GitHub limits)
-            head -c 60000 /tmp/spec-diff.txt > /tmp/spec-diff-truncated.txt
+            head -n 1500 /tmp/spec-diff.txt > /tmp/spec-diff-truncated.txt
           else
             echo "drift=false" >> "$GITHUB_OUTPUT"
             echo "No API spec drift detected."
@@ -62,32 +61,45 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Ensure labels exist
+        if: steps.diff.outputs.drift == 'true' && steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create "api-spec" --color "1d76db" --description "API specification changes" 2>/dev/null || true
+          gh label create "maintenance" --color "d4c5f9" --description "Maintenance tasks" 2>/dev/null || true
+
       - name: Open issue on drift
         if: steps.diff.outputs.drift == 'true' && steps.existing.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          DIFF_CONTENT=$(cat /tmp/spec-diff-truncated.txt)
-          gh issue create \
-            --title "API spec drift detected ($(date +%Y-%m-%d))" \
-            --label "api-spec,maintenance" \
-            --body "$(cat <<ISSUE_BODY
+          cat > /tmp/issue-body.md <<'BODY_EOF'
           ## API Spec Drift Detected
 
           The QURL API OpenAPI specification has changed since the last snapshot.
-          Detected on: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-          Spec URL: \`$SPEC_URL\`
+          BODY_EOF
+
+          # Append dynamic content safely (no shell expansion)
+          printf 'Detected on: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /tmp/issue-body.md
+          printf 'Spec URL: `%s`\n' "$SPEC_URL" >> /tmp/issue-body.md
+          cat >> /tmp/issue-body.md <<'BODY_EOF'
 
           ### Next Steps
           1. Review the diff below
           2. Determine which changes affect the MCP tools
-          3. Update \`api-spec/qurls.yaml\` with the new spec
+          3. Update `api-spec/qurls.yaml` with the new spec
           4. Update client types and tools as needed
-          5. Run \`npm run build && npm run lint && npm test\` to verify
+          5. Run `npm run build && npm run lint && npm test` to verify
 
           ### Diff (truncated)
-          \`\`\`diff
-          ${DIFF_CONTENT}
-          \`\`\`
-          ISSUE_BODY
-          )"
+          ```diff
+          BODY_EOF
+
+          cat /tmp/spec-diff-truncated.txt >> /tmp/issue-body.md
+          printf '```\n' >> /tmp/issue-body.md
+
+          gh issue create \
+            --title "API spec drift detected ($(date +%Y-%m-%d))" \
+            --label "api-spec,maintenance" \
+            --body-file /tmp/issue-body.md
