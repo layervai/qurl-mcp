@@ -85,6 +85,7 @@ export interface ResolveInput {
 export interface MintLinkInput {
   label?: string;
   expires_in?: string;
+  expires_at?: string;
   one_time_use?: boolean;
   max_sessions?: number;
   session_duration?: string;

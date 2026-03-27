@@ -17,8 +17,8 @@ export const batchCreateSchema = z.object({
   items: z
     .array(batchItemSchema)
     .min(1)
-    .max(20)
-    .describe("Array of QURL creation requests (1-20 items)"),
+    .max(100)
+    .describe("Array of QURL creation requests (1-100 items)"),
 });
 
 export function batchCreateTool(client: IQURLClient) {

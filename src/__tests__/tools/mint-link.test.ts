@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { mintLinkTool, mintLinkSchema } from "../../tools/mint-link.js";
+import { mintLinkTool, mintLinkBaseSchema, mintLinkSchema } from "../../tools/mint-link.js";
 import { makeMockClient } from "../helpers.js";
 
 const fixture = {
@@ -23,13 +23,38 @@ describe("mintLinkTool", () => {
 
   describe("schema", () => {
     it("requires resource_id", () => {
-      const result = mintLinkSchema.safeParse({});
+      const result = mintLinkBaseSchema.safeParse({});
       expect(result.success).toBe(false);
     });
 
     it("accepts valid resource_id", () => {
       const result = mintLinkSchema.safeParse({ resource_id: "r_abc123" });
       expect(result.success).toBe(true);
+    });
+
+    it("accepts expires_in", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: "r_abc123",
+        expires_in: "7d",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts expires_at", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: "r_abc123",
+        expires_at: "2026-04-01T00:00:00Z",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects both expires_in and expires_at", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: "r_abc123",
+        expires_in: "7d",
+        expires_at: "2026-04-01T00:00:00Z",
+      });
+      expect(result.success).toBe(false);
     });
 
     it("accepts optional fields", () => {

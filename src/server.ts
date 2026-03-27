@@ -6,7 +6,7 @@ import { listQurlsTool, listQurlsSchema } from "./tools/list-qurls.js";
 import { getQurlTool, getQurlSchema } from "./tools/get-qurl.js";
 import { deleteQurlTool, deleteQurlSchema } from "./tools/delete-qurl.js";
 import { updateQurlTool, updateQurlBaseSchema } from "./tools/update-qurl.js";
-import { mintLinkTool, mintLinkSchema } from "./tools/mint-link.js";
+import { mintLinkTool, mintLinkBaseSchema } from "./tools/mint-link.js";
 import { batchCreateTool, batchCreateSchema } from "./tools/batch-create.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
@@ -40,7 +40,7 @@ export function createServer(client: IQURLClient, version: string): McpServer {
   server.tool(update.name, update.description, updateQurlBaseSchema.shape, update.handler);
 
   const mint = mintLinkTool(client);
-  server.tool(mint.name, mint.description, mintLinkSchema.shape, mint.handler);
+  server.tool(mint.name, mint.description, mintLinkBaseSchema.shape, mint.handler);
 
   const batch = batchCreateTool(client);
   server.tool(batch.name, batch.description, batchCreateSchema.shape, batch.handler);
