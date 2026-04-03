@@ -103,10 +103,8 @@ export class QURLClient implements IQURLClient {
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
+      ...(body !== undefined && { "Content-Type": "application/json" }),
     };
-    if (body !== undefined) {
-      headers["Content-Type"] = "application/json";
-    }
 
     const response = await fetch(url, {
       method,
@@ -117,21 +115,11 @@ export class QURLClient implements IQURLClient {
     const text = await response.text();
 
     // Handle empty 2xx responses (e.g., 204 No Content from DELETE).
-    // Only deleteQURL hits this path — T is void there, so undefined is correct.
     if (!text && response.ok) {
       return undefined as T;
     }
 
-    let json: Record<string, unknown>;
-    try {
-      json = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      throw new QURLAPIError(
-        response.status,
-        "parse_error",
-        `Failed to parse response: ${text.slice(0, 200)}`,
-      );
-    }
+    const json = this.parseJSON(text, response.status);
 
     if (!response.ok) {
       const error = json.error as Record<string, string> | undefined;
@@ -145,12 +133,28 @@ export class QURLClient implements IQURLClient {
     return json as T;
   }
 
+  private parseJSON(text: string, status: number): Record<string, unknown> {
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new QURLAPIError(
+        status,
+        "parse_error",
+        `Failed to parse response: ${text.slice(0, 200)}`,
+      );
+    }
+  }
+
+  private qurlPath(id: string): string {
+    return `/v1/qurls/${encodeURIComponent(id)}`;
+  }
+
   async createQURL(input: CreateQURLInput): Promise<{ data: QURL }> {
     return this.request("POST", "/v1/qurl", input);
   }
 
   async getQURL(id: string): Promise<{ data: QURL }> {
-    return this.request("GET", `/v1/qurls/${encodeURIComponent(id)}`);
+    return this.request("GET", this.qurlPath(id));
   }
 
   async listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput> {
@@ -162,11 +166,11 @@ export class QURLClient implements IQURLClient {
   }
 
   async deleteQURL(id: string): Promise<void> {
-    await this.request("DELETE", `/v1/qurls/${encodeURIComponent(id)}`);
+    await this.request("DELETE", this.qurlPath(id));
   }
 
   async extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }> {
-    return this.request("PATCH", `/v1/qurls/${encodeURIComponent(id)}`, input);
+    return this.request("PATCH", this.qurlPath(id), input);
   }
 
   async resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }> {
