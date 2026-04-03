@@ -103,8 +103,10 @@ export class QURLClient implements IQURLClient {
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
-      ...(body !== undefined && { "Content-Type": "application/json" }),
     };
+    if (body !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
 
     const response = await fetch(url, {
       method,
