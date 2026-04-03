@@ -31,42 +31,33 @@ export function secureAServicePrompt() {
       "Guide through creating a QURL to protect a service with appropriate security policies.",
     args: secureAServiceArgs,
     handler: (args: SecureAServiceInput): GetPromptResult => {
-      const parts = [
-        `Create a QURL to protect the following service: ${args.target_url}`,
+      const optionalParams: [string, string | boolean | undefined][] = [
+        ["description", args.description],
+        ["expires_in", args.expires_in],
+        ["one_time_use", args.one_time_use ? args.one_time_use === "true" : undefined],
+        ["max_sessions", args.max_sessions],
       ];
+      const paramLines = optionalParams
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => `- ${key}: ${value}`);
 
-      if (args.description) {
-        parts.push(`Description: ${args.description}`);
-      }
-
-      parts.push("");
-      parts.push("Use the create_qurl tool with the following parameters:");
-      parts.push(`- target_url: ${args.target_url}`);
-
-      if (args.description) {
-        parts.push(`- description: ${args.description}`);
-      }
-      if (args.expires_in) {
-        parts.push(`- expires_in: ${args.expires_in}`);
-      }
-      if (args.one_time_use) {
-        parts.push(`- one_time_use: ${args.one_time_use === "true"}`);
-      }
-      if (args.max_sessions) {
-        parts.push(`- max_sessions: ${args.max_sessions}`);
-      }
-
-      parts.push("");
-      parts.push(
+      const text = [
+        `Create a QURL to protect the following service: ${args.target_url}`,
+        ...(args.description ? [`Description: ${args.description}`] : []),
+        "",
+        "Use the create_qurl tool with the following parameters:",
+        `- target_url: ${args.target_url}`,
+        ...paramLines,
+        "",
         "After creating the QURL, explain the returned qurl_link and how to share it securely. " +
           "Note the expiration time and any access restrictions that were applied.",
-      );
+      ].join("\n");
 
       return {
         messages: [
           {
             role: "user",
-            content: { type: "text", text: parts.join("\n") },
+            content: { type: "text", text },
           },
         ],
       };
