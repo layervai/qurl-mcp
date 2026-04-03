@@ -18,7 +18,9 @@ type ToolFactory = (client: IQURLClient) => {
   name: string;
   description: string;
   inputSchema: z.AnyZodObject;
-  handler: unknown;
+  // Args vary per tool; exact signatures are validated by server.tool() at each call site.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  handler: (...args: any[]) => Promise<{ content: Array<{ type: string; text: string }> }>;
 };
 
 export function createServer(client: IQURLClient, version: string): McpServer {
