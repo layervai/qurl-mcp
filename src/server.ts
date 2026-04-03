@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { z } from "zod";
 import type { IQURLClient } from "./client.js";
 import { createQurlTool } from "./tools/create-qurl.js";
 import { resolveQurlTool } from "./tools/resolve-qurl.js";
@@ -11,6 +12,14 @@ import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
 import { auditLinksPrompt } from "./prompts/audit-links.js";
 import { rotateAccessPrompt } from "./prompts/rotate-access.js";
+
+/** Shared contract for the objects returned by tool factory functions. */
+type ToolFactory = (client: IQURLClient) => {
+  name: string;
+  description: string;
+  inputSchema: z.AnyZodObject;
+  handler: unknown;
+};
 
 export function createServer(client: IQURLClient, version: string): McpServer {
   const server = new McpServer({
@@ -26,7 +35,7 @@ export function createServer(client: IQURLClient, version: string): McpServer {
     getQurlTool,
     deleteQurlTool,
     extendQurlTool,
-  ];
+  ] satisfies ToolFactory[];
 
   for (const factory of toolFactories) {
     const tool = factory(client);
