@@ -34,6 +34,7 @@ export function secureAServicePrompt() {
       const optionalParams: [string, string | boolean | undefined][] = [
         ["description", args.description],
         ["expires_in", args.expires_in],
+        // "false" (truthy string) → false (boolean), undefined → omitted from output.
         ["one_time_use", args.one_time_use ? args.one_time_use === "true" : undefined],
         ["max_sessions", args.max_sessions],
       ];
