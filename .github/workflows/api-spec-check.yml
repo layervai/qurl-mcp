@@ -9,6 +9,10 @@ permissions:
   contents: read
   issues: write
 
+concurrency:
+  group: api-spec-drift
+  cancel-in-progress: true
+
 env:
   SPEC_SNAPSHOT: api-spec/qurls.yaml
   # Override this in repo variables to point to a different spec URL
@@ -25,7 +29,7 @@ jobs:
       - name: Fetch current API spec
         id: fetch
         run: |
-          HTTP_CODE=$(curl -s --retry 2 --max-time 30 -w '%{http_code}' -o /tmp/current-spec.yaml "$SPEC_URL")
+          HTTP_CODE=$(curl -sS --retry 2 --max-time 30 -w '%{http_code}' -o /tmp/current-spec.yaml "$SPEC_URL")
           if [ "$HTTP_CODE" != "200" ]; then
             echo "::warning::Failed to fetch API spec (HTTP $HTTP_CODE). Skipping drift check."
             echo "skip=true" >> "$GITHUB_OUTPUT"
