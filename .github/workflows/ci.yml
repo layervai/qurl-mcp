@@ -34,3 +34,107 @@ jobs:
           cache: "npm"
       - run: npm ci
       - run: npm test
+
+  notify:
+    name: Notify
+    needs: [lint, test]
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - name: Notify Slack
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TEST_RESULT: ${{ needs.test.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          GH_SERVER_URL: ${{ github.server_url }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_SHA: ${{ github.sha }}
+          GH_REF_NAME: ${{ github.ref_name }}
+          GH_ACTOR: ${{ github.actor }}
+          GH_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [[ -z "$SLACK_WEBHOOK" ]]; then
+            echo "SLACK_WEBHOOK_URL not configured, skipping notification"
+            exit 0
+          fi
+
+          WORKFLOW_URL="${GH_SERVER_URL}/${GH_REPOSITORY}/actions/runs/${GH_RUN_ID}"
+          SHORT_SHA="${GH_SHA:0:7}"
+          COMMIT_URL="${GH_SERVER_URL}/${GH_REPOSITORY}/commit/${GH_SHA}"
+
+          TRIGGER="$GH_EVENT_NAME"
+          case "$TRIGGER" in
+            push)
+              if echo "$COMMIT_MESSAGE" | head -n1 | grep -q "Merge pull request"; then
+                TRIGGER_TEXT="PR merge"
+              else
+                TRIGGER_TEXT="Push"
+              fi
+              ;;
+            workflow_dispatch) TRIGGER_TEXT="Manual" ;;
+            *) TRIGGER_TEXT="$TRIGGER" ;;
+          esac
+
+          # Overall status: fail if either lint or test failed
+          if [[ "$TEST_RESULT" == "success" && "$LINT_RESULT" == "success" ]]; then
+            COLOR="#36a64f"; EMOJI="white_check_mark"
+            HEADER="QURL MCP Server Build"; STATUS_TEXT="successful"
+          elif [[ "$TEST_RESULT" == "failure" || "$LINT_RESULT" == "failure" ]]; then
+            COLOR="#dc3545"; EMOJI="x"
+            HEADER="QURL MCP Server Build"; STATUS_TEXT="failed"
+          elif [[ "$TEST_RESULT" == "cancelled" || "$LINT_RESULT" == "cancelled" ]]; then
+            COLOR="#ffc107"; EMOJI="warning"
+            HEADER="QURL MCP Server Build"; STATUS_TEXT="cancelled"
+          else
+            COLOR="#ffc107"; EMOJI="warning"
+            HEADER="QURL MCP Server Build"; STATUS_TEXT="incomplete"
+          fi
+
+          case "$TEST_RESULT" in
+            success) TEST_EMOJI=":white_check_mark:" ;;
+            failure) TEST_EMOJI=":x:" ;;
+            *) TEST_EMOJI=":warning:" ;;
+          esac
+          case "$LINT_RESULT" in
+            success) LINT_EMOJI=":white_check_mark:" ;;
+            failure) LINT_EMOJI=":x:" ;;
+            *) LINT_EMOJI=":warning:" ;;
+          esac
+
+          FIRST_LINE=$(echo "$COMMIT_MESSAGE" | head -n1 | cut -c1-100)
+
+          PAYLOAD=$(jq -n \
+            --arg color "$COLOR" \
+            --arg emoji "$EMOJI" \
+            --arg header "$HEADER" \
+            --arg status "$STATUS_TEXT" \
+            --arg branch "$GH_REF_NAME" \
+            --arg sha "$SHORT_SHA" \
+            --arg trigger "$TRIGGER_TEXT" \
+            --arg actor "$GH_ACTOR" \
+            --arg test_emoji "$TEST_EMOJI" \
+            --arg lint_emoji "$LINT_EMOJI" \
+            --arg commit "$FIRST_LINE" \
+            --arg commit_url "$COMMIT_URL" \
+            --arg workflow_url "$WORKFLOW_URL" \
+            '{attachments: [{color: $color, blocks: [
+              {type: "section", text: {type: "mrkdwn", text: (":\($emoji): *\($header)* \($status)")}},
+              {type: "section", fields: [
+                {type: "mrkdwn", text: ("*Branch:*\n`\($branch)` (\($sha))")},
+                {type: "mrkdwn", text: ("*Trigger:*\n\($trigger) by \($actor)")},
+                {type: "mrkdwn", text: ("*Lint:*\n\($lint_emoji)")},
+                {type: "mrkdwn", text: ("*Tests:*\n\($test_emoji)")}
+              ]},
+              {type: "section", text: {type: "mrkdwn", text: ("*Commit:* `\($commit)`")}},
+              {type: "context", elements: [
+                {type: "mrkdwn", text: ("<\($commit_url)|\($sha)>  |  <\($workflow_url)|View workflow>")}
+              ]}
+            ]}]}')
+
+          curl -sfS -X POST "$SLACK_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" || echo "Slack notification failed (non-critical)"
