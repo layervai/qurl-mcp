@@ -29,11 +29,11 @@ jobs:
       - name: Fetch current API spec
         id: fetch
         run: |
-          HTTP_CODE=$(curl -sS --retry 2 --max-time 30 -w '%{http_code}' -o /tmp/current-spec.yaml "$SPEC_URL")
+          HTTP_CODE=$(curl -sSL --retry 2 --max-time 30 -w '%{http_code}' -o /tmp/current-spec.yaml "$SPEC_URL")
           if [ "$HTTP_CODE" != "200" ]; then
             echo "::warning::Failed to fetch API spec (HTTP $HTTP_CODE). Skipping drift check."
             echo "skip=true" >> "$GITHUB_OUTPUT"
-          elif ! head -1 /tmp/current-spec.yaml | grep -q '^openapi'; then
+          elif ! grep -m1 -q '^openapi' /tmp/current-spec.yaml; then
             echo "::warning::Fetched content does not appear to be an OpenAPI spec. Skipping drift check."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
@@ -67,6 +67,24 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Update existing issue with new drift
+        if: steps.diff.outputs.drift == 'true' && steps.existing.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cat > /tmp/comment-body.md <<'COMMENT_EOF'
+          ### Updated drift detected
+
+          The spec has changed again since this issue was opened.
+          COMMENT_EOF
+
+          printf 'Detected on: %s\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> /tmp/comment-body.md
+          printf '```diff\n' >> /tmp/comment-body.md
+          cat /tmp/spec-diff-truncated.txt >> /tmp/comment-body.md
+          printf '```\n' >> /tmp/comment-body.md
+
+          gh issue comment "${{ steps.existing.outputs.issue }}" --body-file /tmp/comment-body.md
 
       - name: Ensure labels exist
         if: steps.diff.outputs.drift == 'true' && steps.existing.outputs.exists != 'true'
