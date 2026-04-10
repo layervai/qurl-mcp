@@ -66,8 +66,7 @@ jobs:
           SHORT_SHA="${GH_SHA:0:7}"
           COMMIT_URL="${GH_SERVER_URL}/${GH_REPOSITORY}/commit/${GH_SHA}"
 
-          TRIGGER="$GH_EVENT_NAME"
-          case "$TRIGGER" in
+          case "$GH_EVENT_NAME" in
             push)
               if echo "$COMMIT_MESSAGE" | head -n1 | grep -q "Merge pull request"; then
                 TRIGGER_TEXT="PR merge"
@@ -75,23 +74,19 @@ jobs:
                 TRIGGER_TEXT="Push"
               fi
               ;;
-            workflow_dispatch) TRIGGER_TEXT="Manual" ;;
-            *) TRIGGER_TEXT="$TRIGGER" ;;
+            *) TRIGGER_TEXT="$GH_EVENT_NAME" ;;
           esac
 
           # Overall status: fail if either lint or test failed
+          HEADER="QURL MCP Build"
           if [[ "$TEST_RESULT" == "success" && "$LINT_RESULT" == "success" ]]; then
-            COLOR="#36a64f"; EMOJI="white_check_mark"
-            HEADER="QURL MCP Server Build"; STATUS_TEXT="successful"
+            COLOR="#36a64f"; EMOJI=":white_check_mark:"; STATUS_TEXT="successful"
           elif [[ "$TEST_RESULT" == "failure" || "$LINT_RESULT" == "failure" ]]; then
-            COLOR="#dc3545"; EMOJI="x"
-            HEADER="QURL MCP Server Build"; STATUS_TEXT="failed"
+            COLOR="#dc3545"; EMOJI=":x:"; STATUS_TEXT="failed"
           elif [[ "$TEST_RESULT" == "cancelled" || "$LINT_RESULT" == "cancelled" ]]; then
-            COLOR="#ffc107"; EMOJI="warning"
-            HEADER="QURL MCP Server Build"; STATUS_TEXT="cancelled"
+            COLOR="#ffc107"; EMOJI=":warning:"; STATUS_TEXT="cancelled"
           else
-            COLOR="#ffc107"; EMOJI="warning"
-            HEADER="QURL MCP Server Build"; STATUS_TEXT="incomplete"
+            COLOR="#ffc107"; EMOJI=":warning:"; STATUS_TEXT="incomplete"
           fi
 
           case "$TEST_RESULT" in
@@ -106,6 +101,7 @@ jobs:
           esac
 
           FIRST_LINE=$(echo "$COMMIT_MESSAGE" | head -n1 | cut -c1-100)
+          FIRST_LINE="${FIRST_LINE:-(no commit message)}"
 
           PAYLOAD=$(jq -n \
             --arg color "$COLOR" \
@@ -122,7 +118,7 @@ jobs:
             --arg commit_url "$COMMIT_URL" \
             --arg workflow_url "$WORKFLOW_URL" \
             '{attachments: [{color: $color, blocks: [
-              {type: "section", text: {type: "mrkdwn", text: (":\($emoji): *\($header)* \($status)")}},
+              {type: "section", text: {type: "mrkdwn", text: ("\($emoji) *\($header)* \($status)")}},
               {type: "section", fields: [
                 {type: "mrkdwn", text: ("*Branch:*\n`\($branch)` (\($sha))")},
                 {type: "mrkdwn", text: ("*Trigger:*\n\($trigger) by \($actor)")},
