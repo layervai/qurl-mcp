@@ -9,7 +9,8 @@ export const extendQurlSchema = z.object({
 export function extendQurlTool(client: IQURLClient) {
   return {
     name: "extend_qurl",
-    description: "Extend the expiration of an active QURL.",
+    description:
+      "Extend the expiration of an active QURL. Shorthand for update_qurl with only extend_by — use update_qurl for richer updates (tags, description, expiration).",
     inputSchema: extendQurlSchema,
     handler: async (input: z.infer<typeof extendQurlSchema>) => {
       const result = await client.extendQURL(input.resource_id, {
