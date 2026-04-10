@@ -75,6 +75,50 @@ describe("getQurlTool", () => {
       expect(text).toBe(JSON.stringify(fixture));
     });
 
+    it("passes through qurls array with access token details", async () => {
+      const fixtureWithTokens = sampleQURL({
+        resource_id: "r_tokens",
+        qurl_count: 2,
+        qurls: [
+          {
+            qurl_id: "q_aaa11111111",
+            status: "active",
+            one_time_use: false,
+            max_sessions: 3,
+            session_duration: 3600,
+            use_count: 1,
+            created_at: "2026-03-09T00:00:00Z",
+            expires_at: "2026-03-10T00:00:00Z",
+          },
+          {
+            qurl_id: "q_bbb22222222",
+            status: "consumed",
+            one_time_use: true,
+            max_sessions: 1,
+            session_duration: 300,
+            use_count: 1,
+            created_at: "2026-03-09T00:00:00Z",
+            expires_at: "2026-03-10T00:00:00Z",
+          },
+        ],
+      });
+
+      const mockGet = vi.fn().mockResolvedValue({ data: fixtureWithTokens });
+      const client = makeMockClient({ getQURL: mockGet });
+      const tool = getQurlTool(client);
+
+      const result = await tool.handler({ resource_id: "r_tokens" });
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.qurl_count).toBe(2);
+      expect(parsed.qurls).toHaveLength(2);
+      expect(parsed.qurls[0].qurl_id).toBe("q_aaa11111111");
+      expect(parsed.qurls[0].one_time_use).toBe(false);
+      expect(parsed.qurls[0].max_sessions).toBe(3);
+      expect(parsed.qurls[1].status).toBe("consumed");
+      expect(parsed.qurls[1].one_time_use).toBe(true);
+    });
+
     it("propagates client errors", async () => {
       const mockGet = vi.fn().mockRejectedValue(new Error("Not found"));
       const client = makeMockClient({ getQURL: mockGet });
