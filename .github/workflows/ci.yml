@@ -126,8 +126,8 @@ jobs:
               {type: "section", fields: [
                 {type: "mrkdwn", text: ("*Branch:*\n`\($branch)` (\($sha))")},
                 {type: "mrkdwn", text: ("*Trigger:*\n\($trigger) by \($actor)")},
-                {type: "mrkdwn", text: ("*Lint:*\n\($lint_emoji)  *Tests:*\n\($test_emoji)")},
-                {type: "mrkdwn", text: "*Node:*\n22"}
+                {type: "mrkdwn", text: ("*Lint:*\n\($lint_emoji)")},
+                {type: "mrkdwn", text: ("*Tests:*\n\($test_emoji)")}
               ]},
               {type: "section", text: {type: "mrkdwn", text: ("*Commit:* `\($commit)`")}},
               {type: "context", elements: [
