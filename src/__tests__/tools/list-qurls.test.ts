@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { listQurlsTool, listQurlsSchema } from "../../tools/list-qurls.js";
 import type { ListQURLsOutput } from "../../client.js";
-import { makeMockClient, sampleQurlData } from "../helpers.js";
+import { makeMockClient, sampleQURL } from "../helpers.js";
 
-const fixture = sampleQurlData({ resource_id: "r_abc" });
+const fixture = sampleQURL({ resource_id: "r_abc" });
 
 describe("listQurlsTool", () => {
   describe("metadata", () => {

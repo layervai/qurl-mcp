@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { updateQurlTool, updateQurlSchema } from "../../tools/update-qurl.js";
-import { makeMockClient, sampleQurlData } from "../helpers.js";
+import { makeMockClient, sampleQURL } from "../helpers.js";
 
-const fixture = sampleQurlData({
+const fixture = sampleQURL({
   resource_id: "r_update1",
   qurl_site: "https://update.qurl.site",
   target_url: "https://example.com/updated",

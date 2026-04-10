@@ -1,14 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
 import { getQurlTool, getQurlSchema } from "../../tools/get-qurl.js";
-import { makeMockClient, sampleQurlData } from "../helpers.js";
+import { makeMockClient, sampleQURL } from "../helpers.js";
 
-const fixture = sampleQurlData({
+const fixture = sampleQURL({
   resource_id: "r_test456",
+  qurl_link: "https://qurl.link/at_xyz",
   qurl_site: "https://test.qurl.site",
   target_url: "https://example.com/page",
   description: "A test link",
   expires_at: "2026-03-15T00:00:00Z",
   tags: ["test"],
+  qurl_count: 2,
+  metadata: { tag: "test" },
 });
 
 describe("getQurlTool", () => {
@@ -58,6 +61,8 @@ describe("getQurlTool", () => {
       expect(parsed.resource_id).toBe("r_test456");
       expect(parsed.target_url).toBe("https://example.com/page");
       expect(parsed.tags).toEqual(["test"]);
+      expect(parsed.qurl_count).toBe(2);
+      expect(parsed.metadata).toEqual({ tag: "test" });
     });
 
     it("returns only the data object, not the wrapper", async () => {
@@ -68,8 +73,52 @@ describe("getQurlTool", () => {
       const result = await tool.handler({ resource_id: "r_test456" });
       const text = result.content[0].text;
 
-      // Should be the QurlData object directly, not { data: ... }
+      // Should be the QURL object directly, not { data: ... }
       expect(text).toBe(JSON.stringify(fixture));
+    });
+
+    it("passes through qurls array with access token details", async () => {
+      const fixtureWithTokens = sampleQURL({
+        resource_id: "r_tokens",
+        qurl_count: 2,
+        qurls: [
+          {
+            qurl_id: "q_aaa11111111",
+            status: "active",
+            one_time_use: false,
+            max_sessions: 3,
+            session_duration: 3600,
+            use_count: 1,
+            created_at: "2026-03-09T00:00:00Z",
+            expires_at: "2026-03-10T00:00:00Z",
+          },
+          {
+            qurl_id: "q_bbb22222222",
+            status: "consumed",
+            one_time_use: true,
+            max_sessions: 1,
+            session_duration: 300,
+            use_count: 1,
+            created_at: "2026-03-09T00:00:00Z",
+            expires_at: "2026-03-10T00:00:00Z",
+          },
+        ],
+      });
+
+      const mockGet = vi.fn().mockResolvedValue({ data: fixtureWithTokens });
+      const client = makeMockClient({ getQURL: mockGet });
+      const tool = getQurlTool(client);
+
+      const result = await tool.handler({ resource_id: "r_tokens" });
+      const parsed = JSON.parse(result.content[0].text);
+
+      expect(parsed.qurl_count).toBe(2);
+      expect(parsed.qurls).toHaveLength(2);
+      expect(parsed.qurls[0].qurl_id).toBe("q_aaa11111111");
+      expect(parsed.qurls[0].one_time_use).toBe(false);
+      expect(parsed.qurls[0].max_sessions).toBe(3);
+      expect(parsed.qurls[1].status).toBe("consumed");
+      expect(parsed.qurls[1].one_time_use).toBe(true);
     });
 
     it("propagates client errors", async () => {

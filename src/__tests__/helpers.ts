@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { IQURLClient, QurlData, CreateQurlData } from "../client.js";
+import type { IQURLClient, QURL, CreateQurlData } from "../client.js";
 import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 
 export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClient {
@@ -9,6 +9,7 @@ export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClien
     listQURLs: vi.fn(),
     deleteQURL: vi.fn(),
     updateQURL: vi.fn(),
+    extendQURL: vi.fn(),
     resolveQURL: vi.fn(),
     getQuota: vi.fn(),
     mintLink: vi.fn(),
@@ -24,17 +25,17 @@ export function getPromptText(result: GetPromptResult, index = 0): string {
   return content.text;
 }
 
-export function sampleQurlData(overrides: Partial<QurlData> = {}): QurlData {
+export function sampleQURL(overrides: Partial<QURL> = {}): QURL {
   return {
     resource_id: "r_test123",
+    qurl_link: "https://qurl.link/at_abc",
     qurl_site: "https://example.qurl.site",
     target_url: "https://example.com/protected",
     description: "Test QURL",
-    tags: [],
-    custom_domain: null,
     expires_at: "2026-03-10T00:00:00Z",
     created_at: "2026-03-09T00:00:00Z",
     status: "active",
+    qurl_count: 1,
     ...overrides,
   };
 }

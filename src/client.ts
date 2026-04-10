@@ -9,16 +9,34 @@ export interface QURLClientConfig {
 
 // --- Response data types ---
 
-export interface QurlData {
+export interface AccessToken {
+  qurl_id: string;
+  label?: string;
+  status: string;
+  one_time_use: boolean;
+  max_sessions: number;
+  session_duration: number;
+  use_count: number;
+  qurl_site?: string;
+  access_policy?: Record<string, unknown>;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface QURL {
   resource_id: string;
-  qurl_site: string;
+  qurl_link?: string; // Only present on create response, not on GET/list
+  qurl_site?: string;
   target_url: string;
   description?: string;
-  tags: string[];
-  custom_domain: string | null;
+  tags?: string[];
   expires_at: string;
   created_at: string;
-  status: "active" | "revoked";
+  status: string;
+  custom_domain?: string;
+  qurl_count?: number;
+  qurls?: AccessToken[];
+  metadata?: Record<string, unknown>;
 }
 
 export interface CreateQurlData {
@@ -78,6 +96,10 @@ export interface UpdateQURLInput {
   description?: string;
 }
 
+export interface ExtendQURLInput {
+  extend_by: string;
+}
+
 export interface ResolveInput {
   access_token: string;
 }
@@ -99,7 +121,7 @@ export interface BatchCreateInput {
 // --- Output types ---
 
 export interface ListQURLsOutput {
-  data: QurlData[];
+  data: QURL[];
   meta: {
     next_cursor?: string;
     has_more: boolean;
@@ -172,10 +194,11 @@ export interface BatchCreateOutput {
 
 export interface IQURLClient {
   createQURL(input: CreateQURLInput): Promise<{ data: CreateQurlData }>;
-  getQURL(id: string): Promise<{ data: QurlData }>;
+  getQURL(id: string): Promise<{ data: QURL }>;
   listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput>;
   deleteQURL(id: string): Promise<void>;
-  updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QurlData }>;
+  updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }>;
+  extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }>;
   resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }>;
   getQuota(): Promise<{ data: QuotaOutput }>;
   mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }>;
@@ -232,16 +255,7 @@ export class QURLClient implements IQURLClient {
       return undefined as T;
     }
 
-    let json: Record<string, unknown>;
-    try {
-      json = JSON.parse(text) as Record<string, unknown>;
-    } catch {
-      throw new QURLAPIError(
-        response.status,
-        "parse_error",
-        `Failed to parse response: ${text.slice(0, 200)}`,
-      );
-    }
+    const json = this.parseJSON(text, response.status);
 
     if (!response.ok) {
       const error = json.error as
@@ -261,12 +275,28 @@ export class QURLClient implements IQURLClient {
     return json as T;
   }
 
+  private parseJSON(text: string, status: number): Record<string, unknown> {
+    try {
+      return JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      throw new QURLAPIError(
+        status,
+        "parse_error",
+        `Failed to parse response: ${text.slice(0, 200)}`,
+      );
+    }
+  }
+
+  private qurlPath(id: string): string {
+    return `/v1/qurls/${encodeURIComponent(id)}`;
+  }
+
   async createQURL(input: CreateQURLInput): Promise<{ data: CreateQurlData }> {
     return this.request("POST", "/v1/qurls", input);
   }
 
-  async getQURL(id: string): Promise<{ data: QurlData }> {
-    return this.request("GET", `/v1/qurls/${encodeURIComponent(id)}`);
+  async getQURL(id: string): Promise<{ data: QURL }> {
+    return this.request("GET", this.qurlPath(id));
   }
 
   async listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput> {
@@ -285,11 +315,15 @@ export class QURLClient implements IQURLClient {
   }
 
   async deleteQURL(id: string): Promise<void> {
-    await this.request("DELETE", `/v1/qurls/${encodeURIComponent(id)}`);
+    await this.request("DELETE", this.qurlPath(id));
   }
 
-  async updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QurlData }> {
-    return this.request("PATCH", `/v1/qurls/${encodeURIComponent(id)}`, input);
+  async updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }> {
+    return this.request("PATCH", this.qurlPath(id), input);
+  }
+
+  async extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }> {
+    return this.request("PATCH", this.qurlPath(id), input);
   }
 
   async resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }> {

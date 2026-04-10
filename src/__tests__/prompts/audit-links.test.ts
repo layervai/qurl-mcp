@@ -38,6 +38,13 @@ describe("auditLinksPrompt", () => {
       expect(getPromptText(result)).toContain("expiring");
     });
 
+    it("includes qurl_count evaluation", () => {
+      const prompt = auditLinksPrompt();
+      const result = prompt.handler();
+
+      expect(getPromptText(result)).toContain("qurl_count");
+    });
+
     it("includes tags check", () => {
       const prompt = auditLinksPrompt();
       const result = prompt.handler();
