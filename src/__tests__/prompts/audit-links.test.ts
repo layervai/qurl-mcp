@@ -38,18 +38,11 @@ describe("auditLinksPrompt", () => {
       expect(getPromptText(result)).toContain("expiring");
     });
 
-    it("includes access count evaluation", () => {
+    it("includes qurl_count evaluation", () => {
       const prompt = auditLinksPrompt();
       const result = prompt.handler();
 
-      expect(getPromptText(result)).toContain("access_count");
-    });
-
-    it("includes one_time_use check", () => {
-      const prompt = auditLinksPrompt();
-      const result = prompt.handler();
-
-      expect(getPromptText(result)).toContain("one_time_use");
+      expect(getPromptText(result)).toContain("qurl_count");
     });
 
     it("asks for a summary table", () => {

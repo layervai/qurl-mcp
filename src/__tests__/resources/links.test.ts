@@ -16,8 +16,7 @@ const sampleQURLs = [
     qurl_site: "https://2.qurl.site",
     target_url: "https://example.com/2",
     expires_at: "2026-03-20T00:00:00Z",
-    access_count: 3,
-    one_time_use: true,
+    qurl_count: 3,
   }),
 ];
 

@@ -7,18 +7,32 @@ export interface QURLClientConfig {
   baseURL: string;
 }
 
+export interface AccessToken {
+  qurl_id: string;
+  label?: string;
+  status: string;
+  one_time_use: boolean;
+  max_sessions: number;
+  session_duration: number;
+  use_count: number;
+  qurl_site?: string;
+  access_policy?: Record<string, unknown>;
+  created_at: string;
+  expires_at: string;
+}
+
 export interface QURL {
   resource_id: string;
-  qurl_link: string;
-  qurl_site: string;
+  qurl_link?: string; // Only present on create response, not on GET/list
+  qurl_site?: string;
   target_url: string;
   description?: string;
   expires_at: string;
   created_at: string;
   status: string;
-  access_count: number;
-  one_time_use: boolean;
-  max_sessions: number;
+  custom_domain?: string;
+  qurl_count?: number;
+  qurls?: AccessToken[];
   metadata?: Record<string, unknown>;
 }
 
