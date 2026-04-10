@@ -9,8 +9,7 @@ const fixture = sampleQURL({
   target_url: "https://example.com/page",
   description: "A test link",
   expires_at: "2026-03-15T00:00:00Z",
-  access_count: 5,
-  max_sessions: 2,
+  qurl_count: 2,
   metadata: { tag: "test" },
 });
 
@@ -60,7 +59,7 @@ describe("getQurlTool", () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.resource_id).toBe("r_test456");
       expect(parsed.target_url).toBe("https://example.com/page");
-      expect(parsed.access_count).toBe(5);
+      expect(parsed.qurl_count).toBe(2);
       expect(parsed.metadata).toEqual({ tag: "test" });
     });
 

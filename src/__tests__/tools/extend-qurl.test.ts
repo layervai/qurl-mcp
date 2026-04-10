@@ -8,7 +8,7 @@ const fixture = sampleQURL({
   qurl_site: "https://ext.qurl.site",
   target_url: "https://example.com/extended",
   expires_at: "2026-04-09T00:00:00Z",
-  access_count: 3,
+  qurl_count: 3,
 });
 
 describe("extendQurlTool", () => {

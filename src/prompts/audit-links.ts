@@ -4,7 +4,7 @@ export function auditLinksPrompt() {
   return {
     name: "audit-links",
     description:
-      "Review all active QURLs and identify expiring links, high-usage links, or potential issues.",
+      "Review all active QURLs and identify expiring links, token counts, or potential issues.",
     handler: (): GetPromptResult => {
       return {
         messages: [

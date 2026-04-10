@@ -27,7 +27,7 @@ export interface QURL {
   qurl_site?: string;
   target_url: string;
   description?: string;
-  expires_at?: string;
+  expires_at: string;
   created_at: string;
   status: string;
   custom_domain?: string;
