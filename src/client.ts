@@ -16,13 +16,14 @@ export interface AccessToken {
   session_duration: number;
   use_count: number;
   qurl_site?: string;
+  access_policy?: Record<string, unknown>;
   created_at: string;
   expires_at: string;
 }
 
 export interface QURL {
   resource_id: string;
-  qurl_link?: string;
+  qurl_link?: string; // Only present on create response, not on GET/list
   qurl_site?: string;
   target_url: string;
   description?: string;
