@@ -32,9 +32,7 @@ export function sampleQURL(overrides: Partial<QURL> = {}): QURL {
     expires_at: "2026-03-10T00:00:00Z",
     created_at: "2026-03-09T00:00:00Z",
     status: "active",
-    access_count: 0,
-    one_time_use: false,
-    max_sessions: 1,
+    qurl_count: 1,
     ...overrides,
   };
 }
