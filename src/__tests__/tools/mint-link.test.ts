@@ -79,6 +79,22 @@ describe("mintLinkTool", () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it("rejects max_sessions above 1000 (API hard limit)", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: "r_abc123",
+        max_sessions: 1001,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects label longer than 500 characters", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: "r_abc123",
+        label: "x".repeat(501),
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("handler", () => {

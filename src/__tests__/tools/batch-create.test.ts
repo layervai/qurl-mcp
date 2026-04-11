@@ -166,6 +166,46 @@ describe("batchCreateTool", () => {
       expect(parsed.request_id).toBeUndefined();
     });
 
+    it("surfaces all-items-failed (HTTP 400) as isError with per-item details", async () => {
+      // Matches the API contract at qurl/internal/api/handlers/server.go:1126 —
+      // a 400 here still carries a BatchCreateResponse body with per-item errors.
+      const allFailed = {
+        succeeded: 0,
+        failed: 2,
+        results: [
+          {
+            index: 0,
+            success: false,
+            error: { code: "invalid_input", message: "items[0]: target_url must be HTTPS" },
+          },
+          {
+            index: 1,
+            success: false,
+            error: { code: "invalid_input", message: "items[1]: target_url must be HTTPS" },
+          },
+        ],
+      };
+      const mockBatch = vi
+        .fn()
+        .mockResolvedValue({ data: allFailed, meta: { request_id: "req_allfail" } });
+      const client = makeMockClient({ batchCreate: mockBatch });
+      const tool = batchCreateTool(client);
+
+      const result = await tool.handler({
+        items: [
+          { target_url: "http://a.example.com" },
+          { target_url: "http://b.example.com" },
+        ],
+      });
+
+      expect(result.isError).toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.failed).toBe(2);
+      expect(parsed.succeeded).toBe(0);
+      expect(parsed.results[0].error.message).toContain("target_url must be HTTPS");
+      expect(parsed.request_id).toBe("req_allfail");
+    });
+
     it("propagates client errors", async () => {
       const mockBatch = vi.fn().mockRejectedValue(new Error("Rate limited"));
       const client = makeMockClient({ batchCreate: mockBatch });

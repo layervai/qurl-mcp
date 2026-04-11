@@ -1,13 +1,33 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { zodErrorToToolResult } from "./_shared.js";
+import { describeResourceIdParam, zodErrorToToolResult } from "./_shared.js";
+
+// Tags must match the API constraints: 1-50 chars, start with alphanumeric,
+// allow alphanumerics/spaces/underscores/hyphens. Max 10 tags per resource.
+// See qurl/api/openapi.yaml -> UpdateQurlRequest.tags.
+const tagSchema = z
+  .string()
+  .min(1)
+  .max(50)
+  .regex(
+    /^[a-zA-Z0-9][a-zA-Z0-9 _-]*$/,
+    "Tag must start with alphanumeric and contain only letters, numbers, spaces, underscores, or hyphens",
+  );
 
 export const updateQurlBaseSchema = z.object({
-  resource_id: z.string().describe("The resource ID to update"),
+  resource_id: z.string().describe(describeResourceIdParam("update")),
   extend_by: z.string().optional().describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
   expires_at: z.string().datetime().optional().describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with extend_by."),
-  tags: z.array(z.string()).optional().describe("Replace all tags on this resource"),
-  description: z.string().optional().describe("Replace the resource description"),
+  tags: z
+    .array(tagSchema)
+    .max(10)
+    .optional()
+    .describe("Replace all tags on this resource (max 10 tags, each 1-50 chars)"),
+  description: z
+    .string()
+    .max(500)
+    .optional()
+    .describe("Replace the resource description (max 500 chars)"),
 });
 
 export const updateQurlSchema = updateQurlBaseSchema
@@ -23,6 +43,7 @@ export function updateQurlTool(client: IQURLClient) {
     name: "update_qurl",
     description:
       "Update a QURL - extend expiration, set an absolute expiry, update tags, or change the description. " +
+      "Accepts either a resource ID (r_ prefix) or QURL display ID (q_ prefix). " +
       "Do not provide both extend_by and expires_at. At least one update field is required.",
     // Base shape for MCP tool registration; refinements run in the handler
     inputSchema: updateQurlBaseSchema,

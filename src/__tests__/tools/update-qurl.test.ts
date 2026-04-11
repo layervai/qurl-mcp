@@ -53,6 +53,46 @@ describe("updateQurlTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("rejects more than 10 tags", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        tags: Array.from({ length: 11 }, (_, i) => `tag${i}`),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects tags longer than 50 characters", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        tags: ["x".repeat(51)],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects empty tag strings", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        tags: [""],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects tags that don't match the API pattern", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        tags: ["-invalid"], // must start with alphanumeric
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects description longer than 500 characters", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        description: "x".repeat(501),
+      });
+      expect(result.success).toBe(false);
+    });
+
     it("rejects non-string extend_by", () => {
       const result = updateQurlSchema.safeParse({
         resource_id: "r_abc",

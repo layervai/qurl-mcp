@@ -19,3 +19,15 @@ export function zodErrorToToolResult(error: ZodError) {
     ],
   };
 }
+
+/**
+ * Describe a tool's resource_id parameter. The API accepts both a resource ID
+ * (r_ prefix) and a QURL display ID (q_ prefix) on get/update/extend/mint_link,
+ * and resolves a q_ ID to its parent resource automatically.
+ */
+export function describeResourceIdParam(verb: string): string {
+  return (
+    `The resource ID (r_ prefix) or QURL display ID (q_ prefix) to ${verb}. ` +
+    "If a q_ ID is passed, the API resolves it to the parent resource automatically."
+  );
+}

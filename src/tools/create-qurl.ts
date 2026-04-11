@@ -43,10 +43,20 @@ export const accessPolicySchema = z.object({
 
 export const createQurlSchema = z.object({
   target_url: z.string().url().describe("The URL to protect with QURL"),
-  label: z.string().optional().describe("Human-readable label identifying who this QURL is for"),
+  label: z
+    .string()
+    .max(500)
+    .optional()
+    .describe("Human-readable label identifying who this QURL is for (max 500 chars)"),
   expires_in: z.string().optional().describe('Duration string (e.g., "1h", "24h", "7d")'),
   one_time_use: z.boolean().optional().describe("Whether the link can only be used once"),
-  max_sessions: z.number().int().min(0).optional().describe("Maximum concurrent sessions (0 = unlimited)"),
+  max_sessions: z
+    .number()
+    .int()
+    .min(0)
+    .max(1000)
+    .optional()
+    .describe("Maximum concurrent sessions (0 = unlimited, max 1000)"),
   session_duration: z.string().optional().describe('How long access lasts after clicking (e.g., "1h")'),
   custom_domain: z.string().optional().describe("Custom domain to assign to the auto-created resource"),
   access_policy: accessPolicySchema.optional().describe("Access control policy for the QURL"),

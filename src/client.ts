@@ -139,7 +139,7 @@ export interface ResolveOutput {
 }
 
 export interface QuotaOutput {
-  plan: string;
+  plan: "free" | "growth" | "enterprise";
   period_start: string;
   period_end: string;
   rate_limits: {
@@ -230,7 +230,20 @@ export class QURLClient implements IQURLClient {
     this.baseURL = config.baseURL.replace(/\/$/, "");
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /**
+   * Issue an HTTP request and parse the JSON response.
+   *
+   * `passthroughStatuses` lets a caller opt certain non-2xx codes out of the
+   * default throw-on-error path and receive the parsed body instead. This is
+   * used by `batchCreate`, where the API returns a structured BatchCreateResponse
+   * on HTTP 400 (all items rejected) — throwing would drop the per-item errors.
+   */
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    passthroughStatuses: number[] = [],
+  ): Promise<T> {
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
@@ -255,7 +268,7 @@ export class QURLClient implements IQURLClient {
 
     const json = this.parseJSON(text, response.status);
 
-    if (!response.ok) {
+    if (!response.ok && !passthroughStatuses.includes(response.status)) {
       const error = json.error as
         | { type?: string; title?: string; detail?: string; code?: string; message?: string; instance?: string }
         | undefined;
@@ -337,6 +350,7 @@ export class QURLClient implements IQURLClient {
   }
 
   async batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput> {
-    return this.request("POST", "/v1/qurls/batch", input);
+    // 400 carries per-item errors (see request() JSDoc).
+    return this.request("POST", "/v1/qurls/batch", input, [400]);
   }
 }

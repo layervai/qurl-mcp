@@ -88,6 +88,30 @@ describe("createQurlTool", () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it("rejects max_sessions above 1000 (API hard limit)", () => {
+      const result = createQurlSchema.safeParse({
+        target_url: "https://example.com",
+        max_sessions: 1001,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("accepts max_sessions at the 1000 ceiling", () => {
+      const result = createQurlSchema.safeParse({
+        target_url: "https://example.com",
+        max_sessions: 1000,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects label longer than 500 characters", () => {
+      const result = createQurlSchema.safeParse({
+        target_url: "https://example.com",
+        label: "x".repeat(501),
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("handler", () => {

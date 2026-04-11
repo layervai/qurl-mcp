@@ -1,15 +1,25 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { accessPolicySchema } from "./create-qurl.js";
-import { zodErrorToToolResult } from "./_shared.js";
+import { describeResourceIdParam, zodErrorToToolResult } from "./_shared.js";
 
 export const mintLinkBaseSchema = z.object({
-  resource_id: z.string().describe("The resource ID to mint a new access link for"),
-  label: z.string().optional().describe("Human-readable label identifying who this link is for"),
+  resource_id: z.string().describe(describeResourceIdParam("mint a new access link for")),
+  label: z
+    .string()
+    .max(500)
+    .optional()
+    .describe("Human-readable label identifying who this link is for (max 500 chars)"),
   expires_in: z.string().optional().describe('Relative duration until expiration (e.g., "5m", "24h", "7d"). Mutually exclusive with expires_at'),
   expires_at: z.string().datetime().optional().describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with expires_in"),
   one_time_use: z.boolean().optional().describe("Whether this link can only be used once"),
-  max_sessions: z.number().int().min(0).optional().describe("Maximum concurrent sessions (0 = unlimited)"),
+  max_sessions: z
+    .number()
+    .int()
+    .min(0)
+    .max(1000)
+    .optional()
+    .describe("Maximum concurrent sessions (0 = unlimited, max 1000)"),
   session_duration: z.string().optional().describe('How long access lasts after clicking (e.g., "1h")'),
   access_policy: accessPolicySchema.optional().describe("Access control policy for this link"),
 });
@@ -24,6 +34,7 @@ export function mintLinkTool(client: IQURLClient) {
     name: "mint_link",
     description:
       "Mint a new access link for an existing QURL resource. " +
+      "Accepts either a resource ID (r_ prefix) or QURL display ID (q_ prefix). " +
       "Use this to generate additional access links without creating a new resource. " +
       "Do not provide both expires_in and expires_at.",
     inputSchema: mintLinkBaseSchema,

@@ -688,5 +688,62 @@ describe("QURLClient", () => {
       expect(result.data.failed).toBe(1);
       expect(result.data.results[1].error?.code).toBe("invalid_target_url");
     });
+
+    it("passes through the structured body on HTTP 400 (all items failed)", async () => {
+      // When every batch item fails validation the API returns 400 with a
+      // BatchCreateResponse body, not an error envelope. The client must
+      // surface the per-item errors instead of throwing a generic "HTTP 400".
+      const mockData = {
+        data: {
+          succeeded: 0,
+          failed: 2,
+          results: [
+            {
+              index: 0,
+              success: false,
+              error: { code: "invalid_input", message: "items[0]: target_url must be HTTPS" },
+            },
+            {
+              index: 1,
+              success: false,
+              error: { code: "invalid_input", message: "items[1]: target_url must be HTTPS" },
+            },
+          ],
+        },
+        meta: { request_id: "req_batch_fail" },
+      };
+      stubFetch(mockData, 400);
+
+      const result = await client.batchCreate({
+        items: [
+          { target_url: "http://insecure1.example.com" },
+          { target_url: "http://insecure2.example.com" },
+        ],
+      });
+
+      expect(result.data.failed).toBe(2);
+      expect(result.data.succeeded).toBe(0);
+      expect(result.data.results[0].error?.message).toContain("target_url must be HTTPS");
+      expect(result.data.results[1].error?.message).toContain("target_url must be HTTPS");
+      expect(result.meta.request_id).toBe("req_batch_fail");
+    });
+
+    it("still throws on non-400 batch errors (e.g., 401, 429, 5xx)", async () => {
+      stubFetch(
+        {
+          error: {
+            type: "https://api.qurl.link/problems/unauthorized",
+            title: "Unauthorized",
+            status: 401,
+            code: "unauthorized",
+          },
+        },
+        401,
+      );
+
+      await expect(
+        client.batchCreate({ items: [{ target_url: "https://example.com" }] }),
+      ).rejects.toThrow(QURLAPIError);
+    });
   });
 });
