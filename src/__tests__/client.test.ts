@@ -395,6 +395,9 @@ describe("QURLClient", () => {
     });
 
     it("sends limit=0 as query param", async () => {
+      // The MCP tool schema rejects limit < 1 at the validation layer.
+      // This test covers the client method in isolation — an embedder that
+      // uses QURLClient directly (not via the MCP tool) gets the 0 through.
       const mock = stubFetch({ data: [], meta: { has_more: false } });
 
       await client.listQURLs({ limit: 0 });

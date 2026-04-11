@@ -4,6 +4,7 @@ import type { IQURLClient } from "../client.js";
 export const resolveQurlSchema = z.object({
   access_token: z
     .string()
+    .min(1)
     .describe("The access token from a QURL link (e.g., at_k8xqp9h2sj9lx7r4a)"),
 });
 

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { describeResourceIdParam } from "./_shared.js";
+import { resourceIdSchema } from "./_shared.js";
 
 export const extendQurlSchema = z.object({
-  resource_id: z.string().describe(describeResourceIdParam("extend")),
-  extend_by: z.string().describe('Duration to extend by (e.g., "24h", "7d")'),
+  resource_id: resourceIdSchema("extend"),
+  extend_by: z.string().min(1).describe('Duration to extend by (e.g., "24h", "7d")'),
 });
 
 export function extendQurlTool(client: IQURLClient) {

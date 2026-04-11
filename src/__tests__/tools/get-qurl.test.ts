@@ -41,6 +41,11 @@ describe("getQurlTool", () => {
       const result = getQurlSchema.safeParse({ resource_id: 123 });
       expect(result.success).toBe(false);
     });
+
+    it("rejects empty resource_id", () => {
+      const result = getQurlSchema.safeParse({ resource_id: "" });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("handler", () => {

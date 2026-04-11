@@ -12,13 +12,16 @@ export interface QURLClientConfig {
 export interface AccessToken {
   qurl_id: string;
   label?: string;
-  status: string;
+  // Per-token status is a wider enum than resource status, since individual
+  // tokens can be consumed (one-time-use) or expire independently of the
+  // parent resource. See qurl/api/openapi.yaml -> QurlSummary.status.
+  status: "active" | "consumed" | "expired" | "revoked";
   one_time_use: boolean;
   max_sessions: number;
   session_duration: number;
   use_count: number;
   qurl_site?: string;
-  access_policy?: Record<string, unknown>;
+  access_policy?: AccessPolicy;
   created_at: string;
   expires_at: string;
 }
@@ -346,7 +349,7 @@ export class QURLClient implements IQURLClient {
   }
 
   async mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }> {
-    return this.request("POST", `/v1/qurls/${encodeURIComponent(id)}/mint_link`, input);
+    return this.request("POST", `${this.qurlPath(id)}/mint_link`, input);
   }
 
   async batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput> {

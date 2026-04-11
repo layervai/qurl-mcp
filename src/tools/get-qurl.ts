@@ -1,9 +1,9 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { describeResourceIdParam } from "./_shared.js";
+import { resourceIdSchema } from "./_shared.js";
 
 export const getQurlSchema = z.object({
-  resource_id: z.string().describe(describeResourceIdParam("fetch")),
+  resource_id: resourceIdSchema("fetch"),
 });
 
 export function getQurlTool(client: IQURLClient) {

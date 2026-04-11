@@ -27,6 +27,11 @@ describe("mintLinkTool", () => {
       expect(result.success).toBe(false);
     });
 
+    it("rejects empty resource_id", () => {
+      const result = mintLinkBaseSchema.safeParse({ resource_id: "" });
+      expect(result.success).toBe(false);
+    });
+
     it("accepts valid resource_id", () => {
       const result = mintLinkSchema.safeParse({ resource_id: "r_abc123" });
       expect(result.success).toBe(true);

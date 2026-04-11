@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { describeResourceIdParam, zodErrorToToolResult } from "./_shared.js";
+import { resourceIdSchema, zodErrorToToolResult } from "./_shared.js";
 
 // Tags must match the API constraints: 1-50 chars, start with alphanumeric,
 // allow alphanumerics/spaces/underscores/hyphens. Max 10 tags per resource.
@@ -15,8 +15,8 @@ const tagSchema = z
   );
 
 export const updateQurlBaseSchema = z.object({
-  resource_id: z.string().describe(describeResourceIdParam("update")),
-  extend_by: z.string().optional().describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
+  resource_id: resourceIdSchema("update"),
+  extend_by: z.string().min(1).optional().describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
   expires_at: z.string().datetime().optional().describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with extend_by."),
   tags: z
     .array(tagSchema)

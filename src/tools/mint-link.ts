@@ -1,10 +1,10 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { accessPolicySchema } from "./create-qurl.js";
-import { describeResourceIdParam, zodErrorToToolResult } from "./_shared.js";
+import { resourceIdSchema, zodErrorToToolResult } from "./_shared.js";
 
 export const mintLinkBaseSchema = z.object({
-  resource_id: z.string().describe(describeResourceIdParam("mint a new access link for")),
+  resource_id: resourceIdSchema("mint a new access link for"),
   label: z
     .string()
     .max(500)

@@ -32,7 +32,7 @@ export function rotateAccessPrompt() {
                 `1. Use the get_qurl tool to fetch the current details for resource_id "${args.resource_id}".`,
                 "2. Note the target_url, tags, and description from the existing QURL — you will restore them on the new resource.",
                 `3. Use the delete_qurl tool to revoke the old QURL "${args.resource_id}".`,
-                `4. Use the create_qurl tool to create a new QURL with the same target_url, with expires_in set to "${expiry}". (label, tags, and description are not accepted on create_qurl — they will be applied in the next step.)`,
+                `4. Use the create_qurl tool to create a new QURL with the same target_url, with expires_in set to "${expiry}". (tags and description live on the resource and are not accepted by create_qurl — they will be applied in the next step via update_qurl.)`,
                 "5. If the original had tags or a description, use the update_qurl tool on the new resource_id to restore them.",
                 "6. Confirm the rotation was successful and provide the new qurl_link from the create_qurl response.",
                 "",

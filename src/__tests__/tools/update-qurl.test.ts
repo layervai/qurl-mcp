@@ -28,6 +28,11 @@ describe("updateQurlTool", () => {
       expect(updateQurlSchema.safeParse({}).success).toBe(false);
     });
 
+    it("rejects empty resource_id", () => {
+      const result = updateQurlSchema.safeParse({ resource_id: "", extend_by: "24h" });
+      expect(result.success).toBe(false);
+    });
+
     it("accepts resource_id with extend_by", () => {
       const result = updateQurlSchema.safeParse({
         resource_id: "r_abc",
