@@ -67,6 +67,31 @@ describe("listQurlsTool", () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it("accepts sort without direction", () => {
+      const result = listQurlsSchema.safeParse({ sort: "expires_at" });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts sort with asc direction", () => {
+      const result = listQurlsSchema.safeParse({ sort: "created_at:asc" });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects sort with invalid field", () => {
+      const result = listQurlsSchema.safeParse({ sort: "name:desc" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects sort with invalid direction", () => {
+      const result = listQurlsSchema.safeParse({ sort: "created_at:up" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects sort with malformed separator", () => {
+      const result = listQurlsSchema.safeParse({ sort: "created_at desc" });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("handler", () => {

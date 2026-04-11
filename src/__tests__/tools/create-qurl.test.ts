@@ -112,6 +112,22 @@ describe("createQurlTool", () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it("rejects empty expires_in", () => {
+      const result = createQurlSchema.safeParse({
+        target_url: "https://example.com",
+        expires_in: "",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects empty session_duration", () => {
+      const result = createQurlSchema.safeParse({
+        target_url: "https://example.com",
+        session_duration: "",
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("handler", () => {

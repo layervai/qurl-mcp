@@ -10,7 +10,11 @@ export const mintLinkBaseSchema = z.object({
     .max(500)
     .optional()
     .describe("Human-readable label identifying who this link is for (max 500 chars)"),
-  expires_in: z.string().optional().describe('Relative duration until expiration (e.g., "5m", "24h", "7d"). Mutually exclusive with expires_at'),
+  expires_in: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Relative duration until expiration (e.g., "5m", "24h", "7d"). Mutually exclusive with expires_at'),
   expires_at: z.string().datetime().optional().describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with expires_in"),
   one_time_use: z.boolean().optional().describe("Whether this link can only be used once"),
   max_sessions: z
@@ -20,7 +24,11 @@ export const mintLinkBaseSchema = z.object({
     .max(1000)
     .optional()
     .describe("Maximum concurrent sessions (0 = unlimited, max 1000)"),
-  session_duration: z.string().optional().describe('How long access lasts after clicking (e.g., "1h")'),
+  session_duration: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('How long access lasts after clicking (e.g., "1h")'),
   access_policy: accessPolicySchema.optional().describe("Access control policy for this link"),
 });
 

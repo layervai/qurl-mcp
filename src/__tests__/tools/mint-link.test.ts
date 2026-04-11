@@ -100,6 +100,23 @@ describe("mintLinkTool", () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it("rejects empty expires_in so mutual exclusion refine can't be bypassed", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: "r_abc123",
+        expires_in: "",
+        expires_at: "2026-04-01T00:00:00Z",
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects empty session_duration", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: "r_abc123",
+        session_duration: "",
+      });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("handler", () => {

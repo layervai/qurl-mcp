@@ -18,6 +18,10 @@ export const listQurlsSchema = z.object({
   expires_after: z.string().datetime().optional().describe("Filter: expires after this date (RFC 3339)"),
   sort: z
     .string()
+    .regex(
+      /^(created_at|expires_at)(:(asc|desc))?$/,
+      "sort must be 'created_at' or 'expires_at', optionally followed by ':asc' or ':desc'",
+    )
     .optional()
     .describe(
       "Sort field and direction as 'field:direction'. " +
