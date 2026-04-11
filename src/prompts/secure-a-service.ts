@@ -75,8 +75,13 @@ export function secureAServicePrompt() {
       const optionalParams: [string, string | boolean | undefined][] = [
         ["label", args.label],
         ["expires_in", args.expires_in],
-        // "false" (truthy string) → false (boolean), undefined → omitted from output.
-        ["one_time_use", args.one_time_use ? args.one_time_use === "true" : undefined],
+        // Use `!== undefined` rather than a truthy check so a hypothetical
+        // future change from `z.enum(["true","false"])` to `z.boolean()`
+        // can't silently swallow an explicit `false`.
+        [
+          "one_time_use",
+          args.one_time_use !== undefined ? args.one_time_use === "true" : undefined,
+        ],
         ["max_sessions", args.max_sessions],
         ["session_duration", args.session_duration],
       ];

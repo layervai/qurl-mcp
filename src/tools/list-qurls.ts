@@ -16,7 +16,14 @@ export const listQurlsSchema = z.object({
   created_before: z.string().datetime().optional().describe("Filter: created before this date (RFC 3339)"),
   expires_before: z.string().datetime().optional().describe("Filter: expires before this date (RFC 3339)"),
   expires_after: z.string().datetime().optional().describe("Filter: expires after this date (RFC 3339)"),
-  sort: z.string().optional().describe("Sort field and direction (e.g., 'created_at:desc')"),
+  sort: z
+    .string()
+    .optional()
+    .describe(
+      "Sort field and direction as 'field:direction'. " +
+        "Valid fields: created_at, expires_at. Valid directions: asc, desc (default desc). " +
+        "Example: 'created_at:desc'.",
+    ),
   q: z.string().optional().describe("Search query (searches description and target_url)"),
 });
 

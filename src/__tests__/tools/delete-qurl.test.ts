@@ -30,6 +30,19 @@ describe("deleteQurlTool", () => {
       const result = deleteQurlSchema.safeParse({ resource_id: 42 });
       expect(result.success).toBe(false);
     });
+
+    it("rejects empty resource_id", () => {
+      const result = deleteQurlSchema.safeParse({ resource_id: "" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects q_ prefix IDs (DELETE only accepts r_)", () => {
+      const result = deleteQurlSchema.safeParse({ resource_id: "q_abc123456" });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toContain("delete_qurl only accepts resource IDs");
+      }
+    });
   });
 
   describe("handler", () => {
