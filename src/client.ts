@@ -81,12 +81,19 @@ export interface CreateQURLInput {
 export interface ListQURLsInput {
   limit?: number;
   cursor?: string;
+  /** Filter by status. Accepts comma-separated values, e.g. `"active,revoked"`. */
   status?: string;
+  /** RFC 3339 timestamp. */
   created_after?: string;
+  /** RFC 3339 timestamp. */
   created_before?: string;
+  /** RFC 3339 timestamp. */
   expires_before?: string;
+  /** RFC 3339 timestamp. */
   expires_after?: string;
+  /** Sort field and direction, e.g. `"created_at:desc"`. */
   sort?: string;
+  /** Free-text search over description and target_url. */
   q?: string;
 }
 
@@ -194,7 +201,17 @@ export interface BatchCreateOutput {
 // --- Client interface ---
 
 export interface IQURLClient {
+  /**
+   * Create a new QURL. Returns `CreateQURLData` — the ephemeral create-time
+   * shape that carries `qurl_link` (shown only once) and `qurl_id`. This is
+   * intentionally distinct from the `QURL` shape returned by `getQURL` /
+   * `listQURLs`, which does not include `qurl_link`.
+   */
   createQURL(input: CreateQURLInput): Promise<{ data: CreateQURLData }>;
+  /**
+   * Fetch a resource and its access tokens. Returns the stable `QURL` shape
+   * (no `qurl_link` — that only exists on the create response).
+   */
   getQURL(id: string): Promise<{ data: QURL }>;
   listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput>;
   deleteQURL(id: string): Promise<void>;

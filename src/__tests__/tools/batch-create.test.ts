@@ -215,5 +215,25 @@ describe("batchCreateTool", () => {
         tool.handler({ items: [{ target_url: "https://example.com" }] }),
       ).rejects.toThrow("Rate limited");
     });
+
+    it("surfaces isError=true on unexpected response shape (defense-in-depth)", async () => {
+      // Simulates an HTTP 400 pass-through where the body is not a
+      // BatchCreateResponse (e.g., a top-level validation error that slipped
+      // through). The handler should flag it rather than crash on data.failed.
+      const mockBatch = vi
+        .fn()
+        // Cast through unknown to simulate a runtime contract violation
+        // without fighting the TypeScript types (which assume the contract).
+        .mockResolvedValue({ data: undefined, meta: {} } as unknown);
+      const client = makeMockClient({ batchCreate: mockBatch });
+      const tool = batchCreateTool(client);
+
+      const result = await tool.handler({
+        items: [{ target_url: "https://example.com" }],
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Unexpected batchCreate response shape");
+    });
   });
 });

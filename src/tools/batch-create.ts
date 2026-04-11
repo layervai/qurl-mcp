@@ -20,8 +20,31 @@ export function batchCreateTool(client: IQURLClient) {
     inputSchema: batchCreateSchema,
     handler: async (input: z.infer<typeof batchCreateSchema>) => {
       const result = await client.batchCreate(input);
+      // Defense-in-depth: batchCreate passes through HTTP 400, which is
+      // contracted to carry a BatchCreateResponse body with per-item errors.
+      // If the API ever returns 400 with a different shape (e.g., a
+      // top-level malformed-request error), the downstream `failed > 0`
+      // access would be meaningless — surface the raw response as an error
+      // so agents get a real signal instead of silent mis-interpretation.
+      const data = result.data as Partial<typeof result.data> | undefined;
+      if (
+        !data ||
+        typeof data.failed !== "number" ||
+        typeof data.succeeded !== "number" ||
+        !Array.isArray(data.results)
+      ) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Unexpected batchCreate response shape: ${JSON.stringify(result).slice(0, 500)}`,
+            },
+          ],
+          isError: true,
+        };
+      }
       const payload = {
-        ...result.data,
+        ...data,
         request_id: result.meta?.request_id,
       };
       return {
@@ -31,7 +54,7 @@ export function batchCreateTool(client: IQURLClient) {
             text: JSON.stringify(payload),
           },
         ],
-        isError: result.data.failed > 0,
+        isError: data.failed > 0,
       };
     },
   };
