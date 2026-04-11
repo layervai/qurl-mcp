@@ -3,7 +3,7 @@ import { listQurlsTool, listQurlsSchema } from "../../tools/list-qurls.js";
 import type { ListQURLsOutput } from "../../client.js";
 import { makeMockClient, sampleQURL } from "../helpers.js";
 
-const fixture = sampleQURL({ resource_id: "r_abc", qurl_link: "https://qurl.link/at_abc" });
+const fixture = sampleQURL({ resource_id: "r_abc" });
 
 describe("listQurlsTool", () => {
   describe("metadata", () => {
@@ -54,6 +54,54 @@ describe("listQurlsTool", () => {
       const result = listQurlsSchema.safeParse({ limit: 20, cursor: "cur_abc" });
       expect(result.success).toBe(true);
     });
+
+    it("accepts filter fields", () => {
+      const result = listQurlsSchema.safeParse({
+        status: "active",
+        created_after: "2026-01-01T00:00:00Z",
+        created_before: "2026-12-31T23:59:59Z",
+        expires_before: "2026-06-01T00:00:00Z",
+        expires_after: "2026-03-01T00:00:00Z",
+        sort: "created_at:desc",
+        q: "dashboard",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts sort without direction", () => {
+      const result = listQurlsSchema.safeParse({ sort: "expires_at" });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts sort with asc direction", () => {
+      const result = listQurlsSchema.safeParse({ sort: "created_at:asc" });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects sort with invalid field", () => {
+      const result = listQurlsSchema.safeParse({ sort: "name:desc" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects sort with invalid direction", () => {
+      const result = listQurlsSchema.safeParse({ sort: "created_at:up" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects sort with malformed separator", () => {
+      const result = listQurlsSchema.safeParse({ sort: "created_at desc" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects empty status", () => {
+      const result = listQurlsSchema.safeParse({ status: "" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects empty q", () => {
+      const result = listQurlsSchema.safeParse({ q: "" });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("handler", () => {
@@ -102,6 +150,25 @@ describe("listQurlsTool", () => {
       await tool.handler({ limit: 10, cursor: "cur_abc" });
 
       expect(mockList).toHaveBeenCalledWith({ limit: 10, cursor: "cur_abc" });
+    });
+
+    it("forwards all filter params to the client", async () => {
+      const mockList = vi.fn().mockResolvedValue({ data: [], meta: { has_more: false } });
+      const client = makeMockClient({ listQURLs: mockList });
+      const tool = listQurlsTool(client);
+
+      const input = {
+        status: "active",
+        created_after: "2026-01-01T00:00:00Z",
+        created_before: "2026-12-31T23:59:59Z",
+        expires_before: "2026-06-01T00:00:00Z",
+        expires_after: "2026-03-01T00:00:00Z",
+        sort: "created_at:desc",
+        q: "dashboard",
+      };
+      await tool.handler(input);
+
+      expect(mockList).toHaveBeenCalledWith(input);
     });
 
     it("handles empty list result", async () => {

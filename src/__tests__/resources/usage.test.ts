@@ -4,16 +4,23 @@ import type { QuotaOutput } from "../../client.js";
 import { makeMockClient } from "../helpers.js";
 
 const sampleQuota: QuotaOutput = {
-  plan: "pro",
-  limits: {
-    max_qurls: 1000,
-    max_sessions_per_qurl: 10,
-    max_bandwidth_mb: 50000,
+  plan: "growth",
+  period_start: "2026-03-01T00:00:00Z",
+  period_end: "2026-04-01T00:00:00Z",
+  rate_limits: {
+    create_per_minute: 200,
+    create_per_hour: 10000,
+    list_per_minute: 120,
+    resolve_per_minute: 300,
+    max_active_qurls: 1000,
+    max_tokens_per_qurl: 50,
+    max_expiry_seconds: 2592000,
   },
   usage: {
-    active_qurls: 42,
-    total_sessions: 128,
-    bandwidth_mb: 1250,
+    qurls_created: 150,
+    active_qurls: 45,
+    active_qurls_percent: 0.45,
+    total_accesses: 1250,
   },
 };
 
@@ -71,9 +78,9 @@ describe("usageResource", () => {
       const result = await resource.handler();
       const parsed = JSON.parse(result.contents[0].text);
 
-      expect(parsed.plan).toBe("pro");
-      expect(parsed.limits.max_qurls).toBe(1000);
-      expect(parsed.usage.active_qurls).toBe(42);
+      expect(parsed.plan).toBe("growth");
+      expect(parsed.rate_limits.max_active_qurls).toBe(1000);
+      expect(parsed.usage.active_qurls).toBe(45);
     });
 
     it("returns the data object directly, not the wrapper", async () => {

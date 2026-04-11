@@ -45,6 +45,22 @@ describe("auditLinksPrompt", () => {
       expect(getPromptText(result)).toContain("qurl_count");
     });
 
+    it("includes tags check", () => {
+      const prompt = auditLinksPrompt();
+      const result = prompt.handler();
+
+      expect(getPromptText(result)).toContain("tags");
+    });
+
+    it("includes custom_domain as informational context", () => {
+      const prompt = auditLinksPrompt();
+      const result = prompt.handler();
+
+      expect(getPromptText(result)).toContain("custom_domain");
+      // Custom domain should be framed as informational, not as an issue.
+      expect(getPromptText(result)).toContain("informational");
+    });
+
     it("asks for a summary table", () => {
       const prompt = auditLinksPrompt();
       const result = prompt.handler();
@@ -52,11 +68,11 @@ describe("auditLinksPrompt", () => {
       expect(getPromptText(result)).toContain("table");
     });
 
-    it("recommends actions", () => {
+    it("recommends actions using update_qurl", () => {
       const prompt = auditLinksPrompt();
       const result = prompt.handler();
 
-      expect(getPromptText(result)).toContain("Recommend actions");
+      expect(getPromptText(result)).toContain("update_qurl");
     });
   });
 });

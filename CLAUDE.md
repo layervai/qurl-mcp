@@ -58,12 +58,16 @@ qurl-mcp/
 │   ├── server.ts          # MCP server factory, tool/resource/prompt registration
 │   ├── client.ts          # TypeScript QURL API client
 │   ├── tools/
+│   │   ├── _shared.ts       # resourceIdSchema, zodErrorToToolResult
 │   │   ├── create-qurl.ts
 │   │   ├── resolve-qurl.ts
 │   │   ├── list-qurls.ts
 │   │   ├── get-qurl.ts
 │   │   ├── delete-qurl.ts
-│   │   └── extend-qurl.ts
+│   │   ├── extend-qurl.ts
+│   │   ├── update-qurl.ts
+│   │   ├── mint-link.ts
+│   │   └── batch-create.ts
 │   ├── resources/
 │   │   ├── links.ts
 │   │   └── usage.ts
@@ -125,10 +129,13 @@ npm run format
 |------|---------------|-------------|
 | `create_qurl` | `qurl:write` | Create a protected link |
 | `resolve_qurl` | `qurl:resolve` | Resolve token + open firewall |
-| `list_qurls` | `qurl:read` | List active QURLs |
+| `list_qurls` | `qurl:read` | List QURLs with filtering |
 | `get_qurl` | `qurl:read` | Get QURL details |
 | `delete_qurl` | `qurl:write` | Revoke a QURL |
-| `extend_qurl` | `qurl:write` | Extend expiration |
+| `extend_qurl` | `qurl:write` | Extend expiration (shorthand alias for `update_qurl`) |
+| `update_qurl` | `qurl:write` | Update expiration, tags, description |
+| `mint_link` | `qurl:write` | Mint a new access link for an existing resource |
+| `batch_create_qurls` | `qurl:write` | Create multiple QURLs at once |
 
 ## Commit Convention (Release Please)
 

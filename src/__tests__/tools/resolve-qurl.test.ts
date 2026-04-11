@@ -6,7 +6,6 @@ import { makeMockClient } from "../helpers.js";
 const sampleResolveOutput: ResolveOutput = {
   target_url: "https://example.com/secret",
   resource_id: "r_resolved1",
-  session_id: "s_session1",
   access_grant: {
     expires_in: 300,
     granted_at: "2026-03-09T12:00:00Z",
@@ -71,7 +70,6 @@ describe("resolveQurlTool", () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.target_url).toBe("https://example.com/secret");
       expect(parsed.resource_id).toBe("r_resolved1");
-      expect(parsed.session_id).toBe("s_session1");
       expect(parsed.access_grant.expires_in).toBe(300);
       expect(parsed.access_grant.src_ip).toBe("192.168.1.100");
     });

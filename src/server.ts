@@ -7,6 +7,9 @@ import { listQurlsTool } from "./tools/list-qurls.js";
 import { getQurlTool } from "./tools/get-qurl.js";
 import { deleteQurlTool } from "./tools/delete-qurl.js";
 import { extendQurlTool } from "./tools/extend-qurl.js";
+import { updateQurlTool } from "./tools/update-qurl.js";
+import { mintLinkTool } from "./tools/mint-link.js";
+import { batchCreateTool } from "./tools/batch-create.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
@@ -20,7 +23,10 @@ type ToolFactory = (client: IQURLClient) => {
   inputSchema: z.AnyZodObject;
   // Args vary per tool; exact signatures are validated by server.tool() at each call site.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: (...args: any[]) => Promise<{ content: Array<{ type: string; text: string }> }>;
+  handler: (...args: any[]) => Promise<{
+    content: Array<{ type: string; text: string }>;
+    isError?: boolean;
+  }>;
 };
 
 export function createServer(client: IQURLClient, version: string): McpServer {
@@ -37,6 +43,9 @@ export function createServer(client: IQURLClient, version: string): McpServer {
     getQurlTool,
     deleteQurlTool,
     extendQurlTool,
+    updateQurlTool,
+    mintLinkTool,
+    batchCreateTool,
   ] satisfies ToolFactory[];
 
   for (const factory of toolFactories) {
