@@ -98,6 +98,26 @@ describe("updateQurlTool", () => {
       expect(result.success).toBe(false);
     });
 
+    it("accepts description: '' to clear the field (API clear semantics)", () => {
+      // The API documents `description: ""` as the way to clear the field.
+      // See qurl/api/openapi.yaml -> UpdateQurlRequest.description.
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        description: "",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts tags: [] to clear all tags (API clear semantics)", () => {
+      // The API documents `tags: []` as the way to clear all tags.
+      // See qurl/api/openapi.yaml -> UpdateQurlRequest.tags.
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        tags: [],
+      });
+      expect(result.success).toBe(true);
+    });
+
     it("rejects non-string extend_by", () => {
       const result = updateQurlSchema.safeParse({
         resource_id: "r_abc",

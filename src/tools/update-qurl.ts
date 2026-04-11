@@ -34,9 +34,21 @@ export const updateQurlSchema = updateQurlBaseSchema
   .refine((data) => !(data.extend_by && data.expires_at), {
     message: "Provide either extend_by or expires_at, not both",
   })
-  .refine((data) => data.extend_by || data.expires_at || data.tags || data.description, {
-    message: "At least one update field (extend_by, expires_at, tags, or description) is required",
-  });
+  .refine(
+    // Use `!== undefined` rather than truthy checks so the API's "clear"
+    // semantics work: the spec documents `description: ""` and `tags: []`
+    // as valid payloads that clear the field. A plain `||` would reject
+    // both because empty string is falsy in JS.
+    (data) =>
+      data.extend_by !== undefined ||
+      data.expires_at !== undefined ||
+      data.tags !== undefined ||
+      data.description !== undefined,
+    {
+      message:
+        "At least one update field (extend_by, expires_at, tags, or description) is required",
+    },
+  );
 
 export function updateQurlTool(client: IQURLClient) {
   return {
