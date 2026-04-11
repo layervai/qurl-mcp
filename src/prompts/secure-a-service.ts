@@ -70,9 +70,10 @@ export function secureAServicePrompt() {
       "(expiration, session limits, IP/geo allowlists, AI-agent blocking).",
     args: secureAServiceArgs,
     handler: (args: SecureAServiceInput): GetPromptResult => {
+      // Note: `description` is NOT a valid create_qurl field — it lives on the
+      // resource and must be applied via update_qurl after creation.
       const optionalParams: [string, string | boolean | undefined][] = [
         ["label", args.label],
-        ["description", args.description],
         ["expires_in", args.expires_in],
         // "false" (truthy string) → false (boolean), undefined → omitted from output.
         ["one_time_use", args.one_time_use ? args.one_time_use === "true" : undefined],
@@ -106,6 +107,13 @@ export function secureAServicePrompt() {
         ? [`- access_policy: ${JSON.stringify(policy)}`]
         : [];
 
+      const descriptionFollowUp = args.description
+        ? [
+            "",
+            `Then call update_qurl with the returned resource_id and description: "${args.description}".`,
+          ]
+        : [];
+
       const text = [
         `Create a QURL to protect the following service: ${args.target_url}`,
         ...(args.label ? [`Label: ${args.label}`] : []),
@@ -115,6 +123,7 @@ export function secureAServicePrompt() {
         `- target_url: ${args.target_url}`,
         ...paramLines,
         ...policyLines,
+        ...descriptionFollowUp,
         "",
         "After creating the QURL, explain the returned qurl_link and how to share it securely. " +
           "Note that the qurl_link is ephemeral and shown only once — it should be shared immediately. " +

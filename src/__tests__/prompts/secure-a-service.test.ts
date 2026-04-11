@@ -148,5 +148,37 @@ describe("secureAServicePrompt", () => {
 
       expect(text).toContain('"ip_allowlist":["10.0.0.0/8","192.168.1.1"]');
     });
+
+    it("does not list description as a create_qurl parameter", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({
+        target_url: "https://example.com",
+        description: "An internal dashboard",
+      });
+      const text = getPromptText(result);
+
+      // description is not a valid create_qurl field; it must be applied via update_qurl.
+      expect(text).not.toContain("- description:");
+    });
+
+    it("instructs to use update_qurl to set description after create", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({
+        target_url: "https://example.com",
+        description: "An internal dashboard",
+      });
+      const text = getPromptText(result);
+
+      expect(text).toContain("update_qurl");
+      expect(text).toContain("An internal dashboard");
+    });
+
+    it("omits the update_qurl follow-up when no description is provided", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({ target_url: "https://example.com" });
+      const text = getPromptText(result);
+
+      expect(text).not.toContain("update_qurl");
+    });
   });
 });

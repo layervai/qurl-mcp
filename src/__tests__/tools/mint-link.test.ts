@@ -92,6 +92,16 @@ describe("mintLinkTool", () => {
       expect(mockMint).toHaveBeenCalledWith("r_abc123", { label: "Alice" });
     });
 
+    it("passes undefined body when only resource_id is provided", async () => {
+      const mockMint = vi.fn().mockResolvedValue({ data: fixture });
+      const client = makeMockClient({ mintLink: mockMint });
+      const tool = mintLinkTool(client);
+
+      await tool.handler({ resource_id: "r_abc123" });
+
+      expect(mockMint).toHaveBeenCalledWith("r_abc123", undefined);
+    });
+
     it("returns mint data as formatted JSON", async () => {
       const mockMint = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ mintLink: mockMint });

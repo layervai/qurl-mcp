@@ -31,7 +31,10 @@ export function mintLinkTool(client: IQURLClient) {
       const parsed = mintLinkSchema.safeParse(raw);
       if (!parsed.success) return zodErrorToToolResult(parsed.error);
       const { resource_id, ...body } = parsed.data;
-      const result = await client.mintLink(resource_id, body);
+      // When only resource_id is provided, forward undefined so the client
+      // sends no body (and no Content-Type header) rather than an empty {}.
+      const hasBody = Object.keys(body).length > 0;
+      const result = await client.mintLink(resource_id, hasBody ? body : undefined);
       return {
         content: [
           {
