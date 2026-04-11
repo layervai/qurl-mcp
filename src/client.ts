@@ -272,6 +272,9 @@ export class QURLClient implements IQURLClient {
     const json = this.parseJSON(text, response.status);
 
     if (!response.ok && !passthroughStatuses.includes(response.status)) {
+      // Trust boundary: we cast the parsed error body to the RFC 7807 shape
+      // the API documents. The fallback chain below tolerates missing fields,
+      // so a malformed error response still degrades to `HTTP ${status}`.
       const error = json.error as
         | { type?: string; title?: string; detail?: string; code?: string; message?: string; instance?: string }
         | undefined;
@@ -337,7 +340,9 @@ export class QURLClient implements IQURLClient {
   }
 
   async extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }> {
-    return this.request("PATCH", this.qurlPath(id), input);
+    // ExtendQURLInput is a strict subset of UpdateQURLInput (just extend_by),
+    // so we delegate to updateQURL rather than duplicating the PATCH call.
+    return this.updateQURL(id, input);
   }
 
   async resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }> {
