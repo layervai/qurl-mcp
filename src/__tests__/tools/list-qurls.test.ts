@@ -92,6 +92,16 @@ describe("listQurlsTool", () => {
       const result = listQurlsSchema.safeParse({ sort: "created_at desc" });
       expect(result.success).toBe(false);
     });
+
+    it("rejects empty status", () => {
+      const result = listQurlsSchema.safeParse({ status: "" });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects empty q", () => {
+      const result = listQurlsSchema.safeParse({ q: "" });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("handler", () => {
