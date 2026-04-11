@@ -4,14 +4,12 @@ import { makeMockClient, sampleQURL } from "../helpers.js";
 
 const fixture = sampleQURL({
   resource_id: "r_test456",
-  qurl_link: "https://qurl.link/at_xyz",
   qurl_site: "https://test.qurl.site",
   target_url: "https://example.com/page",
   description: "A test link",
   expires_at: "2026-03-15T00:00:00Z",
   tags: ["test"],
   qurl_count: 2,
-  metadata: { tag: "test" },
 });
 
 describe("getQurlTool", () => {
@@ -62,7 +60,7 @@ describe("getQurlTool", () => {
       expect(parsed.target_url).toBe("https://example.com/page");
       expect(parsed.tags).toEqual(["test"]);
       expect(parsed.qurl_count).toBe(2);
-      expect(parsed.metadata).toEqual({ tag: "test" });
+      expect(parsed.qurl_link).toBeUndefined();
     });
 
     it("returns only the data object, not the wrapper", async () => {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
+import { zodErrorToToolResult } from "./_shared.js";
 
 export const updateQurlBaseSchema = z.object({
   resource_id: z.string().describe("The resource ID to update"),
@@ -22,12 +23,13 @@ export function updateQurlTool(client: IQURLClient) {
     name: "update_qurl",
     description:
       "Update a QURL - extend expiration, set an absolute expiry, update tags, or change the description. " +
-      "Do not provide both extend_by and expires_at.",
+      "Do not provide both extend_by and expires_at. At least one update field is required.",
     // Base shape for MCP tool registration; refinements run in the handler
     inputSchema: updateQurlBaseSchema,
     handler: async (raw: z.infer<typeof updateQurlBaseSchema>) => {
-      const input = updateQurlSchema.parse(raw);
-      const { resource_id, ...body } = input;
+      const parsed = updateQurlSchema.safeParse(raw);
+      if (!parsed.success) return zodErrorToToolResult(parsed.error);
+      const { resource_id, ...body } = parsed.data;
       const result = await client.updateQURL(resource_id, body);
       return {
         content: [

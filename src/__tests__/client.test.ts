@@ -157,6 +157,29 @@ describe("QURLClient", () => {
       expect(err.statusCode).toBe(404);
       expect(err.code).toBe("not_found");
       expect(err.message).toBe("Resource not found");
+      // RFC 7807 fields are not present in legacy format
+      expect(err.type).toBeUndefined();
+      expect(err.instance).toBeUndefined();
+      expect(err.requestId).toBeUndefined();
+    });
+
+    it("falls back to error.title when detail is missing", async () => {
+      stubFetch(
+        {
+          error: {
+            type: "https://api.qurl.link/problems/forbidden",
+            title: "Forbidden",
+            status: 403,
+            code: "forbidden",
+          },
+        },
+        403,
+      );
+
+      const err = await client.getQuota().catch((e: unknown) => e) as QURLAPIError;
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err.message).toBe("Forbidden");
+      expect(err.type).toBe("https://api.qurl.link/problems/forbidden");
     });
 
     it("throws QURLAPIError with defaults when error body has no error field", async () => {
@@ -416,10 +439,10 @@ describe("QURLClient", () => {
 
       const calledUrl = mock.mock.calls[0][0] as string;
       expect(calledUrl).toContain("status=active");
-      expect(calledUrl).toContain("created_after=");
-      expect(calledUrl).toContain("created_before=");
-      expect(calledUrl).toContain("expires_before=");
-      expect(calledUrl).toContain("expires_after=");
+      expect(calledUrl).toContain("created_after=2026-01-01T00%3A00%3A00Z");
+      expect(calledUrl).toContain("created_before=2026-12-31T23%3A59%3A59Z");
+      expect(calledUrl).toContain("expires_before=2026-06-01T00%3A00%3A00Z");
+      expect(calledUrl).toContain("expires_after=2026-03-01T00%3A00%3A00Z");
       expect(calledUrl).toContain("sort=created_at%3Adesc");
       expect(calledUrl).toContain("q=dashboard");
     });
@@ -579,7 +602,7 @@ describe("QURLClient", () => {
       expect(result).toEqual(mockData);
     });
 
-    it("sends empty body when no input provided", async () => {
+    it("sends no body when no input provided", async () => {
       const mock = stubFetch({ data: { qurl_link: "https://qurl.link/at_x" } });
 
       await client.mintLink("r_abc123");
@@ -587,9 +610,12 @@ describe("QURLClient", () => {
       expect(mock).toHaveBeenCalledWith(
         "https://api.test.com/v1/qurls/r_abc123/mint_link",
         expect.objectContaining({
-          body: JSON.stringify({}),
+          body: undefined,
         }),
       );
+      // Content-Type should be omitted when there's no body.
+      const headers = (mock.mock.calls[0][1] as { headers: Record<string, string> }).headers;
+      expect(headers).not.toHaveProperty("Content-Type");
     });
 
     it("URL-encodes the resource ID", async () => {

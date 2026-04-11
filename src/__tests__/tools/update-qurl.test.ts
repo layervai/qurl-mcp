@@ -69,9 +69,11 @@ describe("updateQurlTool", () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toBe(
-          "Provide either extend_by or expires_at, not both",
-        );
+        expect(
+          result.error.issues.some(
+            (i) => i.message === "Provide either extend_by or expires_at, not both",
+          ),
+        ).toBe(true);
       }
     });
 
@@ -81,9 +83,13 @@ describe("updateQurlTool", () => {
       });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toBe(
-          "At least one update field (extend_by, expires_at, tags, or description) is required",
-        );
+        expect(
+          result.error.issues.some(
+            (i) =>
+              i.message ===
+              "At least one update field (extend_by, expires_at, tags, or description) is required",
+          ),
+        ).toBe(true);
       }
     });
   });
@@ -148,6 +154,34 @@ describe("updateQurlTool", () => {
       await expect(
         tool.handler({ resource_id: "r_expired", extend_by: "24h" }),
       ).rejects.toThrow("QURL expired");
+    });
+
+    it("returns isError response when both extend_by and expires_at are provided", async () => {
+      const mockUpdate = vi.fn();
+      const client = makeMockClient({ updateQURL: mockUpdate });
+      const tool = updateQurlTool(client);
+
+      const result = await tool.handler({
+        resource_id: "r_abc",
+        extend_by: "24h",
+        expires_at: "2026-04-01T00:00:00Z",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("extend_by or expires_at");
+      expect(mockUpdate).not.toHaveBeenCalled();
+    });
+
+    it("returns isError response when no update fields are provided", async () => {
+      const mockUpdate = vi.fn();
+      const client = makeMockClient({ updateQURL: mockUpdate });
+      const tool = updateQurlTool(client);
+
+      const result = await tool.handler({ resource_id: "r_abc" });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("At least one update field");
+      expect(mockUpdate).not.toHaveBeenCalled();
     });
   });
 });

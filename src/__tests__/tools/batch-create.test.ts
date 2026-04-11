@@ -85,7 +85,9 @@ describe("batchCreateTool", () => {
 
   describe("handler", () => {
     it("calls client.batchCreate with items", async () => {
-      const mockBatch = vi.fn().mockResolvedValue({ data: fixture });
+      const mockBatch = vi
+        .fn()
+        .mockResolvedValue({ data: fixture, meta: { request_id: "req_batch" } });
       const client = makeMockClient({ batchCreate: mockBatch });
       const tool = batchCreateTool(client);
 
@@ -100,8 +102,10 @@ describe("batchCreateTool", () => {
       expect(mockBatch).toHaveBeenCalledWith(input);
     });
 
-    it("returns batch results as formatted JSON", async () => {
-      const mockBatch = vi.fn().mockResolvedValue({ data: fixture });
+    it("returns batch results as formatted JSON and does not set isError on full success", async () => {
+      const mockBatch = vi
+        .fn()
+        .mockResolvedValue({ data: fixture, meta: { request_id: "req_batch1" } });
       const client = makeMockClient({ batchCreate: mockBatch });
       const tool = batchCreateTool(client);
 
@@ -111,13 +115,15 @@ describe("batchCreateTool", () => {
 
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
+      expect(result.isError).toBe(false);
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.succeeded).toBe(2);
       expect(parsed.results).toHaveLength(2);
+      expect(parsed.request_id).toBe("req_batch1");
     });
 
-    it("returns partial failure results", async () => {
+    it("surfaces partial failures with isError=true", async () => {
       const partialFixture = {
         succeeded: 1,
         failed: 1,
@@ -126,7 +132,10 @@ describe("batchCreateTool", () => {
           { index: 1, success: false, error: { code: "invalid_target_url", message: "Invalid URL" } },
         ],
       };
-      const mockBatch = vi.fn().mockResolvedValue({ data: partialFixture });
+      const mockBatch = vi.fn().mockResolvedValue({
+        data: partialFixture,
+        meta: { request_id: "req_batch2" },
+      });
       const client = makeMockClient({ batchCreate: mockBatch });
       const tool = batchCreateTool(client);
 
@@ -137,9 +146,24 @@ describe("batchCreateTool", () => {
         ],
       });
 
+      expect(result.isError).toBe(true);
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.failed).toBe(1);
       expect(parsed.results[1].error.code).toBe("invalid_target_url");
+      expect(parsed.request_id).toBe("req_batch2");
+    });
+
+    it("handles missing request_id gracefully", async () => {
+      const mockBatch = vi.fn().mockResolvedValue({ data: fixture, meta: {} });
+      const client = makeMockClient({ batchCreate: mockBatch });
+      const tool = batchCreateTool(client);
+
+      const result = await tool.handler({
+        items: [{ target_url: "https://example.com" }],
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.request_id).toBeUndefined();
     });
 
     it("propagates client errors", async () => {

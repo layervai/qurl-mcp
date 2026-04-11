@@ -4,7 +4,6 @@ import { makeMockClient, sampleQURL } from "../helpers.js";
 
 const fixture = sampleQURL({
   resource_id: "r_extend1",
-  qurl_link: "https://qurl.link/at_ext",
   qurl_site: "https://ext.qurl.site",
   target_url: "https://example.com/extended",
   expires_at: "2026-04-09T00:00:00Z",

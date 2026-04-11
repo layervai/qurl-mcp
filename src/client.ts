@@ -25,21 +25,19 @@ export interface AccessToken {
 
 export interface QURL {
   resource_id: string;
-  qurl_link?: string; // Only present on create response, not on GET/list
   qurl_site?: string;
   target_url: string;
   description?: string;
   tags?: string[];
   expires_at: string;
   created_at: string;
-  status: string;
-  custom_domain?: string;
+  status: "active" | "revoked";
+  custom_domain?: string | null;
   qurl_count?: number;
   qurls?: AccessToken[];
-  metadata?: Record<string, unknown>;
 }
 
-export interface CreateQurlData {
+export interface CreateQURLData {
   qurl_id: string;
   resource_id: string;
   qurl_link: string;
@@ -193,7 +191,7 @@ export interface BatchCreateOutput {
 // --- Client interface ---
 
 export interface IQURLClient {
-  createQURL(input: CreateQURLInput): Promise<{ data: CreateQurlData }>;
+  createQURL(input: CreateQURLInput): Promise<{ data: CreateQURLData }>;
   getQURL(id: string): Promise<{ data: QURL }>;
   listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput>;
   deleteQURL(id: string): Promise<void>;
@@ -265,7 +263,7 @@ export class QURLClient implements IQURLClient {
       throw new QURLAPIError(
         response.status,
         error?.code ?? "unknown",
-        error?.detail ?? error?.message ?? `HTTP ${response.status}`,
+        error?.detail ?? error?.title ?? error?.message ?? `HTTP ${response.status}`,
         error?.type,
         error?.instance,
         meta?.request_id,
@@ -291,7 +289,7 @@ export class QURLClient implements IQURLClient {
     return `/v1/qurls/${encodeURIComponent(id)}`;
   }
 
-  async createQURL(input: CreateQURLInput): Promise<{ data: CreateQurlData }> {
+  async createQURL(input: CreateQURLInput): Promise<{ data: CreateQURLData }> {
     return this.request("POST", "/v1/qurls", input);
   }
 
@@ -335,7 +333,7 @@ export class QURLClient implements IQURLClient {
   }
 
   async mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }> {
-    return this.request("POST", `/v1/qurls/${encodeURIComponent(id)}/mint_link`, input ?? {});
+    return this.request("POST", `/v1/qurls/${encodeURIComponent(id)}/mint_link`, input);
   }
 
   async batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput> {

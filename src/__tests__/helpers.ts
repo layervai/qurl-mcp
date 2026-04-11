@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { IQURLClient, QURL, CreateQurlData } from "../client.js";
+import type { IQURLClient, QURL, CreateQURLData } from "../client.js";
 import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 
 export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClient {
@@ -28,7 +28,6 @@ export function getPromptText(result: GetPromptResult, index = 0): string {
 export function sampleQURL(overrides: Partial<QURL> = {}): QURL {
   return {
     resource_id: "r_test123",
-    qurl_link: "https://qurl.link/at_abc",
     qurl_site: "https://example.qurl.site",
     target_url: "https://example.com/protected",
     description: "Test QURL",
@@ -40,7 +39,7 @@ export function sampleQURL(overrides: Partial<QURL> = {}): QURL {
   };
 }
 
-export function sampleCreateQurlData(overrides: Partial<CreateQurlData> = {}): CreateQurlData {
+export function sampleCreateQURLData(overrides: Partial<CreateQURLData> = {}): CreateQURLData {
   return {
     qurl_id: "q_3a7f2c8e91b",
     resource_id: "r_test123",

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { createQurlTool, createQurlSchema } from "../../tools/create-qurl.js";
-import { makeMockClient, sampleCreateQurlData } from "../helpers.js";
+import { makeMockClient, sampleCreateQURLData } from "../helpers.js";
 
-const fixture = sampleCreateQurlData();
+const fixture = sampleCreateQURLData();
 
 describe("createQurlTool", () => {
   describe("metadata", () => {

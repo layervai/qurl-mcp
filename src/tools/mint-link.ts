@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { accessPolicySchema } from "./create-qurl.js";
+import { zodErrorToToolResult } from "./_shared.js";
 
 export const mintLinkBaseSchema = z.object({
   resource_id: z.string().describe("The resource ID to mint a new access link for"),
@@ -23,11 +24,13 @@ export function mintLinkTool(client: IQURLClient) {
     name: "mint_link",
     description:
       "Mint a new access link for an existing QURL resource. " +
-      "Use this to generate additional access links without creating a new resource.",
+      "Use this to generate additional access links without creating a new resource. " +
+      "Do not provide both expires_in and expires_at.",
     inputSchema: mintLinkBaseSchema,
     handler: async (raw: z.infer<typeof mintLinkBaseSchema>) => {
-      const input = mintLinkSchema.parse(raw);
-      const { resource_id, ...body } = input;
+      const parsed = mintLinkSchema.safeParse(raw);
+      if (!parsed.success) return zodErrorToToolResult(parsed.error);
+      const { resource_id, ...body } = parsed.data;
       const result = await client.mintLink(resource_id, body);
       return {
         content: [

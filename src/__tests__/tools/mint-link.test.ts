@@ -114,5 +114,21 @@ describe("mintLinkTool", () => {
 
       await expect(tool.handler({ resource_id: "r_nope" })).rejects.toThrow("Not found");
     });
+
+    it("returns isError response when both expires_in and expires_at are provided", async () => {
+      const mockMint = vi.fn();
+      const client = makeMockClient({ mintLink: mockMint });
+      const tool = mintLinkTool(client);
+
+      const result = await tool.handler({
+        resource_id: "r_abc123",
+        expires_in: "7d",
+        expires_at: "2026-04-01T00:00:00Z",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("expires_in or expires_at");
+      expect(mockMint).not.toHaveBeenCalled();
+    });
   });
 });

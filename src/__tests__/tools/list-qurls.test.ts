@@ -117,6 +117,25 @@ describe("listQurlsTool", () => {
       expect(mockList).toHaveBeenCalledWith({ limit: 10, cursor: "cur_abc" });
     });
 
+    it("forwards all filter params to the client", async () => {
+      const mockList = vi.fn().mockResolvedValue({ data: [], meta: { has_more: false } });
+      const client = makeMockClient({ listQURLs: mockList });
+      const tool = listQurlsTool(client);
+
+      const input = {
+        status: "active",
+        created_after: "2026-01-01T00:00:00Z",
+        created_before: "2026-12-31T23:59:59Z",
+        expires_before: "2026-06-01T00:00:00Z",
+        expires_after: "2026-03-01T00:00:00Z",
+        sort: "created_at:desc",
+        q: "dashboard",
+      };
+      await tool.handler(input);
+
+      expect(mockList).toHaveBeenCalledWith(input);
+    });
+
     it("handles empty list result", async () => {
       const mockList = vi.fn().mockResolvedValue({ data: [], meta: { has_more: false } });
       const client = makeMockClient({ listQURLs: mockList });

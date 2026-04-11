@@ -88,6 +88,65 @@ describe("secureAServicePrompt", () => {
       expect(text).toContain("target_url: https://example.com");
       expect(text).not.toContain("label:");
       expect(text).not.toContain("expires_in:");
+      expect(text).not.toContain("access_policy:");
+    });
+
+    it("emits ip_allowlist in the access_policy block", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({
+        target_url: "https://example.com",
+        ip_allowlist: "10.0.0.0/8, 192.168.1.1",
+      });
+      const text = getPromptText(result);
+
+      expect(text).toContain("access_policy:");
+      expect(text).toContain('"ip_allowlist":["10.0.0.0/8","192.168.1.1"]');
+    });
+
+    it("emits geo_allowlist and geo_denylist together", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({
+        target_url: "https://example.com",
+        geo_allowlist: "US,CA",
+        geo_denylist: "CN,RU",
+      });
+      const text = getPromptText(result);
+
+      expect(text).toContain('"geo_allowlist":["US","CA"]');
+      expect(text).toContain('"geo_denylist":["CN","RU"]');
+    });
+
+    it("emits ai_agent_policy when block_ai_agents is true", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({
+        target_url: "https://example.com",
+        block_ai_agents: "true",
+      });
+      const text = getPromptText(result);
+
+      expect(text).toContain('"ai_agent_policy":{"block_all":true}');
+    });
+
+    it("omits access_policy block when block_ai_agents is false", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({
+        target_url: "https://example.com",
+        block_ai_agents: "false",
+      });
+      const text = getPromptText(result);
+
+      expect(text).not.toContain("access_policy:");
+    });
+
+    it("filters out empty strings from comma-separated policy lists", () => {
+      const prompt = secureAServicePrompt();
+      const result = prompt.handler({
+        target_url: "https://example.com",
+        ip_allowlist: "10.0.0.0/8,,  ,192.168.1.1",
+      });
+      const text = getPromptText(result);
+
+      expect(text).toContain('"ip_allowlist":["10.0.0.0/8","192.168.1.1"]');
     });
   });
 });

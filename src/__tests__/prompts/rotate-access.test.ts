@@ -91,6 +91,24 @@ describe("rotateAccessPrompt", () => {
       expect(text).toContain("3.");
       expect(text).toContain("4.");
       expect(text).toContain("5.");
+      expect(text).toContain("6.");
+    });
+
+    it("instructs to use update_qurl to restore tags/description", () => {
+      const prompt = rotateAccessPrompt();
+      const result = prompt.handler({ resource_id: "r_test123" });
+      const text = getPromptText(result);
+
+      expect(text).toContain("update_qurl");
+    });
+
+    it("does not reference non-existent fields on create_qurl", () => {
+      const prompt = rotateAccessPrompt();
+      const result = prompt.handler({ resource_id: "r_test123" });
+      const text = getPromptText(result);
+
+      // `metadata` is not a field on QurlData or CreateQURLInput
+      expect(text).not.toContain("metadata");
     });
   });
 });

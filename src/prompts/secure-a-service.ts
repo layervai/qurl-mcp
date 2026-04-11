@@ -28,15 +28,46 @@ export const secureAServiceArgs = {
     .string()
     .optional()
     .describe('How long access lasts after clicking (e.g., "1h")'),
+  ip_allowlist: z
+    .string()
+    .optional()
+    .describe("Comma-separated IP addresses or CIDR ranges allowed to access (e.g., \"10.0.0.0/8,192.168.1.1\")"),
+  ip_denylist: z
+    .string()
+    .optional()
+    .describe("Comma-separated IP addresses or CIDR ranges to block"),
+  geo_allowlist: z
+    .string()
+    .optional()
+    .describe("Comma-separated ISO 3166-1 alpha-2 country codes allowed (e.g., \"US,CA,GB\")"),
+  geo_denylist: z
+    .string()
+    .optional()
+    .describe("Comma-separated country codes to block (e.g., \"CN,RU\")"),
+  block_ai_agents: z
+    .enum(["true", "false"])
+    .optional()
+    .describe("Block all recognized AI agents (bots, scrapers, LLM crawlers)"),
 };
 
 type SecureAServiceInput = z.infer<z.ZodObject<typeof secureAServiceArgs>>;
+
+/** Split comma-separated string into a trimmed, non-empty array. */
+function csvToArray(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  const parts = value
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  return parts.length > 0 ? parts : undefined;
+}
 
 export function secureAServicePrompt() {
   return {
     name: "secure-a-service",
     description:
-      "Guide through creating a QURL to protect a service with appropriate security policies.",
+      "Guide through creating a QURL to protect a service with appropriate security policies " +
+      "(expiration, session limits, IP/geo allowlists, AI-agent blocking).",
     args: secureAServiceArgs,
     handler: (args: SecureAServiceInput): GetPromptResult => {
       const optionalParams: [string, string | boolean | undefined][] = [
@@ -52,6 +83,29 @@ export function secureAServicePrompt() {
         .filter(([, value]) => value !== undefined)
         .map(([key, value]) => `- ${key}: ${value}`);
 
+      const ipAllow = csvToArray(args.ip_allowlist);
+      const ipDeny = csvToArray(args.ip_denylist);
+      const geoAllow = csvToArray(args.geo_allowlist);
+      const geoDeny = csvToArray(args.geo_denylist);
+      const blockAI = args.block_ai_agents === "true";
+      const hasPolicy =
+        ipAllow !== undefined ||
+        ipDeny !== undefined ||
+        geoAllow !== undefined ||
+        geoDeny !== undefined ||
+        blockAI;
+
+      const policy: Record<string, unknown> = {};
+      if (ipAllow) policy.ip_allowlist = ipAllow;
+      if (ipDeny) policy.ip_denylist = ipDeny;
+      if (geoAllow) policy.geo_allowlist = geoAllow;
+      if (geoDeny) policy.geo_denylist = geoDeny;
+      if (blockAI) policy.ai_agent_policy = { block_all: true };
+
+      const policyLines = hasPolicy
+        ? [`- access_policy: ${JSON.stringify(policy)}`]
+        : [];
+
       const text = [
         `Create a QURL to protect the following service: ${args.target_url}`,
         ...(args.label ? [`Label: ${args.label}`] : []),
@@ -60,6 +114,7 @@ export function secureAServicePrompt() {
         "Use the create_qurl tool with the following parameters:",
         `- target_url: ${args.target_url}`,
         ...paramLines,
+        ...policyLines,
         "",
         "After creating the QURL, explain the returned qurl_link and how to share it securely. " +
           "Note that the qurl_link is ephemeral and shown only once — it should be shared immediately. " +
