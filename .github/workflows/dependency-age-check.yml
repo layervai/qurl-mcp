@@ -16,12 +16,19 @@ on:
     branches: [main]
     paths:
       - "package-lock.json"
+  # Manual dispatch is intended for re-running the check on a feature
+  # branch with lockfile changes — triggering on `main` itself produces
+  # an empty diff against origin/main and the job exits early (harmless).
   workflow_dispatch:
     inputs:
       base_ref:
         description: "Base ref to diff against (branch or full ref) when running manually from a feature branch"
         required: false
         default: "main"
+      min_age_days:
+        description: "Minimum publish age in days (default 7)"
+        required: false
+        default: "7"
 
 # Cancel superseded runs on the same PR branch — each run makes sequential
 # external calls with sleep gates, so there's no reason to let two races for
@@ -49,7 +56,7 @@ jobs:
 
       - name: Check npm dependency ages (7-day quarantine)
         env:
-          MIN_AGE_DAYS: "7"
+          MIN_AGE_DAYS: ${{ inputs.min_age_days || '7' }}
           BASE_REF: ${{ github.event.pull_request.base.ref || inputs.base_ref || 'main' }}
         # Uses GNU-only features (`date -d`) — pinned to ubuntu-latest at
         # the job level. Would need revision for macOS / BSD runners.
@@ -75,7 +82,14 @@ jobs:
           now_epoch=$(date +%s)
           base_ref="origin/${BASE_REF}"
 
-          if ! git diff --name-only --no-renames "${base_ref}...HEAD" -- package-lock.json | grep -q .; then
+          # Separate the diff from the filter so a diff failure (missing
+          # base ref, invalid workflow_dispatch ref, etc.) doesn't silently
+          # pass as "no changes detected." Under `pipefail`, the `!` would
+          # otherwise invert a non-zero diff exit into the early-exit
+          # branch and skip the security check entirely.
+          name_check=$(git diff --name-only --no-renames "${base_ref}...HEAD" -- package-lock.json) \
+            || { echo "::error::git diff --name-only against ${base_ref} failed"; exit 1; }
+          if ! echo "$name_check" | grep -q .; then
             echo "No package-lock.json changes detected"
             exit 0
           fi
@@ -216,7 +230,7 @@ jobs:
             case "$fetch_rc" in
               0)
                 if [ -z "$publish_time" ]; then
-                  echo "::warning::${pkg}@${version} — version not in registry timestamps (skipped)"
+                  echo "::warning::${pkg}@${safe_ver} — version not in registry timestamps (skipped)"
                   echo "| \`${pkg}\` | ${safe_ver} | — | :warning: skipped (version not in registry) |" >> "$GITHUB_STEP_SUMMARY"
                   skipped_count=$((skipped_count + 1))
                   continue
@@ -225,7 +239,7 @@ jobs:
               1)
                 # 404/410 — package not on npmjs (private registry, scope-only, or unpublished).
                 # Skip with warning; no way to verify age from public metadata.
-                echo "::warning::${pkg}@${version} — not found on npmjs.org (private or unpublished; skipped)"
+                echo "::warning::${pkg}@${safe_ver} — not found on npmjs.org (private or unpublished; skipped)"
                 echo "| \`${pkg}\` | ${safe_ver} | — | :warning: skipped (404 — private or unpublished) |" >> "$GITHUB_STEP_SUMMARY"
                 skipped_count=$((skipped_count + 1))
                 continue
@@ -233,7 +247,7 @@ jobs:
               *)
                 # Transient failure after curl --retry. Fail closed — an outage
                 # must not silently let new deps through a security control.
-                echo "::error::${pkg}@${version} — registry unreachable after retry"
+                echo "::error::${pkg}@${safe_ver} — registry unreachable after retry"
                 echo "| \`${pkg}\` | ${safe_ver} | — | :x: registry unreachable |" >> "$GITHUB_STEP_SUMMARY"
                 failed=true
                 continue
@@ -242,7 +256,7 @@ jobs:
 
             publish_epoch=$(date -d "$publish_time" +%s 2>/dev/null || echo "0")
             if [ "$publish_epoch" -eq 0 ]; then
-              echo "::error::Could not parse publish timestamp for ${pkg}@${version}"
+              echo "::error::Could not parse publish timestamp for ${pkg}@${safe_ver}"
               echo "| \`${pkg}\` | ${safe_ver} | — | :x: parse error |" >> "$GITHUB_STEP_SUMMARY"
               failed=true
               continue
@@ -255,7 +269,7 @@ jobs:
               # Compute when the package will be eligible so developers know
               # when to retry without needing the bypass label.
               eligible_date=$(date -u -d "@$((publish_epoch + MIN_AGE_DAYS * 86400))" +%Y-%m-%d 2>/dev/null || echo "unknown")
-              echo "::error::${pkg}@${version} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS}; eligible after ${eligible_date})"
+              echo "::error::${pkg}@${safe_ver} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS}; eligible after ${eligible_date})"
               echo "| \`${pkg}\` | ${safe_ver} | ${age_days} | :x: **too new** (eligible after ${eligible_date}) |" >> "$GITHUB_STEP_SUMMARY"
               failed=true
             else
