@@ -1,0 +1,18 @@
+# Dependency Age Check (npm)
+# Shim calling shared reusable workflow in ops-routines.
+name: Dependency Age Check (npm)
+
+on:
+  pull_request:
+    paths:
+      - "**/package-lock.json"
+      - "**/package.json"
+  workflow_dispatch:
+
+jobs:
+  age-check:
+    uses: layervai/ops-routines/.github/workflows/age-check-npm.yml@main
+    with:
+      working_directory: .
+    permissions:
+      contents: read

@@ -1,0 +1,16 @@
+# Dependency Age Check (GitHub Actions pins)
+# Thin shim calling shared reusable workflow.
+name: Dependency Age Check (Actions)
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - ".github/actions/**"
+  workflow_dispatch:
+
+jobs:
+  age-check:
+    uses: layervai/ops-routines/.github/workflows/age-check-actions.yml@main
+    permissions:
+      contents: read
