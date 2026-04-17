@@ -74,7 +74,10 @@ jobs:
           # rejects @-epoch syntax) — GNU accepts it and prints the epoch.
           command -v jq >/dev/null || { echo "::error::jq not available on runner"; exit 1; }
           command -v curl >/dev/null || { echo "::error::curl not available on runner"; exit 1; }
-          date -d @0 >/dev/null 2>&1 || { echo "::error::GNU date -d not available on runner (BSD/macOS not supported)"; exit 1; }
+          date -d @0 >/dev/null 2>&1 || {
+            echo "::error::GNU date -d not available on runner — this workflow depends on GNU date's \`@\`-prefix epoch syntax. Fix: run on an \`ubuntu-latest\` / Linux runner, or replace the \`date -d\` calls with a portable alternative (e.g., \`python -c 'from datetime import datetime; ...'\`)."
+            exit 1
+          }
 
           # Validate numeric input from workflow_dispatch — a non-numeric
           # min_age_days would crash later at `$age_days -lt $MIN_AGE_DAYS`
@@ -127,15 +130,17 @@ jobs:
           #   final installed version from the lockfile, which is the
           #   correct behavior.
           #
-          # The trailing `|| true` handles grep's "exit 1 on no matches"
-          # contract: a lockfile diff that touches only metadata (integrity
-          # updates, non-resolved fields) has no `"resolved"` lines, grep
-          # exits 1, and under `pipefail` the whole pipeline would exit 1.
-          # `|| true` converts that to an empty `$new_packages` so the
-          # `-z "$new_packages"` branch below gives a clean early exit.
-          # The upstream `name_check` split already covers the real
-          # failure modes (missing base_ref, invalid workflow_dispatch ref).
-          new_packages=$(git diff --no-renames "${base_ref}...HEAD" -- package-lock.json \
+          # Split `git diff` from the grep/sed/sort pipeline, mirroring the
+          # `name_check` pattern above. Previously the single-pipeline form
+          # with a trailing `|| true` would silently swallow a diff or sed
+          # failure alongside the expected grep-no-match exit 1. By running
+          # `git diff` first with its own error handler, `|| true` on the
+          # pipeline now scopes to grep/sed/sort only — where exit 1
+          # genuinely means "no matching lines" (which is the expected
+          # metadata-only-diff case).
+          diff_output=$(git diff --no-renames "${base_ref}...HEAD" -- package-lock.json) \
+            || { echo "::error::git diff against ${base_ref} failed"; exit 1; }
+          new_packages=$(printf '%s\n' "$diff_output" \
             | grep '^+.*"resolved"' \
             | sed -n \
               -e 's|.*https://registry.npmjs.org/\(@[^/]*/[^/]*\)/-/.*|\1|p' \
