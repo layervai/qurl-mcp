@@ -2,6 +2,7 @@ name: Dependency Age Check
 
 on:
   pull_request:
+    branches: [main]
     paths:
       - "package-lock.json"
   workflow_dispatch:
@@ -15,7 +16,7 @@ jobs:
     timeout-minutes: 5
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'age-check-bypass') }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
 
@@ -30,7 +31,7 @@ jobs:
           now_epoch=$(date +%s)
           base_ref="origin/${BASE_REF}"
 
-          if ! git diff --name-only "${base_ref}...HEAD" -- package-lock.json | grep -q .; then
+          if ! git diff --name-only --no-renames "${base_ref}...HEAD" -- package-lock.json | grep -q .; then
             echo "No package-lock.json changes detected"
             exit 0
           fi
@@ -39,17 +40,29 @@ jobs:
           # Handles both scoped (@scope/name) and unscoped packages.
           # Version is read from the lockfile JSON — not parsed from the URL,
           # which avoids greedy-regex issues with prerelease segments.
-          new_packages=$(git diff "${base_ref}...HEAD" -- package-lock.json \
+          # `|| true` prevents pipefail from crashing on lockfile changes
+          # that don't contain new resolved URLs (e.g. removing a dep).
+          new_packages=$(git diff --no-renames "${base_ref}...HEAD" -- package-lock.json \
             | grep '^+' | grep '"resolved"' \
             | sed -n \
               -e 's|.*https://registry.npmjs.org/\(@[^/]*/[^/]*\)/-/.*|\1|p' \
               -e 's|.*https://registry.npmjs.org/\([^@][^/]*\)/-/.*|\1|p' \
-            | sort -u)
+            | sort -u) || true
 
           if [ -z "$new_packages" ]; then
             echo "No new npm packages detected"
             exit 0
           fi
+
+          pkg_count=$(echo "$new_packages" | wc -l | tr -d ' ')
+          echo "Checking ${pkg_count} new/updated package(s)..."
+          echo ""
+
+          # Step summary header
+          echo "## Dependency Age Check" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Package | Version | Age (days) | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---------|---------|------------|--------|" >> "$GITHUB_STEP_SUMMARY"
 
           for pkg in $new_packages; do
             # Read the installed version from the lockfile's structured JSON.
@@ -59,6 +72,7 @@ jobs:
               '.packages[$p].version // empty' package-lock.json)
             if [ -z "$version" ]; then
               echo "::warning::${pkg} — could not determine installed version from lockfile (skipped)"
+              echo "| \`${pkg}\` | — | — | :warning: skipped (no version in lockfile) |" >> "$GITHUB_STEP_SUMMARY"
               continue
             fi
 
@@ -71,12 +85,14 @@ jobs:
               | jq -r --arg v "$version" '.time[$v] // empty')
             if [ -z "$publish_time" ]; then
               echo "::warning::${pkg}@${version} — version not found in registry timestamps (skipped)"
+              echo "| \`${pkg}\` | ${version} | — | :warning: skipped (version not in registry) |" >> "$GITHUB_STEP_SUMMARY"
               continue
             fi
 
             publish_epoch=$(date -d "$publish_time" +%s 2>/dev/null || echo "0")
             if [ "$publish_epoch" -eq 0 ]; then
               echo "::error::Could not parse publish timestamp for ${pkg}@${version}"
+              echo "| \`${pkg}\` | ${version} | — | :x: parse error |" >> "$GITHUB_STEP_SUMMARY"
               failed=true
               continue
             fi
@@ -85,17 +101,23 @@ jobs:
 
             if [ "$age_days" -lt "$MIN_AGE_DAYS" ]; then
               echo "::error::${pkg}@${version} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS})"
+              echo "| \`${pkg}\` | ${version} | ${age_days} | :x: **too new** |" >> "$GITHUB_STEP_SUMMARY"
               failed=true
             else
               echo "  OK: ${pkg}@${version} (${age_days} days old)"
+              echo "| \`${pkg}\` | ${version} | ${age_days} | :white_check_mark: |" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
 
           if [ "$failed" = true ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> **One or more dependencies failed the 7-day age check.** Add the \`age-check-bypass\` label to override." >> "$GITHUB_STEP_SUMMARY"
             echo ""
             echo "::error::One or more npm dependencies failed the age check."
             echo "To bypass for emergency updates, add the 'age-check-bypass' label to this PR."
             exit 1
           fi
 
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> All ${pkg_count} dependencies are at least ${MIN_AGE_DAYS} days old. :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
           echo "All npm dependencies are at least ${MIN_AGE_DAYS} days old"
