@@ -122,9 +122,13 @@ jobs:
             response_file=$(mktemp)
             # shellcheck disable=SC2064  # expand $response_file at trap-set time
             trap "rm -f '$response_file'" RETURN
+            # -sS: silent, but show errors on stderr — leaves a breadcrumb
+            # in the Actions log when retries exhaust / DNS fails / etc.
+            # On terminal failure `-w` still emits the status (0 here via
+            # `|| echo 000`) so the case below classifies correctly.
             http_code=$(curl -sS --compressed -m 10 --retry 2 --retry-delay 2 --retry-all-errors \
               -o "$response_file" -w "%{http_code}" \
-              "https://registry.npmjs.org/${pkg}" 2>/dev/null || echo "000")
+              "https://registry.npmjs.org/${pkg}" || echo "000")
             case "$http_code" in
               200)
                 jq -r --arg v "$version" '.time[$v] // empty' "$response_file"
