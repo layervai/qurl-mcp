@@ -36,12 +36,6 @@ jobs:
             exit 0
           fi
 
-          # Extract newly added package names from resolved URLs in the diff.
-          # Handles both scoped (@scope/name) and unscoped packages.
-          # Version is read from the lockfile JSON — not parsed from the URL,
-          # which avoids greedy-regex issues with prerelease segments.
-          # `|| true` prevents pipefail from crashing on lockfile changes
-          # that don't contain new resolved URLs (e.g. removing a dep).
           new_packages=$(git diff --no-renames "${base_ref}...HEAD" -- package-lock.json \
             | grep '^+' | grep '"resolved"' \
             | sed -n \
@@ -58,16 +52,12 @@ jobs:
           echo "Checking ${pkg_count} new/updated package(s)..."
           echo ""
 
-          # Step summary header
           echo "## Dependency Age Check" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Package | Version | Age (days) | Status |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---------|---------|------------|--------|" >> "$GITHUB_STEP_SUMMARY"
 
           for pkg in $new_packages; do
-            # Read the installed version from the lockfile's structured JSON.
-            # This handles all semver forms (stable, prerelease, build metadata)
-            # without fragile URL parsing.
             version=$(jq -r --arg p "node_modules/${pkg}" \
               '.packages[$p].version // empty' package-lock.json)
             if [ -z "$version" ]; then
@@ -76,15 +66,13 @@ jobs:
               continue
             fi
 
-            # Rate-limit registry requests to avoid 429s on large dependency updates.
             sleep 0.2
 
-            # Stream curl directly into jq — avoids buffering multi-MB registry
-            # documents (e.g. typescript ~15MB) in a shell variable.
-            # -sSf: silent but show errors on stderr (breadcrumb for DNS/timeout/403).
-            # --compressed: request gzip from registry for faster transfers.
             publish_time=$(curl -sSf --compressed -m 10 "https://registry.npmjs.org/${pkg}" \
-              | jq -r --arg v "$version" '.time[$v] // empty') || true
+              | jq -r --arg v "$version" '.time[$v] // empty') \
+              || { sleep 2; publish_time=$(curl -sSf --compressed -m 10 "https://registry.npmjs.org/${pkg}" \
+              | jq -r --arg v "$version" '.time[$v] // empty'); } \
+              || true
             if [ -z "$publish_time" ]; then
               echo "::warning::${pkg}@${version} — version not found in registry timestamps (skipped)"
               echo "| \`${pkg}\` | ${version} | — | :warning: skipped (version not in registry) |" >> "$GITHUB_STEP_SUMMARY"
