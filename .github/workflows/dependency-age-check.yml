@@ -134,6 +134,8 @@ jobs:
           # injection in the URL path).
           is_valid_pkg_name() {
             local name="$1"
+            # 214 = npm's maximum package name length (includes the `@scope/`
+            # prefix for scoped packages). Per npm's naming spec.
             [ ${#name} -le 214 ] || return 1
             [[ "$name" =~ ^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$ ]]
           }
@@ -172,6 +174,14 @@ jobs:
                 ;;
               404|410)
                 return 1
+                ;;
+              429)
+                # --retry-all-errors already retries 429; if we still got
+                # here, rate limiting has exhausted retries. Log distinctly
+                # from generic "unreachable" so it's diagnosable, then fall
+                # through to the same fail-closed transient path.
+                echo "::warning::${pkg} — rate-limited by npm registry (429); --retry exhausted"
+                return 2
                 ;;
               *)
                 return 2
