@@ -81,9 +81,9 @@ jobs:
 
             # Stream curl directly into jq — avoids buffering multi-MB registry
             # documents (e.g. typescript ~15MB) in a shell variable.
-            # `|| true` prevents pipefail from killing the script on curl failure
-            # (429, timeout, DNS) — the empty publish_time is handled below.
-            publish_time=$(curl -sf -m 10 "https://registry.npmjs.org/${pkg}" 2>/dev/null \
+            # -sSf: silent but show errors on stderr (breadcrumb for DNS/timeout/403).
+            # --compressed: request gzip from registry for faster transfers.
+            publish_time=$(curl -sSf --compressed -m 10 "https://registry.npmjs.org/${pkg}" \
               | jq -r --arg v "$version" '.time[$v] // empty') || true
             if [ -z "$publish_time" ]; then
               echo "::warning::${pkg}@${version} — version not found in registry timestamps (skipped)"
