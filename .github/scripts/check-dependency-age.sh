@@ -63,6 +63,15 @@ checked_count=0
 now_epoch=$(date +%s)
 base_ref="origin/${BASE_REF}"
 
+# Guard: the `|| true` on the extraction pipeline below would otherwise
+# swallow a missing-base-ref failure silently (git diff returns an error
+# but grep-on-empty-input exits 1 too, and `|| true` conflates them).
+# Verify explicitly with a friendlier error than git diff would produce.
+if ! git rev-parse --verify --quiet "${base_ref}" >/dev/null; then
+  echo "::error::Base ref ${base_ref} not found in this checkout."
+  exit 1
+fi
+
 # Separate the diff from the filter so a diff failure (missing base ref,
 # invalid workflow_dispatch ref, etc.) doesn't silently pass as "no changes
 # detected." Under `pipefail`, the `!` would otherwise invert a non-zero
@@ -244,7 +253,9 @@ for pkg in $new_packages; do
   #
   # `2>/dev/null || true` so a malformed/unparseable lockfile yields a
   # clean per-package skip via the `-z "$version"` branch below rather
-  # than aborting the whole run under `set -e`.
+  # than aborting the whole run under `set -e`. The stderr suppression
+  # matches the per-package-skip posture elsewhere — a failure here is
+  # expected if a future lockfile includes something jq can't parse.
   version=$(jq -r --arg p "node_modules/${pkg}" \
     '.packages[$p].version // empty' package-lock.json 2>/dev/null || true)
   if [ -z "$version" ]; then
