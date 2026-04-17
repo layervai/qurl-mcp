@@ -36,6 +36,6 @@ jobs:
     # `contains(...)` is false, job always runs. That's the desired
     # behavior: manual runs shouldn't be bypassable via PR labels.
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'age-check-bypass') }}
-    uses: layervai/ops-routines/.github/workflows/age-check-npm.yml@a9ead86b8fd94edc31c1b3429f6edad67686d3f6 # v0.1.2
+    uses: layervai/ops-routines/.github/workflows/age-check-npm.yml@435d5be4e82fcf749b1689deb85dbcd5d29f9bac # v0.1.3
     permissions:
       contents: read
