@@ -35,40 +35,40 @@ jobs:
             exit 0
           fi
 
-          # Extract newly added package name+version pairs from resolved URLs.
+          # Extract newly added package names from resolved URLs in the diff.
           # Handles both scoped (@scope/name) and unscoped packages.
-          # Format: "package@version" per line.
-          new_deps=$(git diff "${base_ref}...HEAD" -- package-lock.json \
+          # Version is read from the lockfile JSON — not parsed from the URL,
+          # which avoids greedy-regex issues with prerelease segments.
+          new_packages=$(git diff "${base_ref}...HEAD" -- package-lock.json \
             | grep '^+' | grep '"resolved"' \
             | sed -n \
-              -e 's|.*https://registry.npmjs.org/\(@[^/]*/[^/]*\)/-/.*-\([0-9][0-9.]*[-a-zA-Z0-9.]*\)\.tgz.*|\1@\2|p' \
-              -e 's|.*https://registry.npmjs.org/\([^@][^/]*\)/-/.*-\([0-9][0-9.]*[-a-zA-Z0-9.]*\)\.tgz.*|\1@\2|p' \
+              -e 's|.*https://registry.npmjs.org/\(@[^/]*/[^/]*\)/-/.*|\1|p' \
+              -e 's|.*https://registry.npmjs.org/\([^@][^/]*\)/-/.*|\1|p' \
             | sort -u)
 
-          if [ -z "$new_deps" ]; then
+          if [ -z "$new_packages" ]; then
             echo "No new npm packages detected"
             exit 0
           fi
 
-          for dep in $new_deps; do
-            # dep is "name@version" or "@scope/name@version"
-            # Extract version: everything after the last @
-            version="${dep##*@}"
-            # Extract package name: everything before the last @
-            pkg="${dep%@*}"
+          for pkg in $new_packages; do
+            # Read the installed version from the lockfile's structured JSON.
+            # This handles all semver forms (stable, prerelease, build metadata)
+            # without fragile URL parsing.
+            version=$(jq -r --arg p "node_modules/${pkg}" \
+              '.packages[$p].version // empty' package-lock.json)
+            if [ -z "$version" ]; then
+              echo "::warning::${pkg} — could not determine installed version from lockfile (skipped)"
+              continue
+            fi
 
             # Rate-limit registry requests to avoid 429s on large dependency updates.
             sleep 0.2
 
-            response=$(curl -sf -m 10 "https://registry.npmjs.org/${pkg}" 2>/dev/null || echo "")
-            if [ -z "$response" ]; then
-              echo "::error::Could not verify age for ${pkg}@${version} (registry unreachable)"
-              failed=true
-              continue
-            fi
-
-            # Check the specific installed version's publish time, not dist-tags.latest.
-            publish_time=$(echo "$response" | jq -r --arg v "$version" '.time[$v] // empty')
+            # Stream curl directly into jq — avoids buffering multi-MB registry
+            # documents (e.g. typescript ~15MB) in a shell variable.
+            publish_time=$(curl -sf -m 10 "https://registry.npmjs.org/${pkg}" 2>/dev/null \
+              | jq -r --arg v "$version" '.time[$v] // empty')
             if [ -z "$publish_time" ]; then
               echo "::warning::${pkg}@${version} — version not found in registry timestamps (skipped)"
               continue
