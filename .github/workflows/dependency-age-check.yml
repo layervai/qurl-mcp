@@ -1,0 +1,41 @@
+name: Dependency Age Check
+
+# Supply-chain guard: blocks PRs that introduce npm packages published
+# less than MIN_AGE_DAYS days ago. Thin shim delegating to the hardened
+# reusable workflow in layervai/ops-routines (see
+# https://github.com/layervai/ops-routines/blob/main/lib/age-check-npm.sh
+# for the implementation).
+#
+# Bypass: add the `age-check-bypass` label to the PR. Use only for
+# CVE-driven emergency updates (see ops-routines runbooks).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "package-lock.json"
+      - "pnpm-lock.yaml"
+      - "yarn.lock"
+  workflow_dispatch:
+
+# Cancel superseded runs on the same PR branch — each run makes
+# sequential registry calls with sleep gates; no reason to let two
+# race for an outdated diff.
+concurrency:
+  group: dep-age-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  age-check:
+    # Honor `age-check-bypass` at the shim level AND inside the
+    # reusable workflow (defense-in-depth). On `workflow_dispatch`
+    # `github.event.pull_request` is null — labels array is empty,
+    # `contains(...)` is false, job always runs. That's the desired
+    # behavior: manual runs shouldn't be bypassable via PR labels.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'age-check-bypass') }}
+    uses: layervai/ops-routines/.github/workflows/age-check-npm.yml@a9ead86b8fd94edc31c1b3429f6edad67686d3f6 # v0.1.2
+    permissions:
+      contents: read
