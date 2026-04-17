@@ -71,10 +71,13 @@ jobs:
           # Validate numeric input from workflow_dispatch — a non-numeric
           # min_age_days would crash later at `$age_days -lt $MIN_AGE_DAYS`
           # with a cryptic bash error. Catch it here with a clear message.
-          [[ "$MIN_AGE_DAYS" =~ ^[0-9]+$ ]] || {
-            echo "::error::MIN_AGE_DAYS must be a non-negative integer (got: ${MIN_AGE_DAYS})"
+          # Require a positive integer — MIN_AGE_DAYS=0 would make the
+          # quarantine a no-op, which is worse than a misconfigured check
+          # (silent pass). Reject it explicitly.
+          if ! [[ "$MIN_AGE_DAYS" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::MIN_AGE_DAYS must be a positive integer (got: ${MIN_AGE_DAYS})"
             exit 1
-          }
+          fi
 
           failed=false
           skipped_count=0
@@ -282,8 +285,16 @@ jobs:
               echo "::error::${pkg}@${safe_ver} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS}; eligible after ${eligible_date})"
               echo "| \`${pkg}\` | ${safe_ver} | ${age_days} | :x: **too new** (eligible after ${eligible_date}) |" >> "$GITHUB_STEP_SUMMARY"
               failed=true
+            elif [ "$age_days" -le "$((MIN_AGE_DAYS + 1))" ]; then
+              # Package just barely passed the threshold. Surface as a notice
+              # so maintainers know to keep an eye on it — if the package is
+              # unpublished or the threshold is raised slightly, it'll flip
+              # to failing on a future PR.
+              echo "::notice::${pkg}@${safe_ver} is ${age_days} day(s) old — just past the ${MIN_AGE_DAYS}-day threshold"
+              echo "  OK: ${pkg}@${safe_ver} (${age_days} days old, barely past threshold)"
+              echo "| \`${pkg}\` | ${safe_ver} | ${age_days} | :eyes: just past threshold |" >> "$GITHUB_STEP_SUMMARY"
             else
-              echo "  OK: ${pkg}@${version} (${age_days} days old)"
+              echo "  OK: ${pkg}@${safe_ver} (${age_days} days old)"
               echo "| \`${pkg}\` | ${safe_ver} | ${age_days} | :white_check_mark: |" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
