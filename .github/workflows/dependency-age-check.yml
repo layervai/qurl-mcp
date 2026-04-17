@@ -23,6 +23,13 @@ on:
         required: false
         default: "main"
 
+# Cancel superseded runs on the same PR branch — each run makes sequential
+# external calls with sleep gates, so there's no reason to let two races for
+# an outdated diff.
+concurrency:
+  group: dep-age-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -107,28 +114,39 @@ jobs:
           # for version $2 on stdout. Exit codes: 0 success (stdout may still
           # be empty if the version isn't in .time); 1 = registry says 404/410
           # (package private or removed); 2 = transient failure after retry.
-          # Uses curl's native --retry for the transient case.
+          # Uses curl's native --retry for the transient case. Temp-file
+          # cleanup runs via `trap ... RETURN` (bash-only, fine on
+          # ubuntu-latest) so it happens even on unexpected exits.
           fetch_publish_time() {
             local pkg="$1" version="$2" response_file http_code
             response_file=$(mktemp)
+            # shellcheck disable=SC2064  # expand $response_file at trap-set time
+            trap "rm -f '$response_file'" RETURN
             http_code=$(curl -sS --compressed -m 10 --retry 2 --retry-delay 2 --retry-all-errors \
               -o "$response_file" -w "%{http_code}" \
               "https://registry.npmjs.org/${pkg}" 2>/dev/null || echo "000")
             case "$http_code" in
               200)
                 jq -r --arg v "$version" '.time[$v] // empty' "$response_file"
-                rm -f "$response_file"
                 return 0
                 ;;
               404|410)
-                rm -f "$response_file"
                 return 1
                 ;;
               *)
-                rm -f "$response_file"
                 return 2
                 ;;
             esac
+          }
+
+          # Sanitize arbitrary strings before writing them to
+          # $GITHUB_STEP_SUMMARY. Used for values that either pre-date
+          # is_valid_pkg_name (the invalid-name branch below) or come from
+          # jq on the lockfile. Strips to characters that can't form active
+          # markdown (link/image/emphasis) and caps length so a crafted
+          # over-long entry can't blow out the summary.
+          safe_for_md() {
+            printf '%s' "$1" | tr -cd '[:alnum:]@/_.:+-' | head -c 80
           }
 
           # Note: unquoted $new_packages is intentional — npm package names
@@ -136,8 +154,9 @@ jobs:
           # iteration behavior here.
           for pkg in $new_packages; do
             if ! is_valid_pkg_name "$pkg"; then
-              echo "::warning::${pkg} — does not match npm package name rules (skipped)"
-              echo "| \`${pkg}\` | — | — | :warning: invalid name (skipped) |" >> "$GITHUB_STEP_SUMMARY"
+              safe_pkg=$(safe_for_md "$pkg")
+              echo "::warning::${safe_pkg} — does not match npm package name rules (skipped)"
+              echo "| \`${safe_pkg}\` | — | — | :warning: invalid name (skipped) |" >> "$GITHUB_STEP_SUMMARY"
               skipped_count=$((skipped_count + 1))
               continue
             fi
@@ -150,6 +169,9 @@ jobs:
               skipped_count=$((skipped_count + 1))
               continue
             fi
+            # jq output flows into step-summary cells below; sanitize so a
+            # crafted lockfile version string can't inject markdown.
+            safe_ver=$(safe_for_md "$version")
 
             sleep 0.2
 
@@ -160,7 +182,7 @@ jobs:
               0)
                 if [ -z "$publish_time" ]; then
                   echo "::warning::${pkg}@${version} — version not in registry timestamps (skipped)"
-                  echo "| \`${pkg}\` | ${version} | — | :warning: skipped (version not in registry) |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| \`${pkg}\` | ${safe_ver} | — | :warning: skipped (version not in registry) |" >> "$GITHUB_STEP_SUMMARY"
                   skipped_count=$((skipped_count + 1))
                   continue
                 fi
@@ -169,7 +191,7 @@ jobs:
                 # 404/410 — package not on npmjs (private registry, scope-only, or unpublished).
                 # Skip with warning; no way to verify age from public metadata.
                 echo "::warning::${pkg}@${version} — not found on npmjs.org (private or unpublished; skipped)"
-                echo "| \`${pkg}\` | ${version} | — | :warning: skipped (404 — private or unpublished) |" >> "$GITHUB_STEP_SUMMARY"
+                echo "| \`${pkg}\` | ${safe_ver} | — | :warning: skipped (404 — private or unpublished) |" >> "$GITHUB_STEP_SUMMARY"
                 skipped_count=$((skipped_count + 1))
                 continue
                 ;;
@@ -177,7 +199,7 @@ jobs:
                 # Transient failure after curl --retry. Fail closed — an outage
                 # must not silently let new deps through a security control.
                 echo "::error::${pkg}@${version} — registry unreachable after retry"
-                echo "| \`${pkg}\` | ${version} | — | :x: registry unreachable |" >> "$GITHUB_STEP_SUMMARY"
+                echo "| \`${pkg}\` | ${safe_ver} | — | :x: registry unreachable |" >> "$GITHUB_STEP_SUMMARY"
                 failed=true
                 continue
                 ;;
@@ -186,7 +208,7 @@ jobs:
             publish_epoch=$(date -d "$publish_time" +%s 2>/dev/null || echo "0")
             if [ "$publish_epoch" -eq 0 ]; then
               echo "::error::Could not parse publish timestamp for ${pkg}@${version}"
-              echo "| \`${pkg}\` | ${version} | — | :x: parse error |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| \`${pkg}\` | ${safe_ver} | — | :x: parse error |" >> "$GITHUB_STEP_SUMMARY"
               failed=true
               continue
             fi
@@ -196,11 +218,11 @@ jobs:
 
             if [ "$age_days" -lt "$MIN_AGE_DAYS" ]; then
               echo "::error::${pkg}@${version} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS})"
-              echo "| \`${pkg}\` | ${version} | ${age_days} | :x: **too new** |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| \`${pkg}\` | ${safe_ver} | ${age_days} | :x: **too new** |" >> "$GITHUB_STEP_SUMMARY"
               failed=true
             else
               echo "  OK: ${pkg}@${version} (${age_days} days old)"
-              echo "| \`${pkg}\` | ${version} | ${age_days} | :white_check_mark: |" >> "$GITHUB_STEP_SUMMARY"
+              echo "| \`${pkg}\` | ${safe_ver} | ${age_days} | :white_check_mark: |" >> "$GITHUB_STEP_SUMMARY"
             fi
           done
 
