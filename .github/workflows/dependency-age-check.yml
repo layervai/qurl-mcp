@@ -1,4 +1,15 @@
 name: Dependency Age Check
+#
+# 7-day quarantine on newly published npm packages — a supply-chain defense
+# against typosquatting / dependency-confusion attacks where an attacker
+# publishes a malicious version and hopes someone pulls it in before the
+# community notices. Waiting 7 days gives npm and security researchers a
+# window to flag or pull bad packages.
+#
+# Complementary to the existing .github/workflows/dependency-review.yml:
+# - dependency-review gates on *known* vulnerabilities (CVE/GHSA).
+# - this check gates on *age*, catching malicious packages before any CVE
+#   has been filed.
 
 on:
   pull_request:
@@ -6,6 +17,11 @@ on:
     paths:
       - "package-lock.json"
   workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Base ref to diff against (branch or full ref) when running manually from a feature branch"
+        required: false
+        default: "main"
 
 permissions:
   contents: read
@@ -16,6 +32,10 @@ jobs:
     timeout-minutes: 5
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'age-check-bypass') }}
     steps:
+      # fetch-depth: 0 is intentional — the three-dot diff
+      # `${base_ref}...HEAD` needs the merge base, which can be arbitrarily
+      # deep if branches have diverged. For this repo the full clone cost
+      # is negligible; the correctness is worth it.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
@@ -23,11 +43,20 @@ jobs:
       - name: Check npm dependency ages (7-day quarantine)
         env:
           MIN_AGE_DAYS: "7"
-          BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
+          BASE_REF: ${{ github.event.pull_request.base.ref || inputs.base_ref || 'main' }}
+        # Uses GNU-only features (`date -d`) — pinned to ubuntu-latest at
+        # the job level. Would need revision for macOS / BSD runners.
         run: |
           set -euo pipefail
 
+          # Sanity: jq and curl are pre-installed on ubuntu-latest. Fail loudly
+          # rather than silently skipping checks if the runner image changes.
+          command -v jq >/dev/null || { echo "::error::jq not available on runner"; exit 1; }
+          command -v curl >/dev/null || { echo "::error::curl not available on runner"; exit 1; }
+
           failed=false
+          skipped_count=0
+          checked_count=0
           now_epoch=$(date +%s)
           base_ref="origin/${BASE_REF}"
 
@@ -36,6 +65,11 @@ jobs:
             exit 0
           fi
 
+          # Extract package names from added/updated "resolved" URLs in the diff.
+          # Two patterns cover scoped (@scope/name) and unscoped (name) packages.
+          # Known limitation: npm aliases (`npm:other-package@version`) and
+          # packages nested under non-root node_modules won't be extracted
+          # cleanly; both are uncommon in practice.
           new_packages=$(git diff --no-renames "${base_ref}...HEAD" -- package-lock.json \
             | grep '^+' | grep '"resolved"' \
             | sed -n \
@@ -52,32 +86,102 @@ jobs:
           echo "Checking ${pkg_count} new/updated package(s)..."
           echo ""
 
-          echo "## Dependency Age Check" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Package | Version | Age (days) | Status |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---------|---------|------------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY_HEADER'
+          ## Dependency Age Check
 
+          | Package | Version | Age (days) | Status |
+          |---------|---------|------------|--------|
+          SUMMARY_HEADER
+
+          # Validates input looks like a real npm package name. Blocks any
+          # exotic characters in $pkg from reaching the curl URL (defense
+          # against crafted lockfile entries with path-traversal / query
+          # injection in the URL path).
+          is_valid_pkg_name() {
+            local name="$1"
+            [ ${#name} -le 214 ] || return 1
+            [[ "$name" =~ ^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$ ]]
+          }
+
+          # Fetches the registry response for $1 and emits the publish time
+          # for version $2 on stdout. Exit codes: 0 success (stdout may still
+          # be empty if the version isn't in .time); 1 = registry says 404/410
+          # (package private or removed); 2 = transient failure after retry.
+          # Uses curl's native --retry for the transient case.
+          fetch_publish_time() {
+            local pkg="$1" version="$2" response_file http_code
+            response_file=$(mktemp)
+            http_code=$(curl -sS --compressed -m 10 --retry 2 --retry-delay 2 --retry-all-errors \
+              -o "$response_file" -w "%{http_code}" \
+              "https://registry.npmjs.org/${pkg}" 2>/dev/null || echo "000")
+            case "$http_code" in
+              200)
+                jq -r --arg v "$version" '.time[$v] // empty' "$response_file"
+                rm -f "$response_file"
+                return 0
+                ;;
+              404|410)
+                rm -f "$response_file"
+                return 1
+                ;;
+              *)
+                rm -f "$response_file"
+                return 2
+                ;;
+            esac
+          }
+
+          # Note: unquoted $new_packages is intentional — npm package names
+          # cannot contain whitespace, so word-splitting is the desired
+          # iteration behavior here.
           for pkg in $new_packages; do
+            if ! is_valid_pkg_name "$pkg"; then
+              echo "::warning::${pkg} — does not match npm package name rules (skipped)"
+              echo "| \`${pkg}\` | — | — | :warning: invalid name (skipped) |" >> "$GITHUB_STEP_SUMMARY"
+              skipped_count=$((skipped_count + 1))
+              continue
+            fi
+
             version=$(jq -r --arg p "node_modules/${pkg}" \
               '.packages[$p].version // empty' package-lock.json)
             if [ -z "$version" ]; then
               echo "::warning::${pkg} — could not determine installed version from lockfile (skipped)"
               echo "| \`${pkg}\` | — | — | :warning: skipped (no version in lockfile) |" >> "$GITHUB_STEP_SUMMARY"
+              skipped_count=$((skipped_count + 1))
               continue
             fi
 
             sleep 0.2
 
-            publish_time=$(curl -sSf --compressed -m 10 "https://registry.npmjs.org/${pkg}" \
-              | jq -r --arg v "$version" '.time[$v] // empty') \
-              || { sleep 2; publish_time=$(curl -sSf --compressed -m 10 "https://registry.npmjs.org/${pkg}" \
-              | jq -r --arg v "$version" '.time[$v] // empty'); } \
-              || true
-            if [ -z "$publish_time" ]; then
-              echo "::warning::${pkg}@${version} — version not found in registry timestamps (skipped)"
-              echo "| \`${pkg}\` | ${version} | — | :warning: skipped (version not in registry) |" >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
+            fetch_rc=0
+            publish_time=$(fetch_publish_time "$pkg" "$version") || fetch_rc=$?
+
+            case "$fetch_rc" in
+              0)
+                if [ -z "$publish_time" ]; then
+                  echo "::warning::${pkg}@${version} — version not in registry timestamps (skipped)"
+                  echo "| \`${pkg}\` | ${version} | — | :warning: skipped (version not in registry) |" >> "$GITHUB_STEP_SUMMARY"
+                  skipped_count=$((skipped_count + 1))
+                  continue
+                fi
+                ;;
+              1)
+                # 404/410 — package not on npmjs (private registry, scope-only, or unpublished).
+                # Skip with warning; no way to verify age from public metadata.
+                echo "::warning::${pkg}@${version} — not found on npmjs.org (private or unpublished; skipped)"
+                echo "| \`${pkg}\` | ${version} | — | :warning: skipped (404 — private or unpublished) |" >> "$GITHUB_STEP_SUMMARY"
+                skipped_count=$((skipped_count + 1))
+                continue
+                ;;
+              *)
+                # Transient failure after curl --retry. Fail closed — an outage
+                # must not silently let new deps through a security control.
+                echo "::error::${pkg}@${version} — registry unreachable after retry"
+                echo "| \`${pkg}\` | ${version} | — | :x: registry unreachable |" >> "$GITHUB_STEP_SUMMARY"
+                failed=true
+                continue
+                ;;
+            esac
 
             publish_epoch=$(date -d "$publish_time" +%s 2>/dev/null || echo "0")
             if [ "$publish_epoch" -eq 0 ]; then
@@ -88,6 +192,7 @@ jobs:
             fi
 
             age_days=$(( (now_epoch - publish_epoch) / 86400 ))
+            checked_count=$((checked_count + 1))
 
             if [ "$age_days" -lt "$MIN_AGE_DAYS" ]; then
               echo "::error::${pkg}@${version} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS})"
@@ -99,15 +204,33 @@ jobs:
             fi
           done
 
+          # Guard against "registry outage makes every package get skipped and
+          # the workflow passes" — if nothing actually got verified, fail.
+          if [ "$checked_count" -eq 0 ] && [ "$skipped_count" -gt 0 ]; then
+            {
+              echo ""
+              echo "> **No packages could be verified** (all ${skipped_count} were skipped). Treating as failure to avoid silent pass on registry outage."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::All ${skipped_count} packages were skipped; no verification possible. Failing to avoid a false pass."
+            exit 1
+          fi
+
           if [ "$failed" = true ]; then
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "> **One or more dependencies failed the 7-day age check.** Add the \`age-check-bypass\` label to override." >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo ""
+              echo "> **One or more dependencies failed the 7-day age check.** Add the \`age-check-bypass\` label to override."
+            } >> "$GITHUB_STEP_SUMMARY"
             echo ""
             echo "::error::One or more npm dependencies failed the age check."
             echo "To bypass for emergency updates, add the 'age-check-bypass' label to this PR."
             exit 1
           fi
 
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "> All ${pkg_count} dependencies are at least ${MIN_AGE_DAYS} days old. :white_check_mark:" >> "$GITHUB_STEP_SUMMARY"
-          echo "All npm dependencies are at least ${MIN_AGE_DAYS} days old"
+          {
+            echo ""
+            echo "> Verified ${checked_count} of ${pkg_count} packages at ≥ ${MIN_AGE_DAYS} days old. :white_check_mark:"
+            if [ "$skipped_count" -gt 0 ]; then
+              echo "> ${skipped_count} skipped (see warnings above)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "All verified npm dependencies are at least ${MIN_AGE_DAYS} days old"
