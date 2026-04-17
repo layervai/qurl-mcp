@@ -140,13 +140,17 @@ jobs:
             # command is deliberate; single quotes would defer expansion.
             # shellcheck disable=SC2064
             trap "rm -f '$response_file'" RETURN
+            # URL-encode the `/` in scoped names (`@scope/name` → `@scope%2Fname`).
+            # Both forms resolve today, but the encoded form is the canonical
+            # registry API path — makes the request unambiguously correct.
+            local url_pkg="${pkg/\//%2F}"
             # -sS: silent, but show errors on stderr — leaves a breadcrumb
             # in the Actions log when retries exhaust / DNS fails / etc.
             # On terminal failure `-w` still emits the status (0 here via
             # `|| echo 000`) so the case below classifies correctly.
             http_code=$(curl -sS --compressed -m 10 --retry 2 --retry-delay 2 --retry-all-errors \
               -o "$response_file" -w "%{http_code}" \
-              "https://registry.npmjs.org/${pkg}" || echo "000")
+              "https://registry.npmjs.org/${url_pkg}" || echo "000")
             case "$http_code" in
               200)
                 jq -r --arg v "$version" '.time[$v] // empty' "$response_file"
@@ -183,6 +187,10 @@ jobs:
               continue
             fi
 
+            # The `.packages["node_modules/${pkg}"]` path is the lockfile v3
+            # structure (npm 7+). CI pins Node 20+ / npm 10+, so we'll always
+            # emit v3 lockfiles; a v1 lockfile would store packages under
+            # `.dependencies` and those entries would miss this lookup.
             version=$(jq -r --arg p "node_modules/${pkg}" \
               '.packages[$p].version // empty' package-lock.json)
             if [ -z "$version" ]; then
@@ -244,8 +252,11 @@ jobs:
             checked_count=$((checked_count + 1))
 
             if [ "$age_days" -lt "$MIN_AGE_DAYS" ]; then
-              echo "::error::${pkg}@${version} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS})"
-              echo "| \`${pkg}\` | ${safe_ver} | ${age_days} | :x: **too new** |" >> "$GITHUB_STEP_SUMMARY"
+              # Compute when the package will be eligible so developers know
+              # when to retry without needing the bypass label.
+              eligible_date=$(date -u -d "@$((publish_epoch + MIN_AGE_DAYS * 86400))" +%Y-%m-%d 2>/dev/null || echo "unknown")
+              echo "::error::${pkg}@${version} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS}; eligible after ${eligible_date})"
+              echo "| \`${pkg}\` | ${safe_ver} | ${age_days} | :x: **too new** (eligible after ${eligible_date}) |" >> "$GITHUB_STEP_SUMMARY"
               failed=true
             else
               echo "  OK: ${pkg}@${version} (${age_days} days old)"
