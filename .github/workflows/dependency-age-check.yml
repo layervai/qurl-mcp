@@ -57,6 +57,9 @@ jobs:
             # Extract package name: everything before the last @
             pkg="${dep%@*}"
 
+            # Rate-limit registry requests to avoid 429s on large dependency updates.
+            sleep 0.2
+
             response=$(curl -sf -m 10 "https://registry.npmjs.org/${pkg}" 2>/dev/null || echo "")
             if [ -z "$response" ]; then
               echo "::error::Could not verify age for ${pkg}@${version} (registry unreachable)"
