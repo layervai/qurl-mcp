@@ -61,6 +61,14 @@ jobs:
           command -v jq >/dev/null || { echo "::error::jq not available on runner"; exit 1; }
           command -v curl >/dev/null || { echo "::error::curl not available on runner"; exit 1; }
 
+          # Validate numeric input from workflow_dispatch — a non-numeric
+          # min_age_days would crash later at `$age_days -lt $MIN_AGE_DAYS`
+          # with a cryptic bash error. Catch it here with a clear message.
+          [[ "$MIN_AGE_DAYS" =~ ^[0-9]+$ ]] || {
+            echo "::error::MIN_AGE_DAYS must be a non-negative integer (got: ${MIN_AGE_DAYS})"
+            exit 1
+          }
+
           failed=false
           skipped_count=0
           checked_count=0
@@ -74,9 +82,12 @@ jobs:
 
           # Extract package names from added/updated "resolved" URLs in the diff.
           # Two patterns cover scoped (@scope/name) and unscoped (name) packages.
-          # Known limitation: npm aliases (`npm:other-package@version`) and
-          # packages nested under non-root node_modules won't be extracted
-          # cleanly; both are uncommon in practice.
+          # Alternative registries (GitHub Packages, private Verdaccio, etc.)
+          # are silently skipped by design — we can't verify their publish time
+          # from the public npmjs registry. Known limitation: npm aliases
+          # (`npm:other-package@version`) and packages nested under non-root
+          # node_modules won't be extracted cleanly; both are uncommon in
+          # practice given npm v7+'s aggressive hoisting.
           new_packages=$(git diff --no-renames "${base_ref}...HEAD" -- package-lock.json \
             | grep '^+' | grep '"resolved"' \
             | sed -n \
@@ -93,12 +104,15 @@ jobs:
           echo "Checking ${pkg_count} new/updated package(s)..."
           echo ""
 
-          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY_HEADER'
-          ## Dependency Age Check
-
-          | Package | Version | Age (days) | Status |
-          |---------|---------|------------|--------|
-          SUMMARY_HEADER
+          # Block-redirect form (not heredoc) so the YAML/bash indentation
+          # story is unambiguous — every byte we want in the summary is in
+          # an explicit echo argument.
+          {
+            echo "## Dependency Age Check"
+            echo ""
+            echo "| Package | Version | Age (days) | Status |"
+            echo "|---------|---------|------------|--------|"
+          } >> "$GITHUB_STEP_SUMMARY"
 
           # Validates input looks like a real npm package name. Blocks any
           # exotic characters in $pkg from reaching the curl URL (defense
@@ -120,7 +134,11 @@ jobs:
           fetch_publish_time() {
             local pkg="$1" version="$2" response_file http_code
             response_file=$(mktemp)
-            # shellcheck disable=SC2064  # expand $response_file at trap-set time
+            # We want $response_file to be expanded *now* (when the trap is
+            # set), not when the trap fires — by that point `local` has
+            # already gone out of scope. Using double quotes for the trap
+            # command is deliberate; single quotes would defer expansion.
+            # shellcheck disable=SC2064
             trap "rm -f '$response_file'" RETURN
             # -sS: silent, but show errors on stderr — leaves a breadcrumb
             # in the Actions log when retries exhaust / DNS fails / etc.
@@ -177,6 +195,11 @@ jobs:
             # crafted lockfile version string can't inject markdown.
             safe_ver=$(safe_for_md "$version")
 
+            # ~5 req/sec — npm's public registry doesn't document a hard
+            # rate limit but historically throttles at higher rates. With
+            # the 5-min job timeout this supports ~1500 packages, well
+            # above realistic lockfile diffs. --retry-all-errors on the
+            # curl call above handles any 429 that does slip through.
             sleep 0.2
 
             fetch_rc=0
