@@ -9,15 +9,21 @@ on:
     - cron: '0 6 * * 1' # Weekly on Monday at 6 AM UTC
 
 permissions:
-  actions: read
   contents: read
-  security-events: write
 
 jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Scope the elevated permissions to just this job (least-privilege).
+    # If the workflow ever grows a second job, it won't inherit
+    # `actions: read` / `security-events: write` — those are specific
+    # to CodeQL's SARIF upload path.
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
 
     strategy:
       fail-fast: false
