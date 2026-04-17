@@ -41,8 +41,8 @@ jobs:
           new_deps=$(git diff "${base_ref}...HEAD" -- package-lock.json \
             | grep '^+' | grep '"resolved"' \
             | sed -n \
-              -e 's|.*https://registry.npmjs.org/\(@[^/]*/[^/]*\)/-/.*-\([0-9][0-9.]*\)\.tgz.*|\1@\2|p' \
-              -e 's|.*https://registry.npmjs.org/\([^@][^/]*\)/-/.*-\([0-9][0-9.]*\)\.tgz.*|\1@\2|p' \
+              -e 's|.*https://registry.npmjs.org/\(@[^/]*/[^/]*\)/-/.*-\([0-9][0-9.]*[-a-zA-Z0-9.]*\)\.tgz.*|\1@\2|p' \
+              -e 's|.*https://registry.npmjs.org/\([^@][^/]*\)/-/.*-\([0-9][0-9.]*[-a-zA-Z0-9.]*\)\.tgz.*|\1@\2|p' \
             | sort -u)
 
           if [ -z "$new_deps" ]; then
@@ -70,7 +70,7 @@ jobs:
             # Check the specific installed version's publish time, not dist-tags.latest.
             publish_time=$(echo "$response" | jq -r --arg v "$version" '.time[$v] // empty')
             if [ -z "$publish_time" ]; then
-              echo "  SKIP: ${pkg}@${version} (version not found in registry timestamps)"
+              echo "::warning::${pkg}@${version} — version not found in registry timestamps (skipped)"
               continue
             fi
 
