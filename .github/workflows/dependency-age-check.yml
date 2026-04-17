@@ -102,6 +102,13 @@ jobs:
             || { echo "::error::git diff --name-only against ${base_ref} failed"; exit 1; }
           if [ -z "$name_check" ]; then
             echo "No package-lock.json changes detected"
+            # Write a step-summary line so the Actions UI reflects the
+            # early-exit outcome instead of an empty summary panel.
+            {
+              echo "## Dependency Age Check"
+              echo ""
+              echo "> No \`package-lock.json\` changes detected in this diff. :white_check_mark:"
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -137,6 +144,15 @@ jobs:
 
           if [ -z "$new_packages" ]; then
             echo "No new npm packages detected"
+            # Same rationale as the name_check early exit above: write a
+            # visible summary line so the Actions UI doesn't show an
+            # empty panel when the diff only touched non-registry fields
+            # (integrity hashes, transient-only metadata).
+            {
+              echo "## Dependency Age Check"
+              echo ""
+              echo "> Lockfile changed but no new/updated npm packages detected (metadata-only diff). :white_check_mark:"
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
@@ -181,6 +197,12 @@ jobs:
           # Uses curl's native --retry for the transient case. Temp-file
           # cleanup runs via `trap ... RETURN` (bash-only, fine on
           # ubuntu-latest) so it happens even on unexpected exits.
+          #
+          # `RETURN` trap lifecycle: each call installs a fresh trap that
+          # fires when that call returns (normally or via `return N`). The
+          # previous invocation's trap has already fired and been discarded
+          # by that point, so there's no trap leak across calls even
+          # though we reassign the same trap name.
           fetch_publish_time() {
             local pkg="$1" version="$2" response_file http_code
             response_file=$(mktemp)
