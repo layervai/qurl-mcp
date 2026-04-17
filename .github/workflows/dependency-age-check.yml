@@ -35,35 +35,45 @@ jobs:
             exit 0
           fi
 
-          new_packages=$(git diff "${base_ref}...HEAD" -- package-lock.json \
+          # Extract newly added package name+version pairs from resolved URLs.
+          # Handles both scoped (@scope/name) and unscoped packages.
+          # Format: "package@version" per line.
+          new_deps=$(git diff "${base_ref}...HEAD" -- package-lock.json \
             | grep '^+' | grep '"resolved"' \
-            | sed -n 's|.*https://registry.npmjs.org/\([^/]*\)/-/.*|\1|p' \
+            | sed -n \
+              -e 's|.*https://registry.npmjs.org/\(@[^/]*/[^/]*\)/-/.*-\([0-9][0-9.]*\)\.tgz.*|\1@\2|p' \
+              -e 's|.*https://registry.npmjs.org/\([^@][^/]*\)/-/.*-\([0-9][0-9.]*\)\.tgz.*|\1@\2|p' \
             | sort -u)
 
-          if [ -z "$new_packages" ]; then
+          if [ -z "$new_deps" ]; then
             echo "No new npm packages detected"
             exit 0
           fi
 
-          for pkg in $new_packages; do
-            decoded_pkg=$(echo "$pkg" | sed 's/%2f/\//g')
+          for dep in $new_deps; do
+            # dep is "name@version" or "@scope/name@version"
+            # Extract version: everything after the last @
+            version="${dep##*@}"
+            # Extract package name: everything before the last @
+            pkg="${dep%@*}"
 
-            response=$(curl -sf -m 10 "https://registry.npmjs.org/${decoded_pkg}" 2>/dev/null || echo "")
+            response=$(curl -sf -m 10 "https://registry.npmjs.org/${pkg}" 2>/dev/null || echo "")
             if [ -z "$response" ]; then
-              echo "::error::Could not verify age for ${decoded_pkg} (registry unreachable)"
+              echo "::error::Could not verify age for ${pkg}@${version} (registry unreachable)"
               failed=true
               continue
             fi
 
-            publish_time=$(echo "$response" | jq -r '.time[."dist-tags".latest] // empty')
+            # Check the specific installed version's publish time, not dist-tags.latest.
+            publish_time=$(echo "$response" | jq -r --arg v "$version" '.time[$v] // empty')
             if [ -z "$publish_time" ]; then
-              echo "  SKIP: ${decoded_pkg} (could not determine publish time)"
+              echo "  SKIP: ${pkg}@${version} (version not found in registry timestamps)"
               continue
             fi
 
             publish_epoch=$(date -d "$publish_time" +%s 2>/dev/null || echo "0")
             if [ "$publish_epoch" -eq 0 ]; then
-              echo "::error::Could not parse publish timestamp for ${decoded_pkg}"
+              echo "::error::Could not parse publish timestamp for ${pkg}@${version}"
               failed=true
               continue
             fi
@@ -71,10 +81,10 @@ jobs:
             age_days=$(( (now_epoch - publish_epoch) / 86400 ))
 
             if [ "$age_days" -lt "$MIN_AGE_DAYS" ]; then
-              echo "::error::${decoded_pkg} latest version published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS})"
+              echo "::error::${pkg}@${version} published ${age_days} day(s) ago (minimum: ${MIN_AGE_DAYS})"
               failed=true
             else
-              echo "  OK: ${decoded_pkg} (${age_days} days old)"
+              echo "  OK: ${pkg}@${version} (${age_days} days old)"
             fi
           done
 
