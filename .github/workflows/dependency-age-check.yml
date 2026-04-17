@@ -44,6 +44,10 @@ jobs:
   check-dependency-age:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # On `workflow_dispatch`, `github.event.pull_request` is null — the
+    # labels array evaluates empty and `contains(...)` is false, so the
+    # job always runs. That's the desired behavior: manual runs shouldn't
+    # be bypassable via PR labels.
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'age-check-bypass') }}
     steps:
       # fetch-depth: 0 is intentional — the three-dot diff
@@ -105,10 +109,25 @@ jobs:
           # Two patterns cover scoped (@scope/name) and unscoped (name) packages.
           # Alternative registries (GitHub Packages, private Verdaccio, etc.)
           # are silently skipped by design — we can't verify their publish time
-          # from the public npmjs registry. Known limitation: npm aliases
-          # (`npm:other-package@version`) and packages nested under non-root
-          # node_modules won't be extracted cleanly; both are uncommon in
-          # practice given npm v7+'s aggressive hoisting.
+          # from the public npmjs registry. Known limitations:
+          # - npm aliases (`npm:other-package@version`) and packages nested
+          #   under non-root `node_modules` won't be extracted cleanly;
+          #   both are uncommon in practice given npm v7+'s aggressive
+          #   hoisting.
+          # - `sort -u` deduplicates by package name. If the same package
+          #   appears at two different `resolved` URLs (uncommon — `npm link`
+          #   / workspace edge cases), the version lookup below reads the
+          #   final installed version from the lockfile, which is the
+          #   correct behavior.
+          #
+          # The trailing `|| true` handles grep's "exit 1 on no matches"
+          # contract: a lockfile diff that touches only metadata (integrity
+          # updates, non-resolved fields) has no `"resolved"` lines, grep
+          # exits 1, and under `pipefail` the whole pipeline would exit 1.
+          # `|| true` converts that to an empty `$new_packages` so the
+          # `-z "$new_packages"` branch below gives a clean early exit.
+          # The upstream `name_check` split already covers the real
+          # failure modes (missing base_ref, invalid workflow_dispatch ref).
           new_packages=$(git diff --no-renames "${base_ref}...HEAD" -- package-lock.json \
             | grep '^+.*"resolved"' \
             | sed -n \
@@ -144,7 +163,15 @@ jobs:
             # 214 = npm's maximum package name length (includes the `@scope/`
             # prefix for scoped packages). Per npm's naming spec.
             [ ${#name} -le 214 ] || return 1
-            [[ "$name" =~ ^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$ ]]
+            # Uppercase and tildes are included because npm's
+            # `validate-npm-package-name` treats them as warnings (allowed
+            # for legacy packages), not hard errors. Packages like
+            # `JSONStream` (uppercase) do exist in the wild, and rejecting
+            # them here would emit a misleading "does not match npm
+            # package name rules" warning for a legitimate lockfile entry.
+            # Shell metacharacters (`!`, `(`, `)`, `*`, `'`) remain
+            # blocked — those would be dangerous in the curl URL.
+            [[ "$name" =~ ^(@[a-zA-Z0-9~][a-zA-Z0-9~._-]*/)?[a-zA-Z0-9~][a-zA-Z0-9~._-]*$ ]]
           }
 
           # Fetches the registry response for $1 and emits the publish time
@@ -162,7 +189,11 @@ jobs:
             # already gone out of scope. Using double quotes for the trap
             # command is deliberate; single quotes would defer expansion.
             # shellcheck disable=SC2064
-            trap "rm -f '$response_file'" RETURN
+            # Inner path uses escaped double quotes rather than single
+            # quotes so a mktemp path containing a single quote (not
+            # possible with GNU mktemp today, but defensive) wouldn't
+            # break the trap command.
+            trap "rm -f \"$response_file\"" RETURN
             # URL-encode the `/` in scoped names (`@scope/name` → `@scope%2Fname`).
             # Both forms resolve today, but the encoded form is the canonical
             # registry API path — makes the request unambiguously correct.
