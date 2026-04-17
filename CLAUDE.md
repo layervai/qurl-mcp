@@ -196,3 +196,10 @@ The repository includes an API spec drift detection system:
 - Never commit API keys or secrets
 - `QURL_API_KEY` is passed via environment variable, never hardcoded
 - The client only communicates with the configured `QURL_API_URL` endpoint
+
+## Security Workflows
+
+- `codeql.yml` runs CodeQL (JS/TS + `actions` language) and posts SARIF to the Security tab on every PR.
+- `dependency-age-check.yml` enforces a 7-day quarantine on newly published npm packages added to `package-lock.json`. This defends against typosquatting / dependency-confusion attacks where an attacker publishes a malicious version and hopes someone pulls it in before the community notices.
+  - **Blocked PR escape hatch**: add the `age-check-bypass` label to skip the check for genuine emergencies (e.g., a published CVE that requires urgent upgrade despite age). The label is an auditable override rather than a silent skip.
+  - **Manual run**: trigger via `workflow_dispatch` with optional `base_ref` and `min_age_days` inputs.

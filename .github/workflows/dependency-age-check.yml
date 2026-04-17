@@ -55,6 +55,7 @@ jobs:
           fetch-depth: 0
 
       - name: Check npm dependency ages (7-day quarantine)
+        shell: bash
         env:
           MIN_AGE_DAYS: ${{ inputs.min_age_days || '7' }}
           BASE_REF: ${{ github.event.pull_request.base.ref || inputs.base_ref || 'main' }}
@@ -63,10 +64,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Sanity: jq and curl are pre-installed on ubuntu-latest. Fail loudly
-          # rather than silently skipping checks if the runner image changes.
+          # Sanity: jq, curl, and GNU date are pre-installed on ubuntu-latest.
+          # Fail loudly rather than silently skipping checks if the runner
+          # image changes. The `date -d @0` probe catches BSD/macOS (which
+          # rejects @-epoch syntax) — GNU accepts it and prints the epoch.
           command -v jq >/dev/null || { echo "::error::jq not available on runner"; exit 1; }
           command -v curl >/dev/null || { echo "::error::curl not available on runner"; exit 1; }
+          date -d @0 >/dev/null 2>&1 || { echo "::error::GNU date -d not available on runner (BSD/macOS not supported)"; exit 1; }
 
           # Validate numeric input from workflow_dispatch — a non-numeric
           # min_age_days would crash later at `$age_days -lt $MIN_AGE_DAYS`
@@ -92,7 +96,7 @@ jobs:
           # branch and skip the security check entirely.
           name_check=$(git diff --name-only --no-renames "${base_ref}...HEAD" -- package-lock.json) \
             || { echo "::error::git diff --name-only against ${base_ref} failed"; exit 1; }
-          if ! echo "$name_check" | grep -q .; then
+          if [ -z "$name_check" ]; then
             echo "No package-lock.json changes detected"
             exit 0
           fi
@@ -106,7 +110,7 @@ jobs:
           # node_modules won't be extracted cleanly; both are uncommon in
           # practice given npm v7+'s aggressive hoisting.
           new_packages=$(git diff --no-renames "${base_ref}...HEAD" -- package-lock.json \
-            | grep '^+' | grep '"resolved"' \
+            | grep '^+.*"resolved"' \
             | sed -n \
               -e 's|.*https://registry.npmjs.org/\(@[^/]*/[^/]*\)/-/.*|\1|p' \
               -e 's|.*https://registry.npmjs.org/\([^@][^/]*\)/-/.*|\1|p' \
@@ -182,8 +186,10 @@ jobs:
                 # --retry-all-errors already retries 429; if we still got
                 # here, rate limiting has exhausted retries. Log distinctly
                 # from generic "unreachable" so it's diagnosable, then fall
-                # through to the same fail-closed transient path.
-                echo "::warning::${pkg} — rate-limited by npm registry (429); --retry exhausted"
+                # through to the same fail-closed transient path. Warning
+                # goes to stderr so the caller's `$(fetch_publish_time ...)`
+                # capture doesn't swallow the annotation.
+                echo "::warning::${pkg} — rate-limited by npm registry (429); --retry exhausted" >&2
                 return 2
                 ;;
               *)
@@ -218,8 +224,11 @@ jobs:
             # structure (npm 7+). CI pins Node 20+ / npm 10+, so we'll always
             # emit v3 lockfiles; a v1 lockfile would store packages under
             # `.dependencies` and those entries would miss this lookup.
+            # `|| true` so a malformed/unparseable lockfile yields a clean
+            # per-package skip rather than aborting the whole run under
+            # `set -e`. The downstream `-z "$version"` branch handles it.
             version=$(jq -r --arg p "node_modules/${pkg}" \
-              '.packages[$p].version // empty' package-lock.json)
+              '.packages[$p].version // empty' package-lock.json 2>/dev/null || true)
             if [ -z "$version" ]; then
               echo "::warning::${pkg} — could not determine installed version from lockfile (skipped)"
               echo "| \`${pkg}\` | — | — | :warning: skipped (no version in lockfile) |" >> "$GITHUB_STEP_SUMMARY"
