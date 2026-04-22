@@ -35,7 +35,10 @@ Replace `lv_live_xxx` with your actual API key. The key must have the appropriat
 | `list_qurls` | List active QURLs with optional pagination | `qurl:read` |
 | `get_qurl` | Get details of a specific QURL by resource ID | `qurl:read` |
 | `delete_qurl` | Revoke a QURL, immediately invalidating the link | `qurl:write` |
-| `extend_qurl` | Extend the expiration of an active QURL | `qurl:write` |
+| `extend_qurl` | Extend the expiration of an active QURL (alias for `update_qurl`) | `qurl:write` |
+| `update_qurl` | Update expiration, tags, or description on an active QURL | `qurl:write` |
+| `mint_link` | Mint a new access link for an existing protected resource | `qurl:write` |
+| `batch_create_qurls` | Create multiple QURLs in a single call | `qurl:write` |
 
 ## Available Resources
 
