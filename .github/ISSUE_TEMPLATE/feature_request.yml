@@ -1,0 +1,48 @@
+name: Feature Request
+description: Suggest an idea for this MCP server
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      # Rubric wording is feature-shaped (describes ABSENCE, not
+      # failure) — distinct from bug_report.yml where critical
+      # describes harm from an existing defect. Keeping the four
+      # level names in lockstep across both forms; only the
+      # descriptions differ.
+      description: |
+        - **critical** — unblocks a committed delivery, closes a compliance/security gap, required for a live customer
+        - **high** — significant user value, blocks meaningful follow-on work
+        - **medium** — standard improvement, non-urgent
+        - **low** — polish, speculative, future
+      options:
+        - critical
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem would this feature solve?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Mockups, related issues, links to prior discussion.

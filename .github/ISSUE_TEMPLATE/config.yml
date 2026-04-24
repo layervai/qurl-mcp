@@ -1,0 +1,11 @@
+# `blank_issues_enabled: false` forces reporters through the bug-report
+# or feature-request forms, which carry a required Priority dropdown.
+# GitHub blocks blank-issue creation at the UI before any workflow
+# runs — the enforcement fail path is for issues that DO materialize
+# (e.g. API-filed) without a priority label. Better to prevent the
+# blank-issue state than to rely on surfacing it after creation.
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/layervai/qurl-mcp/security/advisories/new
+    about: Do NOT open a public bug report for security issues. Private disclosure via GitHub Security Advisory.

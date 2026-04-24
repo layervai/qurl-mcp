@@ -1,0 +1,38 @@
+# Issue-form schema validation
+# Thin shim calling shared reusable workflow.
+# Source: https://github.com/layervai/ops-routines-workflows/blob/main/.github/workflows/validate-issue-templates.yml
+#
+# The canonical check-jsonschema dispatch logic (forms vs config.yml)
+# lives in the reusable. A malformed form + `blank_issues_enabled:
+# false` silently hides issue creation until an external reporter
+# flags the breakage — this reusable fences that at PR time for every
+# repo in the fleet with identical version pins.
+name: Validate issue templates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/validate-issue-templates.yml"
+  pull_request:
+    paths:
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/workflows/validate-issue-templates.yml"
+
+# Deliberately NO caller-side concurrency block. The reusable's
+# concurrency group evaluates `${{ github.workflow }}-…` against the
+# CALLER'S workflow name at runtime — a caller-side block using the
+# same key would collide with itself and fail the run at startup
+# before any job materializes (hit this in layervai/nhp#1307). The
+# issue-priority.yml reusable uses a literal prefix, which is why
+# a caller-side concurrency block works there. Tracked for fix at
+# the reusable side as layervai/ops-routines#39.
+# The reusable handles deduplication itself.
+
+permissions:
+  contents: read
+
+jobs:
+  validate-templates:
+    uses: layervai/ops-routines-workflows/.github/workflows/validate-issue-templates.yml@39fcb54fc36ea7b6032e138bd8b57647f2bb32f0 # v0.4.0

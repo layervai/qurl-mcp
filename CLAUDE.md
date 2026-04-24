@@ -181,6 +181,12 @@ feat(tools)!: rename resolve_qurl to resolve tool
 | `ci` | GitHub Actions workflows |
 | `deps` | Dependencies |
 
+> Keep this table aligned with the Component dropdown in
+> `.github/ISSUE_TEMPLATE/bug_report.yml`. Convention only (not CI-
+> enforced in this repo); add a new scope to both places in the same
+> PR. The dropdown's `other` option is a reporter-UX escape hatch —
+> do NOT add it here (it's not a valid commit scope).
+
 ## API Spec Maintenance
 
 The repository includes an API spec drift detection system:
