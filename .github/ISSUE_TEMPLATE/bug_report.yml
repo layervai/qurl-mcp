@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a bug to help us improve. Do NOT use this for security vulnerabilities — report via GitHub Security Advisory.
+description: Report a bug to help us improve. Do NOT use this for security vulnerabilities.
 title: "[BUG] "
 labels: ["bug"]
 body:
