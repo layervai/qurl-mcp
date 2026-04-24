@@ -1,0 +1,53 @@
+# Issue Priority Enforcement
+# Thin shim calling shared reusable workflow.
+# Source: https://github.com/layervai/ops-routines-workflows/blob/main/.github/workflows/issue-priority.yml
+#
+# Matching form templates live in .github/ISSUE_TEMPLATE/ alongside this
+# file — GitHub does not allow cross-repo issue-template inheritance.
+name: Issue priority enforcement
+
+on:
+  issues:
+    types: [opened, reopened, edited, labeled, unlabeled]
+
+# Coalesce bursts on the same issue. Redundant with the reusable's own
+# concurrency group (same key shape), but mirrors the dep-age-check
+# shim convention so a future ref bump that accidentally drops the
+# reusable's concurrency doesn't silently remove all deduplication.
+#
+# `cancel-in-progress: false` — serialize rather than cancel. The
+# reusable uses `setLabels` (atomic PUT), so mid-flight cancellation
+# is safe today, but a future reusable that swaps labels non-
+# atomically (remove old → add new) would be vulnerable to a
+# cancelled run leaving an issue with no priority label, which would
+# then trip the enforcement fail path. Runs are bounded at 2 minutes;
+# queueing is cheap compared to the silent-drop failure mode.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  enforce-priority:
+    # Shim-level defense-in-depth against label-event recursion. The
+    # reusable applies priority labels, which emits `labeled` events
+    # that would re-trigger this workflow. GitHub's GITHUB_TOKEN-based
+    # identity suppression handles the common case, AND the reusable
+    # guards with `if: sender.type != 'Bot'`. This outer `if:` mirrors
+    # that guard at the caller so a future ref bump that silently
+    # drops the reusable's guard (or switches it to a PAT/App token,
+    # which bypasses GITHUB_TOKEN suppression) can't fully defeat
+    # loop prevention.
+    #
+    # Side effect: issues OPENED by `github-actions[bot]` are exempt
+    # from priority enforcement at creation time. Subsequent human
+    # `edited` / `labeled` events re-engage enforcement (not sticky).
+    # Other bots (dependabot, renovate, etc.) pass this guard but the
+    # reusable's own `sender.type != 'Bot'` check short-circuits them
+    # before setFailed — net effect is a near-instant no-op run.
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    uses: layervai/ops-routines-workflows/.github/workflows/issue-priority.yml@5f1eb1a94cb7e222fb7a7b0610e3bd8293eeb58b # v0.3.0
+    permissions:
+      issues: write

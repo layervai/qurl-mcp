@@ -1,0 +1,116 @@
+name: Bug Report
+description: Report a bug to help us improve. Do NOT use this for security vulnerabilities — report via GitHub Security Advisory.
+title: "[BUG] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > **Security vulnerabilities: stop.** Report privately via [GitHub Security Advisory](https://github.com/layervai/qurl-mcp/security/advisories/new) or email `security@layerv.ai`. Do NOT open a public issue.
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: |
+        - **critical** — production outage potential, data loss risk, live-customer breakage
+        - **high** — significant user impact, blocker for other work, correctness bug in shipped feature
+        - **medium** — standard bug, non-urgent
+        - **low** — polish, minor fix, tech debt
+      options:
+        - critical
+        - high
+        - medium
+        - low
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Include the MCP client (Claude Desktop, Cursor, etc.), the prompt or tool call, and any config that triggers the bug.
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      # Keep this list aligned with the Scopes table in CLAUDE.md,
+      # EXCEPT for `other` — that's a reporter-UX escape hatch, not a
+      # valid commit scope. Adding a new scope? Update both places in
+      # the same PR. Not enforced at CI here; convention only.
+      description: Match one of the commit scopes in CLAUDE.md (or pick `other` for cross-cutting).
+      options:
+        - tools
+        - client
+        - resources
+        - prompts
+        - ci
+        - deps
+        - other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      description: Run `npm list @layerv/qurl-mcp` or check the installed version in your MCP client config.
+      placeholder: e.g. 0.3.x
+    validations:
+      required: true
+  - type: input
+    id: mcp_client
+    attributes:
+      label: MCP client
+      description: Which client is invoking the server?
+      placeholder: e.g. Claude Desktop 1.0, Cursor, custom
+    validations:
+      required: true
+  - type: input
+    id: node_version
+    attributes:
+      label: Node version
+      placeholder: e.g. 20.x (paste from `node --version`)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: e.g. macOS 15, Ubuntu 24.04, Windows 11
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error output
+      description: |
+        Paste the MCP-client-side error, the server-side stdio transport error, and any stack trace.
+        **Redact before pasting:** bearer tokens, API keys (`lv_live_…` / `lv_test_…`), and customer identifiers.
+      # No `render:` — `render: shell` shell-highlights content, which
+      # miscolors TS stack traces and JSON-structured log lines.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Screenshots, related issues, prior discussion, anything else worth knowing.
