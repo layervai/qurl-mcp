@@ -74,7 +74,7 @@ describe("extendQurlTool", () => {
       expect(mockExtend).toHaveBeenCalledWith("r_extend1", { extend_by: "48h" });
     });
 
-    it("returns updated QURL data as formatted JSON", async () => {
+    it("returns updated qURL data as formatted JSON", async () => {
       const mockExtend = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ extendQURL: mockExtend });
       const tool = extendQurlTool(client);
