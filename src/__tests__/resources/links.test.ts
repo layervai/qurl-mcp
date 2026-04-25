@@ -28,7 +28,7 @@ describe("linksResource", () => {
 
     it("has a name", () => {
       const resource = linksResource(makeMockClient());
-      expect(resource.name).toBe("Active QURL Links");
+      expect(resource.name).toBe("Active qURL Links");
     });
 
     it("has correct mimeType", () => {

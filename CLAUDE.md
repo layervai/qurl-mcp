@@ -47,7 +47,7 @@ Follow this process for all code changes:
 
 ## Project Overview
 
-QURL MCP Server is a TypeScript [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes QURL operations as tools for AI agents. It uses stdio transport and communicates with the QURL API.
+qURL MCP Server is a TypeScript [Model Context Protocol](https://modelcontextprotocol.io/) server that exposes qURL operations as tools for AI agents. It uses stdio transport and communicates with the qURL API.
 
 ## Architecture
 
@@ -56,7 +56,7 @@ qurl-mcp/
 ├── src/
 │   ├── index.ts           # Entry point, env validation, stdio transport
 │   ├── server.ts          # MCP server factory, tool/resource/prompt registration
-│   ├── client.ts          # TypeScript QURL API client
+│   ├── client.ts          # TypeScript qURL API client
 │   ├── tools/
 │   │   ├── _shared.ts       # resourceIdSchema, zodErrorToToolResult
 │   │   ├── create-qurl.ts
@@ -107,7 +107,7 @@ npm run format
 | Variable | Required | Description | Default |
 |----------|----------|-------------|---------|
 | `QURL_API_KEY` | Yes | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes | — |
-| `QURL_API_URL` | No | QURL API base URL | `https://api.layerv.ai` |
+| `QURL_API_URL` | No | qURL API base URL | `https://api.layerv.ai` |
 
 ## MCP Usage
 
@@ -129,13 +129,13 @@ npm run format
 |------|---------------|-------------|
 | `create_qurl` | `qurl:write` | Create a protected link |
 | `resolve_qurl` | `qurl:resolve` | Resolve token + open firewall |
-| `list_qurls` | `qurl:read` | List QURLs with filtering |
-| `get_qurl` | `qurl:read` | Get QURL details |
-| `delete_qurl` | `qurl:write` | Revoke a QURL |
+| `list_qurls` | `qurl:read` | List qURLs with filtering |
+| `get_qurl` | `qurl:read` | Get qURL details |
+| `delete_qurl` | `qurl:write` | Revoke a qURL |
 | `extend_qurl` | `qurl:write` | Extend expiration (shorthand alias for `update_qurl`) |
 | `update_qurl` | `qurl:write` | Update expiration, tags, description |
 | `mint_link` | `qurl:write` | Mint a new access link for an existing resource |
-| `batch_create_qurls` | `qurl:write` | Create multiple QURLs at once |
+| `batch_create_qurls` | `qurl:write` | Create multiple qURLs at once |
 
 ## Commit Convention (Release Please)
 

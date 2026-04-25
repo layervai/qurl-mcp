@@ -65,7 +65,7 @@ describe("deleteQurlTool", () => {
 
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
-      expect(result.content[0].text).toBe("QURL r_abc123 has been revoked.");
+      expect(result.content[0].text).toBe("qURL r_abc123 has been revoked.");
     });
 
     it("propagates client errors", async () => {

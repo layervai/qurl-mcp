@@ -14,7 +14,7 @@ describe("createQurlTool", () => {
     it("has a description", () => {
       const tool = createQurlTool(makeMockClient());
       expect(tool.description).toBeTruthy();
-      expect(tool.description).toContain("QURL");
+      expect(tool.description).toContain("qURL");
     });
   });
 

@@ -8,7 +8,7 @@ export const listQurlsSchema = z.object({
     .min(1)
     .max(100)
     .optional()
-    .describe("Maximum number of QURLs to return (default: 20)"),
+    .describe("Maximum number of qURLs to return (default: 20)"),
   cursor: z.string().optional().describe("Pagination cursor from a previous response"),
   // Plain string (not z.enum) because the API accepts comma-separated values like "active,revoked"
   status: z
@@ -43,7 +43,7 @@ export function listQurlsTool(client: IQURLClient) {
   return {
     name: "list_qurls",
     description:
-      "List QURLs with optional filtering by status, date ranges, and search query.",
+      "List qURLs with optional filtering by status, date ranges, and search query.",
     inputSchema: listQurlsSchema,
     handler: async (input: z.infer<typeof listQurlsSchema>) => {
       const result = await client.listQURLs(input);

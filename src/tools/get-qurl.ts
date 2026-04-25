@@ -10,8 +10,8 @@ export function getQurlTool(client: IQURLClient) {
   return {
     name: "get_qurl",
     description:
-      "Get details of a QURL resource and its access tokens. " +
-      "Accepts either a resource ID (r_ prefix) or a QURL display ID (q_ prefix).",
+      "Get details of a qURL resource and its access tokens. " +
+      "Accepts either a resource ID (r_ prefix) or a qURL display ID (q_ prefix).",
     inputSchema: getQurlSchema,
     handler: async (input: z.infer<typeof getQurlSchema>) => {
       const result = await client.getQURL(input.resource_id);
