@@ -1,5 +1,5 @@
 /**
- * QURL API client for the MCP server.
+ * qURL API client for the MCP server.
  */
 
 export interface QURLClientConfig {
@@ -202,7 +202,7 @@ export interface BatchCreateOutput {
 
 export interface IQURLClient {
   /**
-   * Create a new QURL. Returns `CreateQURLData` — the ephemeral create-time
+   * Create a new qURL. Returns `CreateQURLData` — the ephemeral create-time
    * shape that carries `qurl_link` (shown only once) and `qurl_id`. This is
    * intentionally distinct from the `QURL` shape returned by `getQURL` /
    * `listQURLs`, which does not include `qurl_link`.

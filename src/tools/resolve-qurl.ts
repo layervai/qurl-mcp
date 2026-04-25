@@ -5,14 +5,14 @@ export const resolveQurlSchema = z.object({
   access_token: z
     .string()
     .min(1)
-    .describe("The access token from a QURL link (e.g., at_k8xqp9h2sj9lx7r4a)"),
+    .describe("The access token from a qURL link (e.g., at_k8xqp9h2sj9lx7r4a)"),
 });
 
 export function resolveQurlTool(client: IQURLClient) {
   return {
     name: "resolve_qurl",
     description:
-      "Resolve a QURL access token to get the target URL and open firewall access. " +
+      "Resolve a qURL access token to get the target URL and open firewall access. " +
       "After resolution, the target URL is accessible from your IP for the duration " +
       "specified in access_grant.expires_in seconds.",
     inputSchema: resolveQurlSchema,

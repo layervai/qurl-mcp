@@ -78,7 +78,7 @@ jobs:
           esac
 
           # Overall status: fail if either lint or test failed
-          HEADER="QURL MCP Build"
+          HEADER="qURL MCP Build"
           if [[ "$TEST_RESULT" == "success" && "$LINT_RESULT" == "success" ]]; then
             COLOR="#36a64f"; EMOJI=":white_check_mark:"; STATUS_TEXT="successful"
           elif [[ "$TEST_RESULT" == "failure" || "$LINT_RESULT" == "failure" ]]; then

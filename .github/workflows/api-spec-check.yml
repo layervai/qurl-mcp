@@ -102,7 +102,7 @@ jobs:
           cat > /tmp/issue-body.md <<'BODY_EOF'
           ## API Spec Drift Detected
 
-          The QURL API OpenAPI specification has changed since the last snapshot.
+          The qURL API OpenAPI specification has changed since the last snapshot.
           BODY_EOF
 
           # Append dynamic content safely (no shell expansion)

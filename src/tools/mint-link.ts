@@ -41,8 +41,8 @@ export function mintLinkTool(client: IQURLClient) {
   return {
     name: "mint_link",
     description:
-      "Mint a new access link for an existing QURL resource. " +
-      "Accepts either a resource ID (r_ prefix) or QURL display ID (q_ prefix). " +
+      "Mint a new access link for an existing qURL resource. " +
+      "Accepts either a resource ID (r_ prefix) or qURL display ID (q_ prefix). " +
       "Use this to generate additional access links without creating a new resource. " +
       "Do not provide both expires_in and expires_at.",
     inputSchema: mintLinkBaseSchema,

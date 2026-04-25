@@ -42,12 +42,12 @@ export const accessPolicySchema = z.object({
 });
 
 export const createQurlSchema = z.object({
-  target_url: z.string().url().describe("The URL to protect with QURL"),
+  target_url: z.string().url().describe("The URL to protect with qURL"),
   label: z
     .string()
     .max(500)
     .optional()
-    .describe("Human-readable label identifying who this QURL is for (max 500 chars)"),
+    .describe("Human-readable label identifying who this qURL is for (max 500 chars)"),
   expires_in: z
     .string()
     .min(1)
@@ -67,14 +67,14 @@ export const createQurlSchema = z.object({
     .optional()
     .describe('How long access lasts after clicking (e.g., "1h")'),
   custom_domain: z.string().optional().describe("Custom domain to assign to the auto-created resource"),
-  access_policy: accessPolicySchema.optional().describe("Access control policy for the QURL"),
+  access_policy: accessPolicySchema.optional().describe("Access control policy for the qURL"),
 });
 
 export function createQurlTool(client: IQURLClient) {
   return {
     name: "create_qurl",
     description:
-      "Create a QURL - a secure, policy-bound link to a protected resource. " +
+      "Create a qURL - a secure, policy-bound link to a protected resource. " +
       "The returned qurl_link is ephemeral (shown once) and should be shared immediately.",
     inputSchema: createQurlSchema,
     handler: async (input: z.infer<typeof createQurlSchema>) => {

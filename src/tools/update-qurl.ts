@@ -54,8 +54,8 @@ export function updateQurlTool(client: IQURLClient) {
   return {
     name: "update_qurl",
     description:
-      "Update a QURL - extend expiration, set an absolute expiry, update tags, or change the description. " +
-      "Accepts either a resource ID (r_ prefix) or QURL display ID (q_ prefix). " +
+      "Update a qURL - extend expiration, set an absolute expiry, update tags, or change the description. " +
+      "Accepts either a resource ID (r_ prefix) or qURL display ID (q_ prefix). " +
       "Do not provide both extend_by and expires_at. At least one update field is required.",
     // Base shape for MCP tool registration; refinements run in the handler
     inputSchema: updateQurlBaseSchema,

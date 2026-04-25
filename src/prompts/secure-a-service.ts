@@ -2,11 +2,11 @@ import { z } from "zod";
 import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 
 export const secureAServiceArgs = {
-  target_url: z.string().describe("The URL of the service to protect with QURL"),
+  target_url: z.string().describe("The URL of the service to protect with qURL"),
   label: z
     .string()
     .optional()
-    .describe("Human-readable label identifying who this QURL is for"),
+    .describe("Human-readable label identifying who this qURL is for"),
   description: z
     .string()
     .optional()
@@ -66,7 +66,7 @@ export function secureAServicePrompt() {
   return {
     name: "secure-a-service",
     description:
-      "Guide through creating a QURL to protect a service with appropriate security policies " +
+      "Guide through creating a qURL to protect a service with appropriate security policies " +
       "(expiration, session limits, IP/geo allowlists, AI-agent blocking).",
     args: secureAServiceArgs,
     handler: (args: SecureAServiceInput): GetPromptResult => {
@@ -120,7 +120,7 @@ export function secureAServicePrompt() {
         : [];
 
       const text = [
-        `Create a QURL to protect the following service: ${args.target_url}`,
+        `Create a qURL to protect the following service: ${args.target_url}`,
         ...(args.label ? [`Label: ${args.label}`] : []),
         ...(args.description ? [`Description: ${args.description}`] : []),
         "",
@@ -130,7 +130,7 @@ export function secureAServicePrompt() {
         ...policyLines,
         ...descriptionFollowUp,
         "",
-        "After creating the QURL, explain the returned qurl_link and how to share it securely. " +
+        "After creating the qURL, explain the returned qurl_link and how to share it securely. " +
           "Note that the qurl_link is ephemeral and shown only once — it should be shared immediately. " +
           "Note the expiration time and any access restrictions that were applied.",
       ].join("\n");

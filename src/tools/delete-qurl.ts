@@ -11,14 +11,14 @@ export const deleteQurlSchema = z.object({
     .min(1)
     .startsWith("r_", "delete_qurl only accepts resource IDs (r_ prefix). Use update_qurl or mint_link for q_ IDs.")
     .describe(
-      "The resource ID (must start with r_). delete_qurl does not accept q_ (QURL display) IDs.",
+      "The resource ID (must start with r_). delete_qurl does not accept q_ (qURL display) IDs.",
     ),
 });
 
 export function deleteQurlTool(client: IQURLClient) {
   return {
     name: "delete_qurl",
-    description: "Revoke/delete a QURL. This immediately invalidates the link.",
+    description: "Revoke/delete a qURL. This immediately invalidates the link.",
     inputSchema: deleteQurlSchema,
     handler: async (input: z.infer<typeof deleteQurlSchema>) => {
       await client.deleteQURL(input.resource_id);
@@ -26,7 +26,7 @@ export function deleteQurlTool(client: IQURLClient) {
         content: [
           {
             type: "text" as const,
-            text: `QURL ${input.resource_id} has been revoked.`,
+            text: `qURL ${input.resource_id} has been revoked.`,
           },
         ],
       };

@@ -4,7 +4,7 @@ export function auditLinksPrompt() {
   return {
     name: "audit-links",
     description:
-      "Review all active QURLs and identify expiring links, token counts, missing metadata, or potential issues.",
+      "Review all active qURLs and identify expiring links, token counts, missing metadata, or potential issues.",
     handler: (): GetPromptResult => {
       return {
         messages: [
@@ -13,10 +13,10 @@ export function auditLinksPrompt() {
             content: {
               type: "text",
               text: [
-                "Audit my active QURL links. Follow these steps:",
+                "Audit my active qURL links. Follow these steps:",
                 "",
-                "1. Use the list_qurls tool to fetch all active QURLs.",
-                "2. For each QURL, collect facts:",
+                "1. Use the list_qurls tool to fetch all active qURLs.",
+                "2. For each qURL, collect facts:",
                 "   - Is it expiring within the next 24 hours? (flag as expiring-soon)",
                 "   - How many access tokens does it have (qurl_count)?",
                 "   - Is it missing tags for organization? (flag as untagged)",

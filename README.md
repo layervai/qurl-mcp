@@ -2,11 +2,13 @@
 
 [![npm version](https://img.shields.io/npm/v/@layerv/qurl-mcp.svg)](https://www.npmjs.com/package/@layerv/qurl-mcp)
 
-MCP server for QURL secure link management.
+MCP server for qURL™ secure link management.
+
+> **Quantum URL (qURL)** · The internet has a hidden layer. This is how you enter.
 
 ## What it does
 
-QURL MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that lets AI agents (Claude, GPT, Cursor, etc.) create, resolve, list, and manage QURL secure links natively. It connects to the QURL API over stdio transport, so any MCP-compatible client can use it without custom integration code.
+qURL MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that lets AI agents (Claude, GPT, Cursor, etc.) create, resolve, list, and manage qURL secure links natively. It connects to the qURL API over stdio transport, so any MCP-compatible client can use it without custom integration code.
 
 ## Quick Start
 
@@ -32,27 +34,27 @@ Replace `lv_live_xxx` with your actual API key. The key must have the appropriat
 |------|-------------|----------------|
 | `create_qurl` | Create a secure, policy-bound link to a protected resource | `qurl:write` |
 | `resolve_qurl` | Resolve an access token to get the target URL and open firewall access | `qurl:resolve` |
-| `list_qurls` | List active QURLs with optional pagination | `qurl:read` |
-| `get_qurl` | Get details of a specific QURL by resource ID | `qurl:read` |
-| `delete_qurl` | Revoke a QURL, immediately invalidating the link | `qurl:write` |
-| `extend_qurl` | Extend the expiration of an active QURL (alias for `update_qurl`) | `qurl:write` |
-| `update_qurl` | Update expiration, tags, or description on an active QURL | `qurl:write` |
+| `list_qurls` | List active qURLs with optional pagination | `qurl:read` |
+| `get_qurl` | Get details of a specific qURL by resource ID | `qurl:read` |
+| `delete_qurl` | Revoke a qURL, immediately invalidating the link | `qurl:write` |
+| `extend_qurl` | Extend the expiration of an active qURL (alias for `update_qurl`) | `qurl:write` |
+| `update_qurl` | Update expiration, tags, or description on an active qURL | `qurl:write` |
 | `mint_link` | Mint a new access link for an existing protected resource | `qurl:write` |
-| `batch_create_qurls` | Create multiple QURLs in a single call | `qurl:write` |
+| `batch_create_qurls` | Create multiple qURLs in a single call | `qurl:write` |
 
 ## Available Resources
 
 | URI | Name | Description |
 |-----|------|-------------|
-| `qurl://links` | Active QURL Links | List of all active QURL links |
-| `qurl://usage` | QURL Usage & Quota | Current quota and usage information |
+| `qurl://links` | Active qURL Links | List of all active qURL links |
+| `qurl://usage` | qURL Usage & Quota | Current quota and usage information |
 
 ## Configuration
 
 | Environment Variable | Required | Description | Default |
 |---------------------|----------|-------------|---------|
 | `QURL_API_KEY` | Yes | API key with appropriate scopes (`qurl:read`, `qurl:write`, `qurl:resolve`) | -- |
-| `QURL_API_URL` | No | QURL API base URL | `https://api.layerv.ai` |
+| `QURL_API_URL` | No | qURL API base URL | `https://api.layerv.ai` |
 
 ## Development
 

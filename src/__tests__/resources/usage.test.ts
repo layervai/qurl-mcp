@@ -33,7 +33,7 @@ describe("usageResource", () => {
 
     it("has a name", () => {
       const resource = usageResource(makeMockClient());
-      expect(resource.name).toBe("QURL Usage & Quota");
+      expect(resource.name).toBe("qURL Usage & Quota");
     });
 
     it("has correct mimeType", () => {

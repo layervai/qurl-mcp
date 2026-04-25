@@ -9,9 +9,9 @@ export function linksResource(client: IQURLClient) {
   const mimeType = "application/json";
   return {
     uri,
-    name: "Active QURL Links",
+    name: "Active qURL Links",
     description:
-      `Snapshot of up to ${LINKS_RESOURCE_LIMIT} active QURL links (most recent first). ` +
+      `Snapshot of up to ${LINKS_RESOURCE_LIMIT} active qURL links (most recent first). ` +
       "For full pagination use the list_qurls tool.",
     mimeType,
     handler: async () => {

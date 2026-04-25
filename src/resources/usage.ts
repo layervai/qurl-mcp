@@ -5,7 +5,7 @@ export function usageResource(client: IQURLClient) {
   const mimeType = "application/json";
   return {
     uri,
-    name: "QURL Usage & Quota",
+    name: "qURL Usage & Quota",
     description: "Current quota and usage information",
     mimeType,
     handler: async () => {

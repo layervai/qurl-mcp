@@ -1,7 +1,7 @@
 {
   "name": "@layerv/qurl-mcp",
   "version": "0.1.2",
-  "description": "MCP server for QURL - secure link management for AI agents",
+  "description": "MCP server for qURL™ — secure link management for AI agents. Quantum URL is how you enter the hidden layer of the internet.",
   "type": "module",
   "bin": {
     "qurl-mcp": "./dist/index.js"

@@ -7,14 +7,14 @@ export const batchCreateSchema = z.object({
     .array(createQurlSchema)
     .min(1)
     .max(100)
-    .describe("Array of QURL creation requests (1-100 items)"),
+    .describe("Array of qURL creation requests (1-100 items)"),
 });
 
 export function batchCreateTool(client: IQURLClient) {
   return {
     name: "batch_create_qurls",
     description:
-      "Create multiple QURLs in a single request. " +
+      "Create multiple qURLs in a single request. " +
       "Returns per-item results including any errors for partial failures. " +
       "The response sets isError=true when one or more items fail so agents can branch on partial failure without parsing the JSON.",
     inputSchema: batchCreateSchema,
