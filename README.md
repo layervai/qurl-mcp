@@ -2,7 +2,9 @@
 
 [![npm version](https://img.shields.io/npm/v/@layerv/qurl-mcp.svg)](https://www.npmjs.com/package/@layerv/qurl-mcp)
 
-MCP server for qURL secure link management.
+MCP server for qURL™ secure link management.
+
+> **Quantum URL (qURL)** · The internet has a hidden layer. This is how you enter.
 
 ## What it does
 
