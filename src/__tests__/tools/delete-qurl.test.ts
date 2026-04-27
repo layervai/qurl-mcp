@@ -66,7 +66,7 @@ describe("deleteQurlTool", () => {
 
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
-      expect(result.content[0].text).toBe("qURL r_abc123 has been revoked.");
+      expect(result.content[0].text).toBe("qURL r_abc123 is revoked.");
     });
 
     it("propagates client errors", async () => {
@@ -86,11 +86,11 @@ describe("deleteQurlTool", () => {
 
       const result = await tool.handler({ resource_id: "r_abc123" });
 
-      expect(result.content[0].text).toBe("qURL r_abc123 has been revoked.");
+      expect(result.content[0].text).toBe("qURL r_abc123 is revoked.");
       expect(result.structuredContent).toEqual({
         resource_id: "r_abc123",
         revoked: true,
-        message: "qURL r_abc123 has been revoked.",
+        message: "qURL r_abc123 is revoked.",
       });
     });
 

@@ -50,7 +50,7 @@ export function deleteQurlTool(client: IQURLClient) {
       const payload = {
         resource_id: input.resource_id,
         revoked: true as const,
-        message: `qURL ${input.resource_id} has been revoked.`,
+        message: `qURL ${input.resource_id} is revoked.`,
       };
       return {
         content: [
