@@ -48,6 +48,13 @@ export function deleteQurlTool(client: IQURLClient) {
         // so the tool is genuinely idempotent, but expose
         // `was_already_revoked: true` in the payload so defensive
         // agents can branch when they care.
+        //
+        // Intentionally checks status only, not `code`. A 404 with a
+        // non-JSON body (e.g. an HTML error page from a proxy in front
+        // of the API) lands here as `code: "parse_error"` — the
+        // resource still isn't live, so treating it as already-revoked
+        // is the right behavior; defensive agents see that via the
+        // `was_already_revoked` flag.
         if (!(err instanceof QURLAPIError) || err.statusCode !== 404) throw err;
         wasAlreadyRevoked = true;
       }
