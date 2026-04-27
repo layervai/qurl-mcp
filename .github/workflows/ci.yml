@@ -50,13 +50,19 @@ jobs:
           tags: qurl-mcp:ci
       - name: Verify MCP introspection
         run: |
+          # Pipe stderr to a separate file so we can assert the
+          # introspection-only warning still prints. This guard exists because
+          # the deferred-auth refactor (PR #71) made the warning the only
+          # signal a misconfigured user gets that they're booting without an
+          # API key — a regression that silently strips it should fail CI.
           out=$(printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
             '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-            | docker run -i --rm qurl-mcp:ci 2>/dev/null)
+            | docker run -i --rm qurl-mcp:ci 2>/tmp/mcp-stderr)
           echo "$out" | grep -q '"create_qurl"' || { echo "tools/list missing create_qurl"; echo "$out"; exit 1; }
-          echo "MCP introspection OK"
+          grep -q "QURL_API_KEY is not set" /tmp/mcp-stderr || { echo "missing introspection-only warning on stderr"; cat /tmp/mcp-stderr; exit 1; }
+          echo "MCP introspection OK; warning printed as expected"
 
   notify:
     name: Notify

@@ -57,6 +57,53 @@ describe("QURLClient", () => {
     });
   });
 
+  describe("missing apiKey guard", () => {
+    // Locks in the contract: when QURL_API_KEY is unset (introspection-only
+    // mode), every API call must throw a typed missing_api_key error before
+    // any network request is issued. Removing this guard would silently fall
+    // through to a 401 from the server, masking the configuration problem.
+    it("throws missing_api_key with statusCode 0 when apiKey is empty", async () => {
+      const noKeyClient = new QURLClient({
+        apiKey: "",
+        baseURL: "https://api.test.com",
+      });
+      const mock = vi.fn();
+      vi.stubGlobal("fetch", mock);
+
+      await expect(noKeyClient.getQuota()).rejects.toMatchObject({
+        name: "QURLAPIError",
+        code: "missing_api_key",
+        statusCode: 0,
+      });
+      expect(mock).not.toHaveBeenCalled();
+    });
+
+    it("throws missing_api_key for every API method", async () => {
+      const noKeyClient = new QURLClient({
+        apiKey: "",
+        baseURL: "https://api.test.com",
+      });
+      vi.stubGlobal("fetch", vi.fn());
+
+      const calls: Array<() => Promise<unknown>> = [
+        () => noKeyClient.createQURL({ target_url: "https://example.com" }),
+        () => noKeyClient.getQURL("r_x"),
+        () => noKeyClient.listQURLs(),
+        () => noKeyClient.deleteQURL("r_x"),
+        () => noKeyClient.updateQURL("r_x", { extend_by: "1h" }),
+        () => noKeyClient.extendQURL("r_x", { extend_by: "1h" }),
+        () => noKeyClient.resolveQURL({ access_token: "at_x" }),
+        () => noKeyClient.getQuota(),
+        () => noKeyClient.mintLink("r_x"),
+        () => noKeyClient.batchCreate({ items: [{ target_url: "https://example.com" }] }),
+      ];
+
+      for (const call of calls) {
+        await expect(call()).rejects.toBeInstanceOf(QURLAPIError);
+      }
+    });
+  });
+
   describe("request headers", () => {
     it("sends Authorization bearer header on all requests", async () => {
       const mock = stubFetch({ data: {} });
