@@ -49,6 +49,13 @@ describe("TDQS tool metadata coverage", () => {
       it("sets openWorldHint=true (every tool talks to the qURL API)", () => {
         expect(tool.annotations.openWorldHint).toBe(true);
       });
+
+      it("keeps top-level title and annotations.title in sync", () => {
+        // Both fields are spec-distinct (different consumers), but every
+        // tool in this repo uses the same string for both. Lock that
+        // convention so a future divergence is intentional, not drift.
+        expect(tool.annotations.title).toBe(tool.title);
+      });
     });
   }
 
