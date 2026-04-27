@@ -51,20 +51,26 @@ jobs:
       - name: Verify MCP introspection
         run: |
           # Pipe stderr to a separate file so we can assert the
-          # introspection-only warning still prints. This guard exists because
-          # the deferred-auth refactor (PR #71) made the warning the only
+          # introspection-only warning still prints. The warning is the only
           # signal a misconfigured user gets that they're booting without an
-          # API key — a regression that silently strips it should fail CI.
+          # API key under the deferred-auth model; silently stripping it
+          # should fail CI.
+          # `timeout 30s` fails fast with a clear signal if the entrypoint
+          # hangs (e.g. an SDK notification-ordering bug) instead of letting
+          # the step run to the GitHub Actions default.
           out=$(printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
             '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-            | docker run -i --rm qurl-mcp:ci 2>/tmp/mcp-stderr)
-          # Assert every tool from the registered surface is exposed. A future
-          # change that drops one (e.g. mint_link, batch_create_qurls) would
-          # otherwise be caught only by a third-party probe.
+            | timeout 30s docker run -i --rm qurl-mcp:ci 2>/tmp/mcp-stderr)
+          # Match the JSON-RPC `name` field specifically. A loose grep on the
+          # tool name alone would pass when the tool only appears in another
+          # tool's description (e.g. update_qurl's description mentions
+          # extend_qurl), so dropping a tool from registration could go
+          # undetected. The MCP SDK emits minified JSON, so the literal
+          # "name":"<tool>" substring appears exactly once per registered tool.
           for tool in create_qurl resolve_qurl list_qurls get_qurl delete_qurl extend_qurl update_qurl mint_link batch_create_qurls; do
-            echo "$out" | grep -q "\"$tool\"" || { echo "tools/list missing $tool"; echo "$out"; exit 1; }
+            echo "$out" | grep -q "\"name\":\"$tool\"" || { echo "tools/list missing $tool (no \"name\":\"$tool\" match)"; echo "$out"; exit 1; }
           done
           grep -q "QURL_API_KEY is not set" /tmp/mcp-stderr || { echo "missing introspection-only warning on stderr"; cat /tmp/mcp-stderr; exit 1; }
           echo "MCP introspection OK; all 9 tools exposed; warning printed as expected"

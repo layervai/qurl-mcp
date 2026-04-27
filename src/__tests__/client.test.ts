@@ -79,9 +79,10 @@ describe("QURLClient", () => {
     });
 
     it("treats whitespace-only apiKey as missing", async () => {
-      // Defends against `QURL_API_KEY=" "` slipping past the constructor's
-      // truthy check and failing as a server-side 401 instead of the typed
-      // missing_api_key error.
+      // Defends against `QURL_API_KEY=" "` reaching `request()` as a
+      // non-empty string and failing as a server-side 401 instead of the
+      // typed missing_api_key error. The constructor's `.trim()` is the
+      // sole gate; any regression that drops it would re-open this hole.
       const wsClient = new QURLClient({
         apiKey: "   \t\n  ",
         baseURL: "https://api.test.com",
