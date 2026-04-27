@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.2.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.1.2...qurl-mcp-v0.2.0) (2026-04-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** TypeScript 6.0 no longer implicitly includes Node.js type definitions. Added explicit `"types": ["node"]` to tsconfig.json.
+* extend_qurl tool renamed to update_qurl. QURL response shape changed (removed qurl_link, access_count, metadata from get/list responses). Create endpoint path changed from /v1/qurl to /v1/qurls.
+
+### Features
+
+* align QURL type with API identity fix ([#37](https://github.com/layervai/qurl-mcp/issues/37)) ([fccf4f7](https://github.com/layervai/qurl-mcp/commit/fccf4f78c96d19f1f8dc82f1b6ac4e9227233b9f))
+* **ci:** add fleet issue-template + priority-enforcement pattern ([#63](https://github.com/layervai/qurl-mcp/issues/63)) ([58bd30d](https://github.com/layervai/qurl-mcp/commit/58bd30daf930fdf09c022924d800ba58b851a0db))
+* **deps:** upgrade TypeScript 5.x -&gt; 6.0.2 ([#50](https://github.com/layervai/qurl-mcp/issues/50)) ([e12b15f](https://github.com/layervai/qurl-mcp/commit/e12b15f368e27029abc720174c471dcab6ba16e9))
+* update client, tools, and prompts for latest API spec ([#28](https://github.com/layervai/qurl-mcp/issues/28)) ([535bbb3](https://github.com/layervai/qurl-mcp/commit/535bbb35909187a7493a029a9dacc6b9ca1bb36f))
+
+
+### Bug Fixes
+
+* **ci:** pin all GitHub Actions to commit SHAs ([#42](https://github.com/layervai/qurl-mcp/issues/42)) ([b2367f6](https://github.com/layervai/qurl-mcp/commit/b2367f6350c2eb328fba56536af115ed51d8225c))
+* **ci:** polish Slack notification — rename header, deduplicate, consistency ([#40](https://github.com/layervai/qurl-mcp/issues/40)) ([66d0969](https://github.com/layervai/qurl-mcp/commit/66d0969098cdac7ae0b4bcaed125b59d97f48ab2))
+
 ## [0.1.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.1.1...qurl-mcp-v0.1.2) (2026-03-11)
 
 
