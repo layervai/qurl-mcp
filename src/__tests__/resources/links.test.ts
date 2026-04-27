@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { QURLAPIError } from "../../client.js";
 import { linksResource } from "../../resources/links.js";
 import { makeMockClient, sampleQURL } from "../helpers.js";
 
@@ -102,6 +103,25 @@ describe("linksResource", () => {
       const resource = linksResource(client);
 
       await expect(resource.handler()).rejects.toThrow("Auth failed");
+    });
+
+    it("translates missing_api_key into a content block with error JSON instead of throwing", async () => {
+      // Smoke test asserting the withMissingApiKeyResource wrapping is in
+      // place. The wrapper itself is unit-tested in resources/_shared.test.ts;
+      // this asserts the resource-level UX matches the tool-level UX so a
+      // future refactor that drops the wrapper from one resource fails CI.
+      const mockList = vi
+        .fn()
+        .mockRejectedValue(new QURLAPIError(0, "missing_api_key", "QURL_API_KEY is not set."));
+      const client = makeMockClient({ listQURLs: mockList });
+      const resource = linksResource(client);
+
+      const result = await resource.handler();
+
+      expect(result.contents).toHaveLength(1);
+      expect(JSON.parse(result.contents[0].text)).toEqual({
+        error: { code: "missing_api_key", message: "QURL_API_KEY is not set." },
+      });
     });
   });
 });

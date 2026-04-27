@@ -53,7 +53,7 @@ Replace `lv_live_xxx` with your actual API key. The key must have the appropriat
 
 | Environment Variable | Required | Description | Default |
 |---------------------|----------|-------------|---------|
-| `QURL_API_KEY` | Yes for tool calls | API key with appropriate scopes (`qurl:read`, `qurl:write`, `qurl:resolve`). The server boots without it so MCP introspection (`tools/list`, `resources/list`, `prompts/list`) works for directory probes; tool invocations throw a typed `missing_api_key` error until the key is set. | -- |
+| `QURL_API_KEY` | Conditional (see description) | API key with appropriate scopes (`qurl:read`, `qurl:write`, `qurl:resolve`). The server boots without it so MCP introspection (`tools/list`, `resources/list`, `prompts/list`) works for directory probes — required only on the first tool call or resource read, where invocations surface a typed `missing_api_key` error until the key is set. | -- |
 | `QURL_API_URL` | No | qURL API base URL | `https://api.layerv.ai` |
 
 ## Docker

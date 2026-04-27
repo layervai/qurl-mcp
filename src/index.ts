@@ -21,7 +21,10 @@ if (!apiKey) {
   console.error(`Warning: ${MISSING_API_KEY_MESSAGE}`);
 }
 
-const baseURL = process.env.QURL_API_URL ?? "https://api.layerv.ai";
+// Trim symmetric with the apiKey path so a stray space in the URL doesn't
+// produce a confusing fetch failure (DNS or scheme parse error) instead of
+// being treated as unset.
+const baseURL = process.env.QURL_API_URL?.trim() || "https://api.layerv.ai";
 
 const client = new QURLClient({ apiKey, baseURL });
 const server = createServer(client, version);

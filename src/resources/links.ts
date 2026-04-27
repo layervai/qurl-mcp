@@ -1,4 +1,5 @@
 import type { IQURLClient } from "../client.js";
+import { withMissingApiKeyResource } from "./_shared.js";
 
 // Hard cap on the informational resource. Resource reads are snapshot-style —
 // callers that need full pagination should use the list_qurls tool directly.
@@ -14,11 +15,11 @@ export function linksResource(client: IQURLClient) {
       `Snapshot of up to ${LINKS_RESOURCE_LIMIT} active qURL links (most recent first). ` +
       "For full pagination use the list_qurls tool.",
     mimeType,
-    handler: async () => {
+    handler: withMissingApiKeyResource(uri, async () => {
       const result = await client.listQURLs({ limit: LINKS_RESOURCE_LIMIT });
       return {
         contents: [{ uri, mimeType, text: JSON.stringify(result.data) }],
       };
-    },
+    }),
   };
 }

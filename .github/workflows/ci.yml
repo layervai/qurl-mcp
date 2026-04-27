@@ -65,10 +65,18 @@ jobs:
           # `timeout 30s` fails fast with a clear signal if the entrypoint
           # hangs (e.g. an SDK notification-ordering bug) instead of letting
           # the step run to the GitHub Actions default.
+          # Probe asserts three things end-to-end:
+          #   1. tools/list exposes the full registered surface
+          #   2. boot-time stderr warning fires when QURL_API_KEY is unset
+          #   3. a tool invocation under introspection-only mode surfaces
+          #      the typed missing_api_key error as an isError content
+          #      block (not as a JSON-RPC transport error), locking in the
+          #      withMissingApiKeyHandler wrapper from tools/_shared.ts
           out=$(printf '%s\n' \
             '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
             '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_qurls","arguments":{}}}' \
             | timeout 30s docker run -i --rm qurl-mcp:ci 2>/tmp/mcp-stderr)
           # Match the JSON-RPC `name` field specifically. A loose grep on the
           # tool name alone would pass when the tool only appears in another
@@ -80,7 +88,13 @@ jobs:
             echo "$out" | grep -q "\"name\":\"$tool\"" || { echo "tools/list missing $tool (no \"name\":\"$tool\" match)"; echo "$out"; exit 1; }
           done
           grep -q "QURL_API_KEY is not set" /tmp/mcp-stderr || { echo "missing introspection-only warning on stderr"; cat /tmp/mcp-stderr; exit 1; }
-          echo "MCP introspection OK; all 9 tools exposed; warning printed as expected"
+          # Assert the tool/call response under no-key surfaces the typed
+          # error as content, not as a transport error. The wrapper returns
+          # `{ isError: true, content: [{ type: "text", text: "QURL_API_KEY is not set..." }] }`
+          # so we look for both markers.
+          echo "$out" | grep -q "\"isError\":true" || { echo "tools/call did not return isError content block"; echo "$out"; exit 1; }
+          echo "$out" | grep -q "QURL_API_KEY is not set" || { echo "tools/call response missing the actionable error message"; echo "$out"; exit 1; }
+          echo "MCP introspection OK; all 9 tools exposed; warning printed; tools/call surfaces missing_api_key as expected"
 
   notify:
     name: Notify
