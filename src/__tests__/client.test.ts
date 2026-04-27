@@ -78,12 +78,13 @@ describe("QURLClient", () => {
       expect(mock).not.toHaveBeenCalled();
     });
 
-    it("throws missing_api_key for every API method", async () => {
+    it("throws missing_api_key for every API method without issuing a network request", async () => {
       const noKeyClient = new QURLClient({
         apiKey: "",
         baseURL: "https://api.test.com",
       });
-      vi.stubGlobal("fetch", vi.fn());
+      const mock = vi.fn();
+      vi.stubGlobal("fetch", mock);
 
       const calls: Array<() => Promise<unknown>> = [
         () => noKeyClient.createQURL({ target_url: "https://example.com" }),
@@ -101,6 +102,9 @@ describe("QURLClient", () => {
       for (const call of calls) {
         await expect(call()).rejects.toBeInstanceOf(QURLAPIError);
       }
+      // Intent of this guard is "no network until the key is set" — assert it
+      // directly rather than just trusting that any QURLAPIError suffices.
+      expect(mock).not.toHaveBeenCalled();
     });
   });
 
