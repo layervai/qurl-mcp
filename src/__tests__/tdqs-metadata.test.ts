@@ -11,7 +11,9 @@ import {
 } from "./helpers.js";
 
 const tools = toolFactories.map((factory) => factory(makeMockClient()));
-const factoryByName = new Map(tools.map((tool, i) => [tool.name, toolFactories[i]]));
+const factoryByName = new Map(
+  toolFactories.map((factory) => [factory(makeMockClient()).name, factory] as const),
+);
 
 describe("TDQS tool metadata coverage", () => {
   for (const tool of tools) {

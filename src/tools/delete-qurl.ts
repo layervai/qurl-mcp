@@ -26,7 +26,7 @@ export function deleteQurlTool(client: IQURLClient) {
       "**This action is irreversible.** Use this when you want to cut off access entirely (compromised link, departed user, end-of-engagement). " +
       "Use `update_qurl` instead when you only need to shorten/extend the expiration, retag, or rename — those preserve the existing access tokens. " +
       "Use `extend_qurl` when you only need to push the expiration out. " +
-      "Returns a confirmation payload — the resource will not appear in subsequent `list_qurls` calls (or returns with `status: \"revoked\"` depending on filter).",
+      "Returns a confirmation payload. By default the resource is excluded from `list_qurls`; pass `status: \"revoked\"` to see it.",
     inputSchema: deleteQurlSchema,
     outputSchema: deleteQurlOutputSchema,
     annotations: {

@@ -150,9 +150,9 @@ const batchItemResultSchema = z
  * so agents can branch on partial failure without parsing JSON. `request_id`
  * is hoisted from response metadata for support correlation.
  *
- * Shape diverges from `BatchCreateOutput` (`{ data, meta }` envelope) by
- * design: agents read a single flat object, and `output-schemas.types.test.ts`
- * intentionally omits a round-trip assertion for this schema.
+ * Schema flattens the `{ data, meta }` envelope on `BatchCreateOutput` —
+ * `output-schemas.types.test.ts` asserts the flattened shape against the
+ * client interface so drift on either side fails compilation.
  */
 export const batchCreateOutputSchema = z.object({
   succeeded: z.number(),

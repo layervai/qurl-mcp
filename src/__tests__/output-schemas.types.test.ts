@@ -1,6 +1,7 @@
 import { describe, it, expectTypeOf } from "vitest";
 import type { z } from "zod";
 import type {
+  BatchCreateOutput,
   CreateQURLData,
   ListQURLsOutput,
   MintLinkOutput,
@@ -8,6 +9,7 @@ import type {
   ResolveOutput,
 } from "../client.js";
 import {
+  batchCreateOutputSchema,
   createQurlOutputSchema,
   listQurlsOutputSchema,
   mintLinkOutputSchema,
@@ -20,10 +22,9 @@ import {
 // covers external (API <-> snapshot) drift; this guards internal
 // (client.ts <-> output-schemas.ts) drift.
 //
-// Intentionally omitted: `batchCreateOutputSchema` (flattens `{data, meta}`
-// envelope into one object — see comment in output-schemas.ts) and
-// `deleteQurlOutputSchema` (no client-side interface; the client returns
-// `Promise<void>` and the handler synthesizes the payload).
+// `deleteQurlOutputSchema` is intentionally omitted (no client-side
+// interface — the client returns `Promise<void>` and the handler
+// synthesizes the payload).
 describe("output schema <-> client type alignment", () => {
   it("qurlSchema matches QURL", () => {
     expectTypeOf<z.infer<typeof qurlSchema>>().toEqualTypeOf<QURL>();
@@ -43,5 +44,13 @@ describe("output schema <-> client type alignment", () => {
 
   it("mintLinkOutputSchema matches MintLinkOutput", () => {
     expectTypeOf<z.infer<typeof mintLinkOutputSchema>>().toEqualTypeOf<MintLinkOutput>();
+  });
+
+  it("batchCreateOutputSchema matches the flattened BatchCreateOutput.data + request_id", () => {
+    // Schema flattens the `{ data, meta }` envelope; assert against the
+    // flattened shape so a new field on `BatchCreateOutput.data` is a
+    // compile error here.
+    type FlatBatchPayload = BatchCreateOutput["data"] & { request_id?: string };
+    expectTypeOf<z.infer<typeof batchCreateOutputSchema>>().toEqualTypeOf<FlatBatchPayload>();
   });
 });
