@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.2.0...qurl-mcp-v0.3.0) (2026-04-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* server no longer exits at boot when QURL_API_KEY is unset. Misconfiguration is now signaled via a stderr warning at startup and a typed missing_api_key error from every QURLClient request, surfaced through MCP as an isError content block (tools) or error JSON (resources). Process supervisors that watched for non-zero exit on missing config will need to switch to detecting the per-call error or grepping the boot-time stderr warning. Some MCP hosts (notably older Claude Desktop releases) hide stderr — those users will see the failure only on first tool/resource invocation.
+
+### Features
+
+* add Dockerfile + Glama prep + defer QURL_API_KEY validation ([#71](https://github.com/layervai/qurl-mcp/issues/71)) ([e1688a1](https://github.com/layervai/qurl-mcp/commit/e1688a1c006b2c961f07641da44ceab6da6d436e))
+* register with MCP Registry ([#70](https://github.com/layervai/qurl-mcp/issues/70)) ([722acd4](https://github.com/layervai/qurl-mcp/commit/722acd45989e1cfe6f2440d554d75c599ef08715))
+
 ## [0.2.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.1.2...qurl-mcp-v0.2.0) (2026-04-27)
 
 
