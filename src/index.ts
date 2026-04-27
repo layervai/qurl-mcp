@@ -24,6 +24,12 @@ if (!apiKey) {
 // Trim symmetric with the apiKey path so a stray space in the URL doesn't
 // produce a confusing fetch failure (DNS or scheme parse error) instead of
 // being treated as unset.
+//
+// Intentional asymmetry vs. line 19 (`?? ""`): an empty/whitespace key is
+// a misconfig the user has to fix, so we want it to land on the empty path
+// where the warning fires. An empty/whitespace URL should silently fall
+// back to the default — `||` collapses both `undefined` and `""` cases
+// into one fallback expression.
 const baseURL = process.env.QURL_API_URL?.trim() || "https://api.layerv.ai";
 
 const client = new QURLClient({ apiKey, baseURL });

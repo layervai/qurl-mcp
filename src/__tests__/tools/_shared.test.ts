@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { QURLAPIError } from "../../client.js";
+import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../../client.js";
 import { withMissingApiKeyHandler } from "../../tools/_shared.js";
 
 describe("withMissingApiKeyHandler", () => {
   it("converts a thrown missing_api_key error into an isError content block", async () => {
     const inner = async () => {
-      throw new QURLAPIError(0, "missing_api_key", "QURL_API_KEY is not set.");
+      throw new QURLAPIError(0, "missing_api_key", MISSING_API_KEY_MESSAGE);
     };
     const wrapped = withMissingApiKeyHandler(inner);
 
@@ -13,7 +13,7 @@ describe("withMissingApiKeyHandler", () => {
 
     expect(result).toEqual({
       isError: true,
-      content: [{ type: "text", text: "QURL_API_KEY is not set." }],
+      content: [{ type: "text", text: MISSING_API_KEY_MESSAGE }],
     });
   });
 

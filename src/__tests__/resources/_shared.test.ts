@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { QURLAPIError } from "../../client.js";
+import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../../client.js";
 import { withMissingApiKeyResource } from "../../resources/_shared.js";
 
 const URI = "qurl://test";
@@ -7,7 +7,7 @@ const URI = "qurl://test";
 describe("withMissingApiKeyResource", () => {
   it("converts a thrown missing_api_key error into a resource read with error JSON", async () => {
     const inner = async () => {
-      throw new QURLAPIError(0, "missing_api_key", "QURL_API_KEY is not set.");
+      throw new QURLAPIError(0, "missing_api_key", MISSING_API_KEY_MESSAGE);
     };
     const wrapped = withMissingApiKeyResource(URI, inner);
 
@@ -17,7 +17,7 @@ describe("withMissingApiKeyResource", () => {
     expect(result.contents[0].uri).toBe(URI);
     expect(result.contents[0].mimeType).toBe("application/json");
     expect(JSON.parse(result.contents[0].text)).toEqual({
-      error: { code: "missing_api_key", message: "QURL_API_KEY is not set." },
+      error: { code: "missing_api_key", message: MISSING_API_KEY_MESSAGE },
     });
   });
 
