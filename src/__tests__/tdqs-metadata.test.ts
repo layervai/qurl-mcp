@@ -50,6 +50,28 @@ describe("TDQS tool metadata coverage", () => {
     });
   }
 
+  describe("disambiguation guidance in descriptions", () => {
+    // The 80-char floor catches missing rich text but not 200-char fluff.
+    // For tools that overlap with siblings, lock in the "Use `xxx` instead"
+    // guidance so an inattentive description rewrite can't drop it.
+    const expected: Record<string, string[]> = {
+      delete_qurl: ["update_qurl"],
+      update_qurl: ["extend_qurl", "delete_qurl"],
+      extend_qurl: ["update_qurl"],
+      mint_link: ["create_qurl", "update_qurl"],
+      batch_create_qurls: ["create_qurl"],
+    };
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    for (const [name, siblings] of Object.entries(expected)) {
+      it(`${name} description references ${siblings.join(", ")}`, () => {
+        const description = byName.get(name)?.description ?? "";
+        for (const sibling of siblings) {
+          expect(description).toContain(sibling);
+        }
+      });
+    }
+  });
+
   describe("safety hints match tool semantics", () => {
     const byName = new Map(tools.map((t) => [t.name, t]));
 

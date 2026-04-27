@@ -149,6 +149,10 @@ const batchItemResultSchema = z
  * Batch creation response. The handler sets `isError: true` when `failed > 0`
  * so agents can branch on partial failure without parsing JSON. `request_id`
  * is hoisted from response metadata for support correlation.
+ *
+ * Shape diverges from `BatchCreateOutput` (`{ data, meta }` envelope) by
+ * design: agents read a single flat object, and `output-schemas.types.test.ts`
+ * intentionally omits a round-trip assertion for this schema.
  */
 export const batchCreateOutputSchema = z.object({
   succeeded: z.number(),

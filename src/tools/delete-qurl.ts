@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { IQURLClient } from "../client.js";
+import { type IQURLClient, QURLAPIError } from "../client.js";
 import { withMissingApiKeyHandler } from "./_shared.js";
 import { deleteQurlOutputSchema } from "./output-schemas.js";
 
@@ -37,7 +37,15 @@ export function deleteQurlTool(client: IQURLClient) {
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof deleteQurlSchema>) => {
-      await client.deleteQURL(input.resource_id);
+      try {
+        await client.deleteQURL(input.resource_id);
+      } catch (err) {
+        // Re-delete of an already-revoked resource: the API returns 404,
+        // but the agent's intent ("this resource should not be live") is
+        // already satisfied. Swallow it so the tool is genuinely
+        // idempotent — matching `annotations.idempotentHint: true`.
+        if (!(err instanceof QURLAPIError) || err.statusCode !== 404) throw err;
+      }
       const payload = {
         resource_id: input.resource_id,
         revoked: true as const,

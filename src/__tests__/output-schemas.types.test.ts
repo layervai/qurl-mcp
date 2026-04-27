@@ -19,6 +19,11 @@ import {
 // new field on either side breaks compilation. The MCP-spec-drift workflow
 // covers external (API <-> snapshot) drift; this guards internal
 // (client.ts <-> output-schemas.ts) drift.
+//
+// Intentionally omitted: `batchCreateOutputSchema` (flattens `{data, meta}`
+// envelope into one object — see comment in output-schemas.ts) and
+// `deleteQurlOutputSchema` (no client-side interface; the client returns
+// `Promise<void>` and the handler synthesizes the payload).
 describe("output schema <-> client type alignment", () => {
   it("qurlSchema matches QURL", () => {
     expectTypeOf<z.infer<typeof qurlSchema>>().toEqualTypeOf<QURL>();

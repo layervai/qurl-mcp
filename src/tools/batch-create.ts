@@ -1,8 +1,16 @@
 import { z } from "zod";
-import type { IQURLClient } from "../client.js";
+import type { BatchCreateOutput, IQURLClient } from "../client.js";
 import { createQurlSchema } from "./create-qurl.js";
 import { toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
 import { batchCreateOutputSchema } from "./output-schemas.js";
+
+function isBatchPayload(value: unknown): value is BatchCreateOutput["data"] {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Partial<{ succeeded: unknown; failed: unknown; results: unknown }>;
+  return (
+    typeof v.succeeded === "number" && typeof v.failed === "number" && Array.isArray(v.results)
+  );
+}
 
 export const batchCreateSchema = z.object({
   items: z
@@ -40,13 +48,7 @@ export function batchCreateTool(client: IQURLClient) {
       // top-level malformed-request error), the downstream `failed > 0`
       // access would be meaningless — surface the raw response as an error
       // so agents get a real signal instead of silent mis-interpretation.
-      const data = result.data as Partial<typeof result.data> | undefined;
-      if (
-        !data ||
-        typeof data.failed !== "number" ||
-        typeof data.succeeded !== "number" ||
-        !Array.isArray(data.results)
-      ) {
+      if (!isBatchPayload(result.data)) {
         return {
           content: [
             {
@@ -57,6 +59,7 @@ export function batchCreateTool(client: IQURLClient) {
           isError: true,
         };
       }
+      const data = result.data;
       const payload = {
         ...data,
         request_id: result.meta?.request_id,
