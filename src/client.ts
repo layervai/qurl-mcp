@@ -264,10 +264,12 @@ export class QURLClient implements IQURLClient {
   private baseURL: string;
 
   constructor(config: QURLClientConfig) {
-    // Trim defensively so a whitespace-only key (e.g. from a stray
-    // `QURL_API_KEY=" "`) takes the typed `missing_api_key` path instead
-    // of being sent over the wire and failing as a server-side 401.
-    this.apiKey = config.apiKey.trim();
+    // `?? ""` defends against JS callers that hand in `undefined` (the TS
+    // type forbids it, but `JSON.parse`'d configs and other dynamic call
+    // sites can land here). Trim so a whitespace-only key (e.g. from a
+    // stray `QURL_API_KEY=" "`) takes the typed `missing_api_key` path
+    // instead of being sent over the wire as a server-side 401.
+    this.apiKey = (config.apiKey ?? "").trim();
     this.baseURL = config.baseURL.replace(/\/$/, "");
   }
 
