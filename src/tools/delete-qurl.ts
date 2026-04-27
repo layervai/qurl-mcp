@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
+import { withMissingApiKeyHandler } from "./_shared.js";
 
 export const deleteQurlSchema = z.object({
   // DELETE only accepts r_ (resource) IDs per the API spec — unlike
@@ -20,7 +21,7 @@ export function deleteQurlTool(client: IQURLClient) {
     name: "delete_qurl",
     description: "Revoke/delete a qURL. This immediately invalidates the link.",
     inputSchema: deleteQurlSchema,
-    handler: async (input: z.infer<typeof deleteQurlSchema>) => {
+    handler: withMissingApiKeyHandler(async (input: z.infer<typeof deleteQurlSchema>) => {
       await client.deleteQURL(input.resource_id);
       return {
         content: [
@@ -30,6 +31,6 @@ export function deleteQurlTool(client: IQURLClient) {
           },
         ],
       };
-    },
+    }),
   };
 }

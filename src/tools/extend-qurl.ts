@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { resourceIdSchema } from "./_shared.js";
+import { resourceIdSchema, withMissingApiKeyHandler } from "./_shared.js";
 
 export const extendQurlSchema = z.object({
   resource_id: resourceIdSchema("extend"),
@@ -14,7 +14,7 @@ export function extendQurlTool(client: IQURLClient) {
       "Extend the expiration of an active qURL. Accepts a resource ID (r_) or qURL display ID (q_). " +
       "Shorthand for update_qurl with only extend_by — use update_qurl for richer updates (tags, description, expiration).",
     inputSchema: extendQurlSchema,
-    handler: async (input: z.infer<typeof extendQurlSchema>) => {
+    handler: withMissingApiKeyHandler(async (input: z.infer<typeof extendQurlSchema>) => {
       const result = await client.extendQURL(input.resource_id, {
         extend_by: input.extend_by,
       });
@@ -26,6 +26,6 @@ export function extendQurlTool(client: IQURLClient) {
           },
         ],
       };
-    },
+    }),
   };
 }

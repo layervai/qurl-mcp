@@ -53,8 +53,26 @@ Replace `lv_live_xxx` with your actual API key. The key must have the appropriat
 
 | Environment Variable | Required | Description | Default |
 |---------------------|----------|-------------|---------|
-| `QURL_API_KEY` | Yes | API key with appropriate scopes (`qurl:read`, `qurl:write`, `qurl:resolve`) | -- |
+| `QURL_API_KEY` | Conditional (see description) | API key with appropriate scopes (`qurl:read`, `qurl:write`, `qurl:resolve`). The server boots without it so MCP introspection (`tools/list`, `resources/list`, `prompts/list`) works for directory probes — required only on the first tool call or resource read, where invocations surface a typed `missing_api_key` error until the key is set. | -- |
 | `QURL_API_URL` | No | qURL API base URL | `https://api.layerv.ai` |
+
+## Docker
+
+A multi-stage Dockerfile is included for container-based deployment:
+
+```bash
+docker build -t qurl-mcp .
+docker run -i -e QURL_API_KEY=lv_live_xxx qurl-mcp
+```
+
+The image runs as the non-root `node` user, ships only production dependencies, and uses `tini` as PID 1 for clean signal handling.
+
+If a tool call returns `missing_api_key` despite `QURL_API_KEY` looking set, check stderr for the boot-time warning — some MCP hosts hide stderr, and the warning is the fastest way to spot a whitespace-only or unset value:
+
+```bash
+docker logs <container>          # if running detached
+docker run -i -e QURL_API_KEY=lv_live_xxx qurl-mcp 2>&1  # interactive
+```
 
 ## Development
 

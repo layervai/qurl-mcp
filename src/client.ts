@@ -225,6 +225,14 @@ export interface IQURLClient {
 
 // --- Error class ---
 
+/**
+ * Error thrown by `QURLClient` for any API or pre-flight failure.
+ *
+ * `statusCode` is the HTTP response status, with one sentinel: **`0`** means
+ * the error was raised on the client before any network request was issued
+ * (e.g. `code: "missing_api_key"`). Branching logic that inspects HTTP
+ * status should special-case `0` rather than treating it as a real status.
+ */
 export class QURLAPIError extends Error {
   constructor(
     public statusCode: number,
@@ -239,6 +247,16 @@ export class QURLAPIError extends Error {
   }
 }
 
+/**
+ * Shared message for the missing-API-key condition. Emitted both at boot
+ * (stderr warning in `index.ts`) and on every API call from `request()`.
+ * Keeping a single string means a user grepping logs/transcripts hits the
+ * same phrase from both sites, and the CI introspection probe has a stable
+ * substring to assert against.
+ */
+export const MISSING_API_KEY_MESSAGE =
+  "QURL_API_KEY is not set. Set it in the MCP server environment and restart to make API calls.";
+
 // --- Client implementation ---
 
 export class QURLClient implements IQURLClient {
@@ -246,7 +264,12 @@ export class QURLClient implements IQURLClient {
   private baseURL: string;
 
   constructor(config: QURLClientConfig) {
-    this.apiKey = config.apiKey;
+    // `?? ""` defends against JS callers that hand in `undefined` (the TS
+    // type forbids it, but `JSON.parse`'d configs and other dynamic call
+    // sites can land here). Trim so a whitespace-only key (e.g. from a
+    // stray `QURL_API_KEY=" "`) takes the typed `missing_api_key` path
+    // instead of being sent over the wire as a server-side 401.
+    this.apiKey = (config.apiKey ?? "").trim();
     this.baseURL = config.baseURL.replace(/\/$/, "");
   }
 
@@ -264,6 +287,10 @@ export class QURLClient implements IQURLClient {
     body?: unknown,
     passthroughStatuses: number[] = [],
   ): Promise<T> {
+    if (!this.apiKey) {
+      throw new QURLAPIError(0, "missing_api_key", MISSING_API_KEY_MESSAGE);
+    }
+
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,

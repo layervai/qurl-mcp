@@ -1,4 +1,44 @@
 import { z, type ZodError } from "zod";
+import { QURLAPIError } from "../client.js";
+
+/**
+ * Tool result shape that handlers return. Kept structural so we don't
+ * take a hard dep on the MCP SDK's internal types.
+ */
+type ToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
+};
+
+/**
+ * Wrap a tool handler so that a thrown `QURLAPIError` with
+ * `code: "missing_api_key"` is converted into an `isError: true` content
+ * block instead of propagating as a JSON-RPC error. MCP hosts surface
+ * `isError: true` content blocks more prominently than transport-level
+ * errors, so a missing-key misconfig becomes immediately actionable in
+ * the host UI rather than buried in a generic error toast.
+ *
+ * Other API errors continue to throw — they're real failures that callers
+ * should treat as exceptional, and the JSON-RPC error path carries the
+ * statusCode/code metadata the host needs to surface them properly.
+ */
+export function withMissingApiKeyHandler<I>(
+  inner: (input: I) => Promise<ToolResult>,
+): (input: I) => Promise<ToolResult> {
+  return async (input) => {
+    try {
+      return await inner(input);
+    } catch (err) {
+      if (err instanceof QURLAPIError && err.code === "missing_api_key") {
+        return {
+          isError: true,
+          content: [{ type: "text", text: err.message }],
+        };
+      }
+      throw err;
+    }
+  };
+}
 
 /**
  * Convert a ZodError into an MCP tool error result.

@@ -35,9 +35,70 @@ jobs:
       - run: npm ci
       - run: npm test
 
+  docker:
+    name: Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+      - name: Build image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: qurl-mcp:ci
+      - name: Verify MCP introspection
+        run: |
+          # Bash command-substitution doesn't trip set -e by default, so an
+          # exit-on-error from `docker run` (e.g. timeout 124, killed 137)
+          # would otherwise let `out` be set to whatever made it to stdout
+          # and the step would limp on until a grep finally failed with a
+          # misleading "missing tool" message. Fail at the actual cause.
+          set -euo pipefail
+          shopt -s inherit_errexit
+          # Pipe stderr to a separate file so we can assert the
+          # introspection-only warning still prints. The warning is the only
+          # signal a misconfigured user gets that they're booting without an
+          # API key under the deferred-auth model; silently stripping it
+          # should fail CI.
+          # `timeout 30s` fails fast with a clear signal if the entrypoint
+          # hangs (e.g. an SDK notification-ordering bug) instead of letting
+          # the step run to the GitHub Actions default.
+          # Probe asserts three things end-to-end:
+          #   1. tools/list exposes the full registered surface
+          #   2. boot-time stderr warning fires when QURL_API_KEY is unset
+          #   3. a tool invocation under introspection-only mode surfaces
+          #      the typed missing_api_key error as an isError content
+          #      block (not as a JSON-RPC transport error), locking in the
+          #      withMissingApiKeyHandler wrapper from tools/_shared.ts
+          out=$(printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_qurls","arguments":{}}}' \
+            | timeout 30s docker run -i --rm qurl-mcp:ci 2>/tmp/mcp-stderr)
+          # Match the JSON-RPC `name` field specifically. A loose grep on the
+          # tool name alone would pass when the tool only appears in another
+          # tool's description (e.g. update_qurl's description mentions
+          # extend_qurl), so dropping a tool from registration could go
+          # undetected. The MCP SDK emits minified JSON, so the literal
+          # "name":"<tool>" substring appears exactly once per registered tool.
+          for tool in create_qurl resolve_qurl list_qurls get_qurl delete_qurl extend_qurl update_qurl mint_link batch_create_qurls; do
+            echo "$out" | grep -q "\"name\":\"$tool\"" || { echo "tools/list missing $tool (no \"name\":\"$tool\" match)"; echo "$out"; exit 1; }
+          done
+          grep -q "QURL_API_KEY is not set" /tmp/mcp-stderr || { echo "missing introspection-only warning on stderr"; cat /tmp/mcp-stderr; exit 1; }
+          # Assert the tool/call response under no-key surfaces the typed
+          # error as content, not as a transport error. The wrapper returns
+          # `{ isError: true, content: [{ type: "text", text: "QURL_API_KEY is not set..." }] }`
+          # so we look for both markers.
+          echo "$out" | grep -q "\"isError\":true" || { echo "tools/call did not return isError content block"; echo "$out"; exit 1; }
+          echo "$out" | grep -q "QURL_API_KEY is not set" || { echo "tools/call response missing the actionable error message"; echo "$out"; exit 1; }
+          echo "MCP introspection OK; all 9 tools exposed; warning printed; tools/call surfaces missing_api_key as expected"
+
   notify:
     name: Notify
-    needs: [lint, test]
+    needs: [lint, test, docker]
     if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -48,6 +109,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEST_RESULT: ${{ needs.test.result }}
           LINT_RESULT: ${{ needs.lint.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           GH_SERVER_URL: ${{ github.server_url }}
           GH_REPOSITORY: ${{ github.repository }}
@@ -77,13 +139,13 @@ jobs:
             *) TRIGGER_TEXT="$GH_EVENT_NAME" ;;
           esac
 
-          # Overall status: fail if either lint or test failed
+          # Overall status: fail if any of lint, test, docker failed
           HEADER="qURL MCP Build"
-          if [[ "$TEST_RESULT" == "success" && "$LINT_RESULT" == "success" ]]; then
+          if [[ "$TEST_RESULT" == "success" && "$LINT_RESULT" == "success" && "$DOCKER_RESULT" == "success" ]]; then
             COLOR="#36a64f"; EMOJI=":white_check_mark:"; STATUS_TEXT="successful"
-          elif [[ "$TEST_RESULT" == "failure" || "$LINT_RESULT" == "failure" ]]; then
+          elif [[ "$TEST_RESULT" == "failure" || "$LINT_RESULT" == "failure" || "$DOCKER_RESULT" == "failure" ]]; then
             COLOR="#dc3545"; EMOJI=":x:"; STATUS_TEXT="failed"
-          elif [[ "$TEST_RESULT" == "cancelled" || "$LINT_RESULT" == "cancelled" ]]; then
+          elif [[ "$TEST_RESULT" == "cancelled" || "$LINT_RESULT" == "cancelled" || "$DOCKER_RESULT" == "cancelled" ]]; then
             COLOR="#ffc107"; EMOJI=":warning:"; STATUS_TEXT="cancelled"
           else
             COLOR="#ffc107"; EMOJI=":warning:"; STATUS_TEXT="incomplete"
@@ -98,6 +160,11 @@ jobs:
             success) LINT_EMOJI=":white_check_mark:" ;;
             failure) LINT_EMOJI=":x:" ;;
             *) LINT_EMOJI=":warning:" ;;
+          esac
+          case "$DOCKER_RESULT" in
+            success) DOCKER_EMOJI=":white_check_mark:" ;;
+            failure) DOCKER_EMOJI=":x:" ;;
+            *) DOCKER_EMOJI=":warning:" ;;
           esac
 
           FIRST_LINE=$(echo "$COMMIT_MESSAGE" | head -n1 | cut -c1-100)
@@ -114,6 +181,7 @@ jobs:
             --arg actor "$GH_ACTOR" \
             --arg test_emoji "$TEST_EMOJI" \
             --arg lint_emoji "$LINT_EMOJI" \
+            --arg docker_emoji "$DOCKER_EMOJI" \
             --arg commit "$FIRST_LINE" \
             --arg commit_url "$COMMIT_URL" \
             --arg workflow_url "$WORKFLOW_URL" \
@@ -123,7 +191,8 @@ jobs:
                 {type: "mrkdwn", text: ("*Branch:*\n`\($branch)` (\($sha))")},
                 {type: "mrkdwn", text: ("*Trigger:*\n\($trigger) by \($actor)")},
                 {type: "mrkdwn", text: ("*Lint:*\n\($lint_emoji)")},
-                {type: "mrkdwn", text: ("*Tests:*\n\($test_emoji)")}
+                {type: "mrkdwn", text: ("*Tests:*\n\($test_emoji)")},
+                {type: "mrkdwn", text: ("*Docker:*\n\($docker_emoji)")}
               ]},
               {type: "section", text: {type: "mrkdwn", text: ("*Commit:* `\($commit)`")}},
               {type: "context", elements: [

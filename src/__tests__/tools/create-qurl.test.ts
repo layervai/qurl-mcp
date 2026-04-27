@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { QURLAPIError } from "../../client.js";
 import { createQurlTool, createQurlSchema } from "../../tools/create-qurl.js";
 import { makeMockClient, sampleCreateQURLData } from "../helpers.js";
 
@@ -170,6 +171,25 @@ describe("createQurlTool", () => {
       await expect(tool.handler({ target_url: "https://example.com" })).rejects.toThrow(
         "API Error",
       );
+    });
+
+    it("translates missing_api_key into an isError content block instead of throwing", async () => {
+      // Smoke test that the withMissingApiKeyHandler wrapping is in place
+      // for this tool. The wrapper itself is unit-tested in
+      // _shared.test.ts; this asserts it's actually applied here so a
+      // future handler refactor that drops the wrapper would fail here.
+      const mockCreate = vi
+        .fn()
+        .mockRejectedValue(new QURLAPIError(0, "missing_api_key", "QURL_API_KEY is not set."));
+      const client = makeMockClient({ createQURL: mockCreate });
+      const tool = createQurlTool(client);
+
+      const result = await tool.handler({ target_url: "https://example.com" });
+
+      expect(result).toEqual({
+        isError: true,
+        content: [{ type: "text", text: "QURL_API_KEY is not set." }],
+      });
     });
 
     it("passes all optional fields to the client", async () => {

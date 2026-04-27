@@ -57,6 +57,62 @@ describe("QURLClient", () => {
     });
   });
 
+  describe("missing apiKey guard", () => {
+    // Locks in the contract: when QURL_API_KEY is unset (introspection-only
+    // mode), every API call must throw a typed missing_api_key error before
+    // any network request is issued. Removing this guard would silently fall
+    // through to a 401 from the server, masking the configuration problem.
+    //
+    // Parameterized over both empty and whitespace-only keys so the
+    // constructor's `.trim()` (the sole gate against the whitespace case)
+    // is exercised against the entire 10-method client surface, not just
+    // a single representative method.
+    const missingKeyCases: Array<[string, string]> = [
+      ["empty", ""],
+      ["whitespace-only", "   \t\n  "],
+    ];
+
+    for (const [label, apiKey] of missingKeyCases) {
+      it(`throws missing_api_key for every API method when apiKey is ${label}, without issuing a network request`, async () => {
+        const noKeyClient = new QURLClient({
+          apiKey,
+          baseURL: "https://api.test.com",
+        });
+        const mock = vi.fn();
+        vi.stubGlobal("fetch", mock);
+
+        const calls: Array<() => Promise<unknown>> = [
+          () => noKeyClient.createQURL({ target_url: "https://example.com" }),
+          () => noKeyClient.getQURL("r_x"),
+          () => noKeyClient.listQURLs(),
+          () => noKeyClient.deleteQURL("r_x"),
+          () => noKeyClient.updateQURL("r_x", { extend_by: "1h" }),
+          () => noKeyClient.extendQURL("r_x", { extend_by: "1h" }),
+          () => noKeyClient.resolveQURL({ access_token: "at_x" }),
+          () => noKeyClient.getQuota(),
+          () => noKeyClient.mintLink("r_x"),
+          () => noKeyClient.batchCreate({ items: [{ target_url: "https://example.com" }] }),
+        ];
+
+        for (const call of calls) {
+          // toMatchObject rather than toBeInstanceOf catches a regression
+          // where a method routes around `request()` and throws a different
+          // QURLAPIError for an unrelated reason — e.g. extendQURL already
+          // delegates to updateQURL today; a sibling that doesn't would slip
+          // a looser instanceof check.
+          await expect(call()).rejects.toMatchObject({
+            name: "QURLAPIError",
+            code: "missing_api_key",
+            statusCode: 0,
+          });
+        }
+        // Intent of this guard is "no network until the key is set" — assert
+        // it directly rather than just trusting that any QURLAPIError suffices.
+        expect(mock).not.toHaveBeenCalled();
+      });
+    }
+  });
+
   describe("request headers", () => {
     it("sends Authorization bearer header on all requests", async () => {
       const mock = stubFetch({ data: {} });

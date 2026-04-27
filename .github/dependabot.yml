@@ -30,3 +30,16 @@ updates:
       - "ci"
     commit-message:
       prefix: "chore(ci)"
+
+  # Tracks the digest-pinned base image in the Dockerfile so the
+  # supply-chain claim in the file's header comment stays true.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"

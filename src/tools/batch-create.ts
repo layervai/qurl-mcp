@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { createQurlSchema } from "./create-qurl.js";
+import { withMissingApiKeyHandler } from "./_shared.js";
 
 export const batchCreateSchema = z.object({
   items: z
@@ -18,7 +19,7 @@ export function batchCreateTool(client: IQURLClient) {
       "Returns per-item results including any errors for partial failures. " +
       "The response sets isError=true when one or more items fail so agents can branch on partial failure without parsing the JSON.",
     inputSchema: batchCreateSchema,
-    handler: async (input: z.infer<typeof batchCreateSchema>) => {
+    handler: withMissingApiKeyHandler(async (input: z.infer<typeof batchCreateSchema>) => {
       const result = await client.batchCreate(input);
       // Defense-in-depth: batchCreate passes through HTTP 400, which is
       // contracted to carry a BatchCreateResponse body with per-item errors.
@@ -56,6 +57,6 @@ export function batchCreateTool(client: IQURLClient) {
         ],
         isError: data.failed > 0,
       };
-    },
+    }),
   };
 }

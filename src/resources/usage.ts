@@ -1,4 +1,5 @@
 import type { IQURLClient } from "../client.js";
+import { withMissingApiKeyResource } from "./_shared.js";
 
 export function usageResource(client: IQURLClient) {
   const uri = "qurl://usage";
@@ -8,11 +9,11 @@ export function usageResource(client: IQURLClient) {
     name: "qURL Usage & Quota",
     description: "Current quota and usage information",
     mimeType,
-    handler: async () => {
+    handler: withMissingApiKeyResource(uri, async () => {
       const result = await client.getQuota();
       return {
         contents: [{ uri, mimeType, text: JSON.stringify(result.data) }],
       };
-    },
+    }),
   };
 }
