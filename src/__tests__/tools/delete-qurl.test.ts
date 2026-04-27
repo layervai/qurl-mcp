@@ -77,7 +77,7 @@ describe("deleteQurlTool", () => {
       await expect(tool.handler({ resource_id: "r_abc" })).rejects.toThrow("Forbidden");
     });
 
-    it("swallows 404 from a re-delete and returns the same payload", async () => {
+    it("swallows 404 from a re-delete and flags was_already_revoked", async () => {
       const mockDelete = vi
         .fn()
         .mockRejectedValue(new QURLAPIError(404, "not_found", "Resource not found."));
@@ -90,7 +90,20 @@ describe("deleteQurlTool", () => {
       expect(result.structuredContent).toEqual({
         resource_id: "r_abc123",
         revoked: true,
+        was_already_revoked: true,
         message: "qURL r_abc123 is revoked.",
+      });
+    });
+
+    it("sets was_already_revoked: false on a fresh delete", async () => {
+      const mockDelete = vi.fn().mockResolvedValue(undefined);
+      const client = makeMockClient({ deleteQURL: mockDelete });
+      const tool = deleteQurlTool(client);
+
+      const result = await tool.handler({ resource_id: "r_abc123" });
+
+      expect(result.structuredContent).toMatchObject({
+        was_already_revoked: false,
       });
     });
 

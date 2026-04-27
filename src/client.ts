@@ -174,18 +174,28 @@ export interface MintLinkOutput {
   expires_at: string;
 }
 
-export interface BatchItemResult {
-  index: number;
-  success: boolean;
-  resource_id?: string;
-  qurl_link?: string;
-  qurl_site?: string;
-  expires_at?: string;
-  error?: {
-    code: string;
-    message: string;
-  };
-}
+// Discriminated on `success` so consumers narrowing on the boolean get
+// type-safe access to the success-only fields (qurl_link, etc.) and the
+// failure-only `error` shape. The API contract is mutually exclusive at
+// the per-item level — a result either succeeded or carries an error,
+// never both.
+export type BatchItemResult =
+  | {
+      index: number;
+      success: true;
+      resource_id: string;
+      qurl_link: string;
+      qurl_site: string;
+      expires_at: string;
+    }
+  | {
+      index: number;
+      success: false;
+      error: {
+        code: string;
+        message: string;
+      };
+    };
 
 export interface BatchCreateOutput {
   data: {

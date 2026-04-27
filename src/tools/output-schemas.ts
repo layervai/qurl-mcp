@@ -127,23 +127,31 @@ export const mintLinkOutputSchema = z.object({
   expires_at: z.string(),
 });
 
+// Discriminated on `success` so the schema enforces the API's
+// mutual-exclusivity contract — a host or planner generating UI from
+// the schema will only show success-fields under `success: true` and
+// the `error` block under `success: false`, never both.
+const batchItemSuccessSchema = z.object({
+  index: z.number().describe("Index of the corresponding item in the input `items` array"),
+  success: z.literal(true),
+  resource_id: z.string(),
+  qurl_link: z.string().describe("One-shot access link — shown ONCE on creation"),
+  qurl_site: z.string(),
+  expires_at: z.string(),
+});
+
+const batchItemFailureSchema = z.object({
+  index: z.number().describe("Index of the corresponding item in the input `items` array"),
+  success: z.literal(false),
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+  }),
+});
+
 const batchItemResultSchema = z
-  .object({
-    index: z.number().describe("Index of the corresponding item in the input `items` array"),
-    success: z.boolean(),
-    resource_id: z.string().optional(),
-    qurl_link: z.string().optional().describe("One-shot access link — populated only when `success: true`"),
-    qurl_site: z.string().optional(),
-    expires_at: z.string().optional(),
-    error: z
-      .object({
-        code: z.string(),
-        message: z.string(),
-      })
-      .optional()
-      .describe("Per-item error — populated only when `success: false`"),
-  })
-  .describe("Per-item result. `qurl_link` and `error` are mutually exclusive.");
+  .discriminatedUnion("success", [batchItemSuccessSchema, batchItemFailureSchema])
+  .describe("Per-item result. Discriminated on `success`.");
 
 /**
  * Batch creation response. The handler sets `isError: true` when `failed > 0`
@@ -161,9 +169,15 @@ export const batchCreateOutputSchema = z.object({
   request_id: z.string().optional(),
 });
 
-/** Delete confirmation. The qURL is immediately revoked. */
+/** Delete confirmation. The qURL is in a revoked state after this call. */
 export const deleteQurlOutputSchema = z.object({
   resource_id: z.string(),
   revoked: z.literal(true),
+  was_already_revoked: z
+    .boolean()
+    .describe(
+      "True when the API responded 404 (resource was already revoked or never existed). " +
+        "Agents that need to distinguish 'I revoked it' from 'it was already gone' should branch on this.",
+    ),
   message: z.string().describe("Human-readable confirmation message"),
 });

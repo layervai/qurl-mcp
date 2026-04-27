@@ -38,18 +38,23 @@ export function deleteQurlTool(client: IQURLClient) {
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof deleteQurlSchema>) => {
+      let wasAlreadyRevoked = false;
       try {
         await client.deleteQURL(input.resource_id);
       } catch (err) {
-        // Re-delete of an already-revoked resource: the API returns 404,
-        // but the agent's intent ("this resource should not be live") is
-        // already satisfied. Swallow it so the tool is genuinely
-        // idempotent — matching `annotations.idempotentHint: true`.
+        // Re-delete of an already-revoked (or never-existed) resource:
+        // the API returns 404, but the agent's intent ("this resource
+        // should not be live") is already satisfied. Swallow the throw
+        // so the tool is genuinely idempotent, but expose
+        // `was_already_revoked: true` in the payload so defensive
+        // agents can branch when they care.
         if (!(err instanceof QURLAPIError) || err.statusCode !== 404) throw err;
+        wasAlreadyRevoked = true;
       }
       const payload = {
         resource_id: input.resource_id,
         revoked: true as const,
+        was_already_revoked: wasAlreadyRevoked,
         message: `qURL ${input.resource_id} is revoked.`,
       };
       return {
