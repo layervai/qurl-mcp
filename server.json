@@ -1,0 +1,38 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.layervai/qurl-mcp",
+  "title": "qURL",
+  "description": "Mint, resolve, audit, and rotate expiring, scope-limited access links (qURLs) for AI agents — secure URL gateway for the qURL API. Lets agents act through scoped, expiring URLs instead of receiving raw credentials.",
+  "websiteUrl": "https://layerv.ai",
+  "repository": {
+    "url": "https://github.com/layervai/qurl-mcp",
+    "source": "github"
+  },
+  "version": "0.2.1",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@layerv/qurl-mcp",
+      "version": "0.2.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "QURL_API_KEY",
+          "description": "API key for the qURL API with qurl:read, qurl:write, and/or qurl:resolve scopes. Obtain from https://layerv.ai.",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "QURL_API_URL",
+          "description": "qURL API base URL. Defaults to https://api.layerv.ai.",
+          "isRequired": false,
+          "format": "string",
+          "default": "https://api.layerv.ai"
+        }
+      ]
+    }
+  ]
+}
