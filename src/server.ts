@@ -18,17 +18,16 @@ import { auditLinksPrompt } from "./prompts/audit-links.js";
 import { rotateAccessPrompt } from "./prompts/rotate-access.js";
 
 /**
- * Shared contract for the objects returned by tool factory functions. Each
- * tool exports the full `registerTool` config object so the SDK forwards
- * `outputSchema` and `annotations` into the MCP `tools/list` response —
- * downstream agents and TDQS scoring rely on those being present.
+ * Shape of the object every tool factory returns. Exported so the
+ * TDQS-coverage test can iterate the same canonical list without
+ * redeclaring the type.
  */
-type ToolFactory = (client: IQURLClient) => {
+export type ToolFactory = (client: IQURLClient) => {
   name: string;
   title: string;
   description: string;
   inputSchema: z.AnyZodObject;
-  outputSchema: z.ZodTypeAny;
+  outputSchema: z.AnyZodObject;
   annotations: ToolAnnotations;
   // Args vary per tool; exact signatures are validated by registerTool at each call site.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,42 +38,35 @@ type ToolFactory = (client: IQURLClient) => {
   }>;
 };
 
+export const toolFactories = [
+  createQurlTool,
+  resolveQurlTool,
+  listQurlsTool,
+  getQurlTool,
+  deleteQurlTool,
+  extendQurlTool,
+  updateQurlTool,
+  mintLinkTool,
+  batchCreateTool,
+] satisfies ToolFactory[];
+
 export function createServer(client: IQURLClient, version: string): McpServer {
   const server = new McpServer({
     name: "qurl",
     version,
   });
 
-  // Register tools
-  const toolFactories = [
-    createQurlTool,
-    resolveQurlTool,
-    listQurlsTool,
-    getQurlTool,
-    deleteQurlTool,
-    extendQurlTool,
-    updateQurlTool,
-    mintLinkTool,
-    batchCreateTool,
-  ] satisfies ToolFactory[];
-
   for (const factory of toolFactories) {
     const tool = factory(client);
-    // registerTool (vs. the deprecated `tool(...)`) is the path that wires
-    // outputSchema + annotations into the protocol response. The handler
-    // is typed loosely via the factory signature; the SDK validates
-    // structuredContent against outputSchema at call time.
+    // registerTool wires outputSchema + annotations into tools/list; pass
+    // .shape (ZodRawShape), not the ZodObject itself.
     server.registerTool(
       tool.name,
       {
         title: tool.title,
         description: tool.description,
         inputSchema: tool.inputSchema.shape,
-        outputSchema:
-          // outputSchema accepts either a ZodRawShape or a ZodObject. Our
-          // factories declare ZodTypeAny which covers both — the SDK does
-          // the right thing.
-          (tool.outputSchema as unknown as z.AnyZodObject).shape ?? tool.outputSchema,
+        outputSchema: tool.outputSchema.shape,
         annotations: tool.annotations,
       },
       tool.handler,

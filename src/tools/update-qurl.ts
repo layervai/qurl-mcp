@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { resourceIdSchema, withMissingApiKeyHandler, zodErrorToToolResult } from "./_shared.js";
+import {
+  resourceIdSchema,
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  zodErrorToToolResult,
+} from "./_shared.js";
 import { updateQurlOutputSchema } from "./output-schemas.js";
 
 // Tags must match the API constraints: 1-50 chars, start with alphanumeric,
@@ -86,7 +91,7 @@ export function updateQurlTool(client: IQURLClient) {
             text: JSON.stringify(result.data),
           },
         ],
-        structuredContent: result.data as unknown as Record<string, unknown>,
+        structuredContent: toStructuredContent(result.data),
       };
     }),
   };

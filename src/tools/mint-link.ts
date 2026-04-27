@@ -1,7 +1,12 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { accessPolicySchema } from "./create-qurl.js";
-import { resourceIdSchema, withMissingApiKeyHandler, zodErrorToToolResult } from "./_shared.js";
+import {
+  resourceIdSchema,
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  zodErrorToToolResult,
+} from "./_shared.js";
 import { mintLinkOutputSchema } from "./output-schemas.js";
 
 export const mintLinkBaseSchema = z.object({
@@ -74,7 +79,7 @@ export function mintLinkTool(client: IQURLClient) {
             text: JSON.stringify(result.data),
           },
         ],
-        structuredContent: result.data as unknown as Record<string, unknown>,
+        structuredContent: toStructuredContent(result.data),
       };
     }),
   };

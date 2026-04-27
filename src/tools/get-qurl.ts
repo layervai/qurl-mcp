@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { resourceIdSchema, withMissingApiKeyHandler } from "./_shared.js";
+import { resourceIdSchema, toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
 import { getQurlOutputSchema } from "./output-schemas.js";
 
 export const getQurlSchema = z.object({
@@ -35,7 +35,7 @@ export function getQurlTool(client: IQURLClient) {
             text: JSON.stringify(result.data),
           },
         ],
-        structuredContent: result.data as unknown as Record<string, unknown>,
+        structuredContent: toStructuredContent(result.data),
       };
     }),
   };

@@ -32,6 +32,12 @@ export type ToolAnnotations = {
   openWorldHint?: boolean;
 };
 
+// SDK's `structuredContent` is `Record<string, unknown>`; payloads are
+// typed against API response shapes. Single seam for the cast.
+export function toStructuredContent<T>(value: T): Record<string, unknown> {
+  return value as unknown as Record<string, unknown>;
+}
+
 /**
  * Wrap a tool handler so that a thrown `QURLAPIError` with
  * `code: "missing_api_key"` is converted into an `isError: true` content

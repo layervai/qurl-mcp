@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { withMissingApiKeyHandler } from "./_shared.js";
+import { toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
 import { createQurlOutputSchema } from "./output-schemas.js";
 
 export const aiAgentPolicySchema = z.object({
@@ -100,7 +100,7 @@ export function createQurlTool(client: IQURLClient) {
             text: JSON.stringify(result.data),
           },
         ],
-        structuredContent: result.data as unknown as Record<string, unknown>,
+        structuredContent: toStructuredContent(result.data),
       };
     }),
   };

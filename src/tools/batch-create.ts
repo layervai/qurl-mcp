@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { createQurlSchema } from "./create-qurl.js";
-import { withMissingApiKeyHandler } from "./_shared.js";
+import { toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
 import { batchCreateOutputSchema } from "./output-schemas.js";
 
 export const batchCreateSchema = z.object({
@@ -68,7 +68,7 @@ export function batchCreateTool(client: IQURLClient) {
             text: JSON.stringify(payload),
           },
         ],
-        structuredContent: payload as unknown as Record<string, unknown>,
+        structuredContent: toStructuredContent(payload),
         isError: data.failed > 0,
       };
     }),

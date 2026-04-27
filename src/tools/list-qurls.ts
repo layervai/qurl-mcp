@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { withMissingApiKeyHandler } from "./_shared.js";
+import { toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
 import { listQurlsOutputSchema } from "./output-schemas.js";
 
 export const listQurlsSchema = z.object({
@@ -73,7 +73,7 @@ export function listQurlsTool(client: IQURLClient) {
             text: JSON.stringify(result),
           },
         ],
-        structuredContent: result as unknown as Record<string, unknown>,
+        structuredContent: toStructuredContent(result),
       };
     }),
   };
