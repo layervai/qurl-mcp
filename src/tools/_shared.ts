@@ -3,11 +3,33 @@ import { QURLAPIError } from "../client.js";
 
 /**
  * Tool result shape that handlers return. Kept structural so we don't
- * take a hard dep on the MCP SDK's internal types.
+ * take a hard dep on the MCP SDK's internal types. `structuredContent`
+ * is what the SDK validates against `outputSchema` when one is declared
+ * on the tool; `content` carries the human-readable JSON for display.
  */
 type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
+};
+
+/**
+ * MCP tool behavioral annotations — hints to the host for safety / UX
+ * surfacing. Mirrors `ToolAnnotations` from the MCP SDK without taking
+ * a value-level dep on it (the SDK type lives behind a deep import).
+ *
+ * - `readOnlyHint` — tool does not modify server state (list, get, resolve).
+ * - `destructiveHint` — tool may delete or revoke (delete, optionally rotate).
+ * - `idempotentHint` — repeated calls with the same args yield the same effect.
+ * - `openWorldHint` — tool reaches an external service whose state the host
+ *   cannot model. True for everything here since we hit the qURL API.
+ */
+export type ToolAnnotations = {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
 };
 
 /**

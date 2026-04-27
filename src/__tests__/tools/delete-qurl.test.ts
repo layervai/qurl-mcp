@@ -11,7 +11,7 @@ describe("deleteQurlTool", () => {
 
     it("has a description mentioning revoke", () => {
       const tool = deleteQurlTool(makeMockClient());
-      expect(tool.description).toContain("Revoke");
+      expect(tool.description.toLowerCase()).toContain("revoke");
     });
   });
 

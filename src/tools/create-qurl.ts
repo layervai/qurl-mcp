@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { withMissingApiKeyHandler } from "./_shared.js";
+import { createQurlOutputSchema } from "./output-schemas.js";
 
 export const aiAgentPolicySchema = z.object({
   block_all: z.boolean().optional().describe("Block all recognized AI agents"),
@@ -74,10 +75,22 @@ export const createQurlSchema = z.object({
 export function createQurlTool(client: IQURLClient) {
   return {
     name: "create_qurl",
+    title: "Create qURL",
     description:
-      "Create a qURL - a secure, policy-bound link to a protected resource. " +
-      "The returned qurl_link is ephemeral (shown once) and should be shared immediately.",
+      "Create a new qURL — a policy-bound, expiring access link to a protected target URL. " +
+      "Use this when an agent needs to mint a fresh resource (e.g. share-once link, time-limited access). " +
+      "Use `mint_link` instead when you already have a resource and only need an additional access link. " +
+      "Use `batch_create_qurls` to create many in one call. " +
+      "Returns the new resource ID and a `qurl_link` that is shown ONCE and never returned by `get_qurl` or `list_qurls` — share it immediately.",
     inputSchema: createQurlSchema,
+    outputSchema: createQurlOutputSchema,
+    annotations: {
+      title: "Create qURL",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof createQurlSchema>) => {
       const result = await client.createQURL(input);
       return {
@@ -87,6 +100,7 @@ export function createQurlTool(client: IQURLClient) {
             text: JSON.stringify(result.data),
           },
         ],
+        structuredContent: result.data as unknown as Record<string, unknown>,
       };
     }),
   };

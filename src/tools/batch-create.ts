@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { createQurlSchema } from "./create-qurl.js";
 import { withMissingApiKeyHandler } from "./_shared.js";
+import { batchCreateOutputSchema } from "./output-schemas.js";
 
 export const batchCreateSchema = z.object({
   items: z
@@ -14,11 +15,23 @@ export const batchCreateSchema = z.object({
 export function batchCreateTool(client: IQURLClient) {
   return {
     name: "batch_create_qurls",
+    title: "Batch Create qURLs",
     description:
-      "Create multiple qURLs in a single request. " +
-      "Returns per-item results including any errors for partial failures. " +
-      "The response sets isError=true when one or more items fail so agents can branch on partial failure without parsing the JSON.",
+      "Create up to 100 qURLs in a single request. The atomic-batch alternative to looping `create_qurl` — saves round trips and returns a single envelope of per-item results. " +
+      "Use this when you need to mint many qURLs at once (e.g. provisioning a vendor list, distributing per-customer share links). " +
+      "Use `create_qurl` for a single resource. " +
+      "**Response shape:** `{ succeeded: number, failed: number, results: BatchItemResult[], request_id?: string }`. Each `results[i]` carries `index` (matching the input position), `success`, plus either `qurl_link` + `resource_id` + `qurl_site` + `expires_at` (success) OR `error: { code, message }` (failure). " +
+      "**Partial failure signaling:** the handler sets `isError: true` on the tool response whenever `failed > 0`, so agents can branch without parsing JSON. The HTTP layer also returns 400 when every item fails — that's surfaced through the same shape (read `data.results[*].error`). " +
+      "**One-shot links:** like `create_qurl`, every `qurl_link` in the response is shown ONCE. Don't lose them.",
     inputSchema: batchCreateSchema,
+    outputSchema: batchCreateOutputSchema,
+    annotations: {
+      title: "Batch Create qURLs",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof batchCreateSchema>) => {
       const result = await client.batchCreate(input);
       // Defense-in-depth: batchCreate passes through HTTP 400, which is
@@ -55,6 +68,7 @@ export function batchCreateTool(client: IQURLClient) {
             text: JSON.stringify(payload),
           },
         ],
+        structuredContent: payload as unknown as Record<string, unknown>,
         isError: data.failed > 0,
       };
     }),

@@ -22,7 +22,7 @@ describe("resolveQurlTool", () => {
 
     it("has a description mentioning resolve and firewall", () => {
       const tool = resolveQurlTool(makeMockClient());
-      expect(tool.description).toContain("Resolve");
+      expect(tool.description.toLowerCase()).toContain("resolve");
       expect(tool.description).toContain("firewall");
     });
   });

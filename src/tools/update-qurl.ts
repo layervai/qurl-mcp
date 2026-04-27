@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { resourceIdSchema, withMissingApiKeyHandler, zodErrorToToolResult } from "./_shared.js";
+import { updateQurlOutputSchema } from "./output-schemas.js";
 
 // Tags must match the API constraints: 1-50 chars, start with alphanumeric,
 // allow alphanumerics/spaces/underscores/hyphens. Max 10 tags per resource.
@@ -53,12 +54,26 @@ export const updateQurlSchema = updateQurlBaseSchema
 export function updateQurlTool(client: IQURLClient) {
   return {
     name: "update_qurl",
+    title: "Update qURL",
     description:
-      "Update a qURL - extend expiration, set an absolute expiry, update tags, or change the description. " +
-      "Accepts either a resource ID (r_ prefix) or qURL display ID (q_ prefix). " +
-      "Do not provide both extend_by and expires_at. At least one update field is required.",
+      "Update a qURL's expiration, tags, or description. The richer alternative to `extend_qurl` — use `update_qurl` whenever you need anything beyond a relative time push. " +
+      "Accepts both `r_` and `q_` IDs (q_ is auto-resolved). " +
+      "**Constraints:** `extend_by` and `expires_at` are mutually exclusive; at least one update field (`extend_by`, `expires_at`, `tags`, `description`) must be set. " +
+      "**Clearing fields:** pass `description: \"\"` or `tags: []` to clear those fields explicitly. " +
+      "Use `extend_qurl` when the only change is a relative time push. " +
+      "Use `delete_qurl` when you want to revoke entirely. " +
+      "**Errors:** if the input fails schema refinements (both extend_by + expires_at, or no fields set), the handler returns an `isError: true` content block before any API call. Other API errors throw with the API's `code`/`statusCode`. " +
+      "Returns the updated resource (same shape as `get_qurl`).",
     // Base shape for MCP tool registration; refinements run in the handler
     inputSchema: updateQurlBaseSchema,
+    outputSchema: updateQurlOutputSchema,
+    annotations: {
+      title: "Update qURL",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     handler: withMissingApiKeyHandler(async (raw: z.infer<typeof updateQurlBaseSchema>) => {
       const parsed = updateQurlSchema.safeParse(raw);
       if (!parsed.success) return zodErrorToToolResult(parsed.error);
@@ -71,6 +86,7 @@ export function updateQurlTool(client: IQURLClient) {
             text: JSON.stringify(result.data),
           },
         ],
+        structuredContent: result.data as unknown as Record<string, unknown>,
       };
     }),
   };

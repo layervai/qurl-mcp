@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { withMissingApiKeyHandler } from "./_shared.js";
+import { listQurlsOutputSchema } from "./output-schemas.js";
 
 export const listQurlsSchema = z.object({
   limit: z
@@ -43,9 +44,25 @@ export const listQurlsSchema = z.object({
 export function listQurlsTool(client: IQURLClient) {
   return {
     name: "list_qurls",
+    title: "List qURLs",
     description:
-      "List qURLs with optional filtering by status, date ranges, and search query.",
+      "List qURL resources, paginated and optionally filtered. " +
+      "Use this to discover qURLs by status (`active`, `revoked`), date range (created_*, expires_*), search text (`q`), or sort order. " +
+      "Use `get_qurl` instead when you already have a specific resource ID. " +
+      "**Pagination:** default page size is 20 (configurable via `limit` up to 100). " +
+      "When the response sets `meta.has_more: true`, pass `meta.next_cursor` as the `cursor` argument on a subsequent call to fetch the next page. " +
+      "**Sorting:** use `sort` like `created_at:desc` (default) or `expires_at:asc`. " +
+      "**Response shape:** `{ data: QURL[], meta: { has_more, next_cursor?, page_size?, request_id? } }` — `data[]` items are the same stable resource shape returned by `get_qurl`, with no per-token detail (call `get_qurl` for `qurls[]`). " +
+      'Example: `list_qurls({ status: "active", sort: "expires_at:asc", limit: 10 })`.',
     inputSchema: listQurlsSchema,
+    outputSchema: listQurlsOutputSchema,
+    annotations: {
+      title: "List qURLs",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof listQurlsSchema>) => {
       const result = await client.listQURLs(input);
       return {
@@ -56,6 +73,7 @@ export function listQurlsTool(client: IQURLClient) {
             text: JSON.stringify(result),
           },
         ],
+        structuredContent: result as unknown as Record<string, unknown>,
       };
     }),
   };

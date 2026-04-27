@@ -21,7 +21,9 @@ describe("batchCreateTool", () => {
     it("has a description", () => {
       const tool = batchCreateTool(makeMockClient());
       expect(tool.description).toBeTruthy();
-      expect(tool.description).toContain("multiple");
+      // Batch is the "many qURLs in one call" alternative to looping create_qurl —
+      // any of these markers is enough to confirm the description still names that purpose.
+      expect(tool.description).toMatch(/up to 100|many|multiple|batch/i);
     });
   });
 
