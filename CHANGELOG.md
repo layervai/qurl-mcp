@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.0...qurl-mcp-v0.3.1) (2026-04-27)
+
+
+### Bug Fixes
+
+* include LICENSE in published npm tarball ([#80](https://github.com/layervai/qurl-mcp/issues/80)) ([d51f923](https://github.com/layervai/qurl-mcp/commit/d51f9239d0e581491226eb13a4bf31cbd6ccf39c))
+
 ## [0.3.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.2.0...qurl-mcp-v0.3.0) (2026-04-27)
 
 
