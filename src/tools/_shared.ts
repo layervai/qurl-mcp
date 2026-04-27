@@ -25,6 +25,10 @@ type ToolResult = {
  *   cannot model. True for everything here since we hit the qURL API.
  */
 export type ToolAnnotations = {
+  // `annotations.title` is *not* the same field as the top-level `title`
+  // on the tool object: the top-level one feeds `tools/list[*].title`,
+  // while this one is a behavioral hint surfaced separately by some
+  // hosts. Both are per the MCP spec; do not deduplicate.
   title?: string;
   readOnlyHint?: boolean;
   destructiveHint?: boolean;

@@ -1,9 +1,17 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import type { IQURLClient } from "../client.js";
 import { toolFactories } from "../server.js";
-import { deleteQurlTool } from "../tools/delete-qurl.js";
-import { makeMockClient } from "./helpers.js";
+import {
+  makeMockClient,
+  sampleBatchCreateOutput,
+  sampleCreateQURLData,
+  sampleMintLinkOutput,
+  sampleQURL,
+  sampleResolveOutput,
+} from "./helpers.js";
 
 const tools = toolFactories.map((factory) => factory(makeMockClient()));
+const factoryByName = new Map(tools.map((tool, i) => [tool.name, toolFactories[i]]));
 
 describe("TDQS tool metadata coverage", () => {
   for (const tool of tools) {
@@ -43,6 +51,8 @@ describe("TDQS tool metadata coverage", () => {
   }
 
   describe("safety hints match tool semantics", () => {
+    const byName = new Map(tools.map((t) => [t.name, t]));
+
     it("marks read-only tools as readOnlyHint", () => {
       const readOnlyNames = new Set(["list_qurls", "get_qurl"]);
       for (const tool of tools) {
@@ -56,8 +66,94 @@ describe("TDQS tool metadata coverage", () => {
     });
 
     it("marks delete_qurl as destructiveHint", () => {
-      const tool = deleteQurlTool(makeMockClient());
-      expect(tool.annotations.destructiveHint).toBe(true);
+      expect(byName.get("delete_qurl")?.annotations.destructiveHint).toBe(true);
     });
+  });
+});
+
+/**
+ * Round-trip contract for every tool: `structuredContent` validates
+ * against the declared `outputSchema`, and (where text is JSON) the two
+ * views agree. Without this, schema/handler drift would only fail at
+ * host call time. delete_qurl is an intentional exception — its text is
+ * a human-readable confirmation, not the JSON payload.
+ */
+describe("structuredContent ↔ outputSchema round-trip", () => {
+  type Case = {
+    // Generic over 9 schemas, so input is loosely typed; per-tool tests
+    // exercise the strict input schema.
+    input: Record<string, unknown>;
+    clientOverrides: Partial<IQURLClient>;
+    textIsJson?: boolean;
+  };
+
+  const qurlFixture = sampleQURL();
+  const cases: Record<string, Case> = {
+    create_qurl: {
+      input: { target_url: "https://example.com" },
+      clientOverrides: {
+        createQURL: vi.fn().mockResolvedValue({ data: sampleCreateQURLData() }),
+      },
+    },
+    resolve_qurl: {
+      input: { access_token: "at_abc123def456" },
+      clientOverrides: {
+        resolveQURL: vi.fn().mockResolvedValue({ data: sampleResolveOutput() }),
+      },
+    },
+    list_qurls: {
+      input: {},
+      clientOverrides: {
+        listQURLs: vi.fn().mockResolvedValue({ data: [qurlFixture], meta: { has_more: false } }),
+      },
+    },
+    get_qurl: {
+      input: { resource_id: "r_test123" },
+      clientOverrides: { getQURL: vi.fn().mockResolvedValue({ data: qurlFixture }) },
+    },
+    delete_qurl: {
+      input: { resource_id: "r_test123" },
+      clientOverrides: { deleteQURL: vi.fn().mockResolvedValue(undefined) },
+      textIsJson: false,
+    },
+    extend_qurl: {
+      input: { resource_id: "r_test123", extend_by: "24h" },
+      clientOverrides: { extendQURL: vi.fn().mockResolvedValue({ data: qurlFixture }) },
+    },
+    update_qurl: {
+      input: { resource_id: "r_test123", extend_by: "24h" },
+      clientOverrides: { updateQURL: vi.fn().mockResolvedValue({ data: qurlFixture }) },
+    },
+    mint_link: {
+      input: { resource_id: "r_test123" },
+      clientOverrides: {
+        mintLink: vi.fn().mockResolvedValue({ data: sampleMintLinkOutput() }),
+      },
+    },
+    batch_create_qurls: {
+      input: { items: [{ target_url: "https://example.com" }] },
+      clientOverrides: { batchCreate: vi.fn().mockResolvedValue(sampleBatchCreateOutput()) },
+    },
+  };
+
+  for (const [name, { input, clientOverrides, textIsJson = true }] of Object.entries(cases)) {
+    it(`${name} structuredContent validates against outputSchema`, async () => {
+      const factory = factoryByName.get(name);
+      if (!factory) throw new Error(`Unknown tool ${name}`);
+      const tool = factory(makeMockClient(clientOverrides));
+
+      const result = await tool.handler(input);
+
+      expect(result.structuredContent).toBeDefined();
+      if (textIsJson) {
+        expect(result.structuredContent).toEqual(JSON.parse(result.content[0].text));
+      }
+      const parsed = tool.outputSchema.safeParse(result.structuredContent);
+      expect(parsed.success).toBe(true);
+    });
+  }
+
+  it("covers every registered tool", () => {
+    expect(new Set(Object.keys(cases))).toEqual(new Set(tools.map((t) => t.name)));
   });
 });

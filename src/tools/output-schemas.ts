@@ -13,6 +13,14 @@ import { z } from "zod";
  * and downstream agents use it to plan their call shape — so keeping these
  * aligned with the API spec at `api-spec/qurls.yaml` is part of the API spec
  * drift workflow.
+ *
+ * Why URLs and timestamps are plain `z.string()` (not `.url()`/`.datetime()`):
+ * these schemas validate API *responses*, not user input. A tighter local
+ * validator that disagrees with the server (e.g. an `https://` redirect that
+ * Zod's URL parser rejects, or a timestamp Go formats slightly differently
+ * from RFC 3339 strict mode) would turn a valid API response into a tool
+ * error for no benefit. We trust the server on shape and use `.string()` as
+ * an existence/typeof check.
  */
 
 const accessPolicy = z
@@ -60,6 +68,8 @@ export const qurlSchema = z.object({
   tags: z.array(z.string()).optional(),
   expires_at: z.string(),
   created_at: z.string(),
+  // Enum sourced from api-spec/qurls.yaml; if the API adds a value, the
+  // spec-drift workflow catches it before this validation hard-fails.
   status: z.enum(["active", "revoked"]),
   custom_domain: z.string().nullable().optional(),
   qurl_count: z.number().optional().describe("Number of access tokens minted for this resource"),

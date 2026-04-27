@@ -1,5 +1,12 @@
 import { vi } from "vitest";
-import type { IQURLClient, QURL, CreateQURLData } from "../client.js";
+import type {
+  BatchCreateOutput,
+  CreateQURLData,
+  IQURLClient,
+  MintLinkOutput,
+  QURL,
+  ResolveOutput,
+} from "../client.js";
 import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 
 export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClient {
@@ -47,5 +54,49 @@ export function sampleCreateQURLData(overrides: Partial<CreateQURLData> = {}): C
     qurl_site: "https://q_3a7f2c8e91b.qurl.site",
     expires_at: "2026-03-10T00:00:00Z",
     ...overrides,
+  };
+}
+
+export function sampleResolveOutput(overrides: Partial<ResolveOutput> = {}): ResolveOutput {
+  return {
+    target_url: "https://example.com/secret",
+    resource_id: "r_resolved1",
+    access_grant: {
+      expires_in: 300,
+      granted_at: "2026-03-09T12:00:00Z",
+      src_ip: "192.168.1.100",
+    },
+    ...overrides,
+  };
+}
+
+export function sampleMintLinkOutput(overrides: Partial<MintLinkOutput> = {}): MintLinkOutput {
+  return {
+    qurl_link: "https://qurl.link/at_xyz",
+    expires_at: "2026-03-10T00:00:00Z",
+    ...overrides,
+  };
+}
+
+export function sampleBatchCreateOutput(
+  overrides: Partial<BatchCreateOutput["data"]> = {},
+): BatchCreateOutput {
+  return {
+    data: {
+      succeeded: 1,
+      failed: 0,
+      results: [
+        {
+          index: 0,
+          success: true,
+          resource_id: "r_test123",
+          qurl_link: "https://qurl.link/at_abc",
+          qurl_site: "https://q_x.qurl.site",
+          expires_at: "2026-03-10T00:00:00Z",
+        },
+      ],
+      ...overrides,
+    },
+    meta: { request_id: "req_batch" },
   };
 }
