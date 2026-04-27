@@ -264,6 +264,14 @@ export class QURLClient implements IQURLClient {
     body?: unknown,
     passthroughStatuses: number[] = [],
   ): Promise<T> {
+    if (!this.apiKey) {
+      throw new QURLAPIError(
+        0,
+        "missing_api_key",
+        "QURL_API_KEY is not set. Set it in the MCP server environment and restart to make API calls.",
+      );
+    }
+
     const url = `${this.baseURL}${path}`;
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,

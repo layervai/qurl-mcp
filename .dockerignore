@@ -1,6 +1,8 @@
 .git
 .github
 .claude
+.vscode
+.idea
 node_modules
 dist
 coverage
@@ -8,6 +10,8 @@ coverage
 .env.*
 *.log
 .DS_Store
+Dockerfile
+.dockerignore
 README.md
 CHANGELOG.md
 CLAUDE.md

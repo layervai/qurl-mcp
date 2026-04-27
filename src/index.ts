@@ -8,10 +8,15 @@ import { createServer } from "./server.js";
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
 
-const apiKey = process.env.QURL_API_KEY;
+// Auth validation is deferred to first API call so the server can boot for
+// MCP introspection (tools/list, resources/list, prompts/list) without a key.
+// Tool/resource invocations that hit the API will throw a clear error if the
+// key is missing.
+const apiKey = process.env.QURL_API_KEY ?? "";
 if (!apiKey) {
-  console.error("Error: QURL_API_KEY environment variable is required");
-  process.exit(1);
+  console.error(
+    "Warning: QURL_API_KEY is not set. MCP introspection will succeed, but every tool/resource invocation will fail until you set it.",
+  );
 }
 
 const baseURL = process.env.QURL_API_URL ?? "https://api.layerv.ai";
