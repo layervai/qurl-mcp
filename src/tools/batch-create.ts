@@ -60,9 +60,13 @@ export function batchCreateTool(client: IQURLClient) {
         };
       }
       const data = result.data;
+      // Spread request_id only when present so structuredContent doesn't
+      // expose an explicit `request_id: undefined` key to hosts that
+      // consume the raw object (JSON.stringify drops it; structured
+      // consumers don't).
       const payload = {
         ...data,
-        request_id: result.meta?.request_id,
+        ...(result.meta?.request_id && { request_id: result.meta.request_id }),
       };
       return {
         content: [

@@ -38,10 +38,12 @@ export type ToolAnnotations = {
 
 // SDK's `structuredContent` is `Record<string, unknown>`; payloads are
 // typed against API response shapes. Single seam for the cast.
-// `T extends object` rules out primitives and `null` at compile time —
-// `Record<string, unknown>` would be tighter, but client-defined
+// `T extends object` rules out primitives and `null` at compile time;
+// `{ length?: never }` rules out arrays (which would pass the SDK's
+// runtime type check but violate its JSON-object contract).
+// `Record<string, unknown>` would be tighter still, but client-defined
 // interfaces lack an index signature and don't satisfy it.
-export function toStructuredContent<T extends object>(
+export function toStructuredContent<T extends object & { length?: never }>(
   value: T,
 ): Record<string, unknown> {
   return value as unknown as Record<string, unknown>;
