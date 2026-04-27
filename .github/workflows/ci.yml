@@ -50,6 +50,13 @@ jobs:
           tags: qurl-mcp:ci
       - name: Verify MCP introspection
         run: |
+          # Bash command-substitution doesn't trip set -e by default, so an
+          # exit-on-error from `docker run` (e.g. timeout 124, killed 137)
+          # would otherwise let `out` be set to whatever made it to stdout
+          # and the step would limp on until a grep finally failed with a
+          # misleading "missing tool" message. Fail at the actual cause.
+          set -euo pipefail
+          shopt -s inherit_errexit
           # Pipe stderr to a separate file so we can assert the
           # introspection-only warning still prints. The warning is the only
           # signal a misconfigured user gets that they're booting without an
