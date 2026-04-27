@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
+import { withMissingApiKeyHandler } from "./_shared.js";
 
 export const aiAgentPolicySchema = z.object({
   block_all: z.boolean().optional().describe("Block all recognized AI agents"),
@@ -77,7 +78,7 @@ export function createQurlTool(client: IQURLClient) {
       "Create a qURL - a secure, policy-bound link to a protected resource. " +
       "The returned qurl_link is ephemeral (shown once) and should be shared immediately.",
     inputSchema: createQurlSchema,
-    handler: async (input: z.infer<typeof createQurlSchema>) => {
+    handler: withMissingApiKeyHandler(async (input: z.infer<typeof createQurlSchema>) => {
       const result = await client.createQURL(input);
       return {
         content: [
@@ -87,6 +88,6 @@ export function createQurlTool(client: IQURLClient) {
           },
         ],
       };
-    },
+    }),
   };
 }

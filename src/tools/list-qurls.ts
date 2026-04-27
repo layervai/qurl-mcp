@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
+import { withMissingApiKeyHandler } from "./_shared.js";
 
 export const listQurlsSchema = z.object({
   limit: z
@@ -45,7 +46,7 @@ export function listQurlsTool(client: IQURLClient) {
     description:
       "List qURLs with optional filtering by status, date ranges, and search query.",
     inputSchema: listQurlsSchema,
-    handler: async (input: z.infer<typeof listQurlsSchema>) => {
+    handler: withMissingApiKeyHandler(async (input: z.infer<typeof listQurlsSchema>) => {
       const result = await client.listQURLs(input);
       return {
         content: [
@@ -56,6 +57,6 @@ export function listQurlsTool(client: IQURLClient) {
           },
         ],
       };
-    },
+    }),
   };
 }

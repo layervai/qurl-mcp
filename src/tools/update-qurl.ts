@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { resourceIdSchema, zodErrorToToolResult } from "./_shared.js";
+import { resourceIdSchema, withMissingApiKeyHandler, zodErrorToToolResult } from "./_shared.js";
 
 // Tags must match the API constraints: 1-50 chars, start with alphanumeric,
 // allow alphanumerics/spaces/underscores/hyphens. Max 10 tags per resource.
@@ -59,7 +59,7 @@ export function updateQurlTool(client: IQURLClient) {
       "Do not provide both extend_by and expires_at. At least one update field is required.",
     // Base shape for MCP tool registration; refinements run in the handler
     inputSchema: updateQurlBaseSchema,
-    handler: async (raw: z.infer<typeof updateQurlBaseSchema>) => {
+    handler: withMissingApiKeyHandler(async (raw: z.infer<typeof updateQurlBaseSchema>) => {
       const parsed = updateQurlSchema.safeParse(raw);
       if (!parsed.success) return zodErrorToToolResult(parsed.error);
       const { resource_id, ...body } = parsed.data;
@@ -72,6 +72,6 @@ export function updateQurlTool(client: IQURLClient) {
           },
         ],
       };
-    },
+    }),
   };
 }

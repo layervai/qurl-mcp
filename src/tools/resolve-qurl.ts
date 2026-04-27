@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
+import { withMissingApiKeyHandler } from "./_shared.js";
 
 export const resolveQurlSchema = z.object({
   access_token: z
@@ -16,7 +17,7 @@ export function resolveQurlTool(client: IQURLClient) {
       "After resolution, the target URL is accessible from your IP for the duration " +
       "specified in access_grant.expires_in seconds.",
     inputSchema: resolveQurlSchema,
-    handler: async (input: z.infer<typeof resolveQurlSchema>) => {
+    handler: withMissingApiKeyHandler(async (input: z.infer<typeof resolveQurlSchema>) => {
       const result = await client.resolveQURL(input);
       return {
         content: [
@@ -26,6 +27,6 @@ export function resolveQurlTool(client: IQURLClient) {
           },
         ],
       };
-    },
+    }),
   };
 }

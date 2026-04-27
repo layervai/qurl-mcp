@@ -17,6 +17,12 @@ LABEL org.opencontainers.image.source="https://github.com/layervai/qurl-mcp" \
       org.opencontainers.image.description="MCP server for qURL — secure expiring access links for AI agents." \
       org.opencontainers.image.licenses="MIT"
 
+# tini reaps zombies and forwards SIGTERM to node so `docker stop`
+# triggers a graceful shutdown instead of relying on Node's default
+# PID-1 signal handling. Alternative is `docker run --init …`, but
+# baking it in keeps the image self-contained.
+RUN apk add --no-cache tini
+
 WORKDIR /app
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/dist ./dist
@@ -25,4 +31,4 @@ COPY --chown=node:node --from=build /app/package.json ./
 ENV NODE_ENV=production
 USER node
 
-ENTRYPOINT ["node", "dist/index.js"]
+ENTRYPOINT ["/sbin/tini", "--", "node", "dist/index.js"]
