@@ -60,13 +60,18 @@ jobs:
             '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
             '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
             | docker run -i --rm qurl-mcp:ci 2>/tmp/mcp-stderr)
-          echo "$out" | grep -q '"create_qurl"' || { echo "tools/list missing create_qurl"; echo "$out"; exit 1; }
+          # Assert every tool from the registered surface is exposed. A future
+          # change that drops one (e.g. mint_link, batch_create_qurls) would
+          # otherwise be caught only by a third-party probe.
+          for tool in create_qurl resolve_qurl list_qurls get_qurl delete_qurl extend_qurl update_qurl mint_link batch_create_qurls; do
+            echo "$out" | grep -q "\"$tool\"" || { echo "tools/list missing $tool"; echo "$out"; exit 1; }
+          done
           grep -q "QURL_API_KEY is not set" /tmp/mcp-stderr || { echo "missing introspection-only warning on stderr"; cat /tmp/mcp-stderr; exit 1; }
-          echo "MCP introspection OK; warning printed as expected"
+          echo "MCP introspection OK; all 9 tools exposed; warning printed as expected"
 
   notify:
     name: Notify
-    needs: [lint, test]
+    needs: [lint, test, docker]
     if: always() && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -77,6 +82,7 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEST_RESULT: ${{ needs.test.result }}
           LINT_RESULT: ${{ needs.lint.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
           COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           GH_SERVER_URL: ${{ github.server_url }}
           GH_REPOSITORY: ${{ github.repository }}
@@ -106,13 +112,13 @@ jobs:
             *) TRIGGER_TEXT="$GH_EVENT_NAME" ;;
           esac
 
-          # Overall status: fail if either lint or test failed
+          # Overall status: fail if any of lint, test, docker failed
           HEADER="qURL MCP Build"
-          if [[ "$TEST_RESULT" == "success" && "$LINT_RESULT" == "success" ]]; then
+          if [[ "$TEST_RESULT" == "success" && "$LINT_RESULT" == "success" && "$DOCKER_RESULT" == "success" ]]; then
             COLOR="#36a64f"; EMOJI=":white_check_mark:"; STATUS_TEXT="successful"
-          elif [[ "$TEST_RESULT" == "failure" || "$LINT_RESULT" == "failure" ]]; then
+          elif [[ "$TEST_RESULT" == "failure" || "$LINT_RESULT" == "failure" || "$DOCKER_RESULT" == "failure" ]]; then
             COLOR="#dc3545"; EMOJI=":x:"; STATUS_TEXT="failed"
-          elif [[ "$TEST_RESULT" == "cancelled" || "$LINT_RESULT" == "cancelled" ]]; then
+          elif [[ "$TEST_RESULT" == "cancelled" || "$LINT_RESULT" == "cancelled" || "$DOCKER_RESULT" == "cancelled" ]]; then
             COLOR="#ffc107"; EMOJI=":warning:"; STATUS_TEXT="cancelled"
           else
             COLOR="#ffc107"; EMOJI=":warning:"; STATUS_TEXT="incomplete"
@@ -127,6 +133,11 @@ jobs:
             success) LINT_EMOJI=":white_check_mark:" ;;
             failure) LINT_EMOJI=":x:" ;;
             *) LINT_EMOJI=":warning:" ;;
+          esac
+          case "$DOCKER_RESULT" in
+            success) DOCKER_EMOJI=":white_check_mark:" ;;
+            failure) DOCKER_EMOJI=":x:" ;;
+            *) DOCKER_EMOJI=":warning:" ;;
           esac
 
           FIRST_LINE=$(echo "$COMMIT_MESSAGE" | head -n1 | cut -c1-100)
@@ -143,6 +154,7 @@ jobs:
             --arg actor "$GH_ACTOR" \
             --arg test_emoji "$TEST_EMOJI" \
             --arg lint_emoji "$LINT_EMOJI" \
+            --arg docker_emoji "$DOCKER_EMOJI" \
             --arg commit "$FIRST_LINE" \
             --arg commit_url "$COMMIT_URL" \
             --arg workflow_url "$WORKFLOW_URL" \
@@ -152,7 +164,8 @@ jobs:
                 {type: "mrkdwn", text: ("*Branch:*\n`\($branch)` (\($sha))")},
                 {type: "mrkdwn", text: ("*Trigger:*\n\($trigger) by \($actor)")},
                 {type: "mrkdwn", text: ("*Lint:*\n\($lint_emoji)")},
-                {type: "mrkdwn", text: ("*Tests:*\n\($test_emoji)")}
+                {type: "mrkdwn", text: ("*Tests:*\n\($test_emoji)")},
+                {type: "mrkdwn", text: ("*Docker:*\n\($docker_emoji)")}
               ]},
               {type: "section", text: {type: "mrkdwn", text: ("*Commit:* `\($commit)`")}},
               {type: "context", elements: [

@@ -78,6 +78,25 @@ describe("QURLClient", () => {
       expect(mock).not.toHaveBeenCalled();
     });
 
+    it("treats whitespace-only apiKey as missing", async () => {
+      // Defends against `QURL_API_KEY=" "` slipping past the constructor's
+      // truthy check and failing as a server-side 401 instead of the typed
+      // missing_api_key error.
+      const wsClient = new QURLClient({
+        apiKey: "   \t\n  ",
+        baseURL: "https://api.test.com",
+      });
+      const mock = vi.fn();
+      vi.stubGlobal("fetch", mock);
+
+      await expect(wsClient.getQuota()).rejects.toMatchObject({
+        name: "QURLAPIError",
+        code: "missing_api_key",
+        statusCode: 0,
+      });
+      expect(mock).not.toHaveBeenCalled();
+    });
+
     it("throws missing_api_key for every API method without issuing a network request", async () => {
       const noKeyClient = new QURLClient({
         apiKey: "",
