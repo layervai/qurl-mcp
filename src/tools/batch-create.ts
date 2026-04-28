@@ -64,10 +64,12 @@ export function batchCreateTool(client: IQURLClient) {
       // Spread request_id only when present so structuredContent doesn't
       // expose an explicit `request_id: undefined` key to hosts that
       // consume the raw object (JSON.stringify drops it; structured
-      // consumers don't).
+      // consumers don't). `!== undefined` rather than truthy so an
+      // empty-string request_id (shouldn't happen, but cheap to guard)
+      // doesn't silently drop.
       const payload = {
         ...data,
-        ...(result.meta?.request_id && { request_id: result.meta.request_id }),
+        ...(result.meta?.request_id !== undefined && { request_id: result.meta.request_id }),
       };
       return {
         content: [
