@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - "qurl-mcp-v*"
+  # workflow_dispatch checks out the workflow file's branch (main) by default,
+  # not the most recent tag — fine for re-publishing the current main's
+  # server.json, but if you need to publish an older release, add
+  # `inputs.ref` and pass it to actions/checkout.
   workflow_dispatch:
 
 permissions:
@@ -27,14 +31,14 @@ jobs:
           # alongside the `version` above when upgrading the publisher.
           expected_sha="9a324bab0bc69bf957599d7975b663d7c4169eba2cdc00baf0f589b847e03898"
           url="https://github.com/modelcontextprotocol/registry/releases/download/${version}/${tarball}"
-          curl -fsSL "$url" -o /tmp/mcp-publisher.tar.gz
+          curl -fsSL --retry 3 --retry-delay 5 "$url" -o /tmp/mcp-publisher.tar.gz
           echo "${expected_sha}  /tmp/mcp-publisher.tar.gz" | sha256sum -c -
           mkdir -p /tmp/mcp-publisher
           tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp/mcp-publisher
           echo "/tmp/mcp-publisher" >> "$GITHUB_PATH"
 
       - name: Sanity-check publisher binary
-        run: mcp-publisher --help | head -1
+        run: mcp-publisher --help > /dev/null
 
       - name: Validate server.json
         run: mcp-publisher validate
