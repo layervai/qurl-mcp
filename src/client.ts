@@ -103,6 +103,8 @@ export interface UpdateQURLInput {
   expires_at?: string;
   tags?: string[];
   description?: string;
+  custom_domain?: string;
+  preserve_host?: boolean;
 }
 
 export interface ExtendQURLInput {

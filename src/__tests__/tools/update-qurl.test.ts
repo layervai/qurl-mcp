@@ -118,6 +118,47 @@ describe("updateQurlTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("accepts custom_domain", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        custom_domain: "app.example.com",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it('accepts custom_domain: "" to clear the field', () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        custom_domain: "",
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("rejects custom_domain longer than 253 characters", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        custom_domain: "a".repeat(254),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("accepts preserve_host: true / false", () => {
+      expect(
+        updateQurlSchema.safeParse({ resource_id: "r_abc", preserve_host: true }).success,
+      ).toBe(true);
+      expect(
+        updateQurlSchema.safeParse({ resource_id: "r_abc", preserve_host: false }).success,
+      ).toBe(true);
+    });
+
+    it("rejects non-boolean preserve_host", () => {
+      const result = updateQurlSchema.safeParse({
+        resource_id: "r_abc",
+        preserve_host: "yes",
+      });
+      expect(result.success).toBe(false);
+    });
+
     it("rejects non-string extend_by", () => {
       const result = updateQurlSchema.safeParse({
         resource_id: "r_abc",
@@ -152,7 +193,7 @@ describe("updateQurlTool", () => {
           result.error.issues.some(
             (i) =>
               i.message ===
-              "At least one update field (extend_by, expires_at, tags, or description) is required",
+              "At least one update field (extend_by, expires_at, tags, description, custom_domain, or preserve_host) is required",
           ),
         ).toBe(true);
       }
@@ -208,6 +249,40 @@ describe("updateQurlTool", () => {
       expect(mockUpdate).toHaveBeenCalledWith("r_update1", {
         tags: ["prod", "api"],
         description: "New desc",
+      });
+    });
+
+    it("passes custom_domain and preserve_host to client", async () => {
+      const mockUpdate = vi.fn().mockResolvedValue({ data: fixture });
+      const client = makeMockClient({ updateQURL: mockUpdate });
+      const tool = updateQurlTool(client);
+
+      await tool.handler({
+        resource_id: "r_update1",
+        custom_domain: "app.example.com",
+        preserve_host: true,
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith("r_update1", {
+        custom_domain: "app.example.com",
+        preserve_host: true,
+      });
+    });
+
+    it("passes the clear-custom_domain + preserve_host combo through verbatim", async () => {
+      const mockUpdate = vi.fn().mockResolvedValue({ data: fixture });
+      const client = makeMockClient({ updateQURL: mockUpdate });
+      const tool = updateQurlTool(client);
+
+      await tool.handler({
+        resource_id: "r_update1",
+        custom_domain: "",
+        preserve_host: false,
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith("r_update1", {
+        custom_domain: "",
+        preserve_host: false,
       });
     });
 
