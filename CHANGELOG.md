@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.2...qurl-mcp-v0.3.3) (2026-04-28)
+
+
+### Bug Fixes
+
+* **client:** add preserve_host to QURL interface and qurlSchema ([#85](https://github.com/layervai/qurl-mcp/issues/85)) ([b8e82da](https://github.com/layervai/qurl-mcp/commit/b8e82dadb52457ee7c24fadceedfa101cfedf184))
+
 ## [0.3.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.1...qurl-mcp-v0.3.2) (2026-04-28)
 
 
