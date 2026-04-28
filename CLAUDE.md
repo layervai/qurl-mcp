@@ -204,6 +204,12 @@ The repository includes an API spec drift detection system:
 - **Description divergence:** `server.json.description` is intentionally shorter than `package.json.description` because the registry hard-caps descriptions at 100 characters. Don't "fix" by aligning them — keep the npm/site copy long-form, and the registry copy concise.
 - **Pinning:** the workflow pins both `actions/checkout` and the `mcp-publisher` tarball SHA. Bump them in lockstep when upgrading the publisher.
 
+## Smithery
+
+- **Manifest:** `smithery.yaml`. Powers smithery.ai's auto-detect import flow.
+- **Hand-synced:** `configSchema` is kept in sync with `server.json.environmentVariables` by hand. Adding or renaming an env var means updating both manifests; there's no automated sync.
+- **Default URLs duplicated:** `https://api.layerv.ai` appears in three places — `smithery.yaml`'s schema default, the `commandFunction` fallback, and `src/index.ts` runtime default. If the production URL ever moves, all three move in lockstep. The duplication is deliberate (defense-in-depth against consumers that don't apply JSON Schema defaults).
+
 ## Security Notes
 
 - Never commit API keys or secrets

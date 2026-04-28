@@ -7,6 +7,11 @@ startCommand:
     properties:
       qurlApiKey:
         type: string
+        # JSON Schema's `format: password` is the standard convention for
+        # input-masking. Smithery's UI rendering of this hint isn't formally
+        # documented; mirroring server.json's `isSecret: true` here in the
+        # form Smithery is most likely to honor.
+        format: password
         description: |
           API key for the qURL API with qurl:read, qurl:write, and/or qurl:resolve scopes.
           Obtain from https://layerv.ai.
