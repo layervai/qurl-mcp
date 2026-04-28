@@ -37,7 +37,7 @@ jobs:
     # only if/name/needs/permissions/secrets/strategy/uses/with/concurrency
     # are valid on a job that calls a reusable workflow. The reusable
     # workflow itself sets `timeout-minutes: 5` internally.
-    uses: layervai/ops-routines-workflows/.github/workflows/age-check-actions.yml@3f4ce1fdeb5d2f6f66b0b2c7d0ba42efce7212bc # v0.2.0
+    uses: layervai/ops-routines-workflows/.github/workflows/age-check-actions.yml@39fcb54fc36ea7b6032e138bd8b57647f2bb32f0 # v0.4.0
     with:
       min_age_days: 7
     permissions:
