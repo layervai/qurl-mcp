@@ -72,6 +72,13 @@ export const qurlSchema = z.object({
   // spec-drift workflow catches it before this validation hard-fails.
   status: z.enum(["active", "revoked"]),
   custom_domain: z.string().nullable().optional(),
+  preserve_host: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the original Host header is preserved when proxying via the custom domain. " +
+        "Only meaningful when custom_domain is set; defaults to false on the API side.",
+    ),
   qurl_count: z.number().optional().describe("Number of access tokens minted for this resource"),
   qurls: z.array(accessTokenSchema).optional(),
 });

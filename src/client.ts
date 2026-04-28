@@ -36,6 +36,7 @@ export interface QURL {
   created_at: string;
   status: "active" | "revoked";
   custom_domain?: string | null;
+  preserve_host?: boolean;
   qurl_count?: number;
   qurls?: AccessToken[];
 }
