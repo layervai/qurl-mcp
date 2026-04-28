@@ -68,7 +68,13 @@ export const createQurlSchema = z.object({
     .min(1)
     .optional()
     .describe('How long access lasts after clicking (e.g., "1h")'),
-  custom_domain: z.string().optional().describe("Custom domain to assign to the auto-created resource"),
+  custom_domain: z
+    .string()
+    .max(253)
+    .optional()
+    .describe(
+      "Custom domain to assign to the auto-created resource (max 253 chars, must be registered/active/owned).",
+    ),
   access_policy: accessPolicySchema.optional().describe("Access control policy for the qURL"),
 });
 
