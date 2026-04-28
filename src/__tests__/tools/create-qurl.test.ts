@@ -153,6 +153,19 @@ describe("createQurlTool", () => {
       expect(parsed.qurl_id).toBe("q_3a7f2c8e91b");
     });
 
+    it("returns structuredContent that matches the declared outputSchema", async () => {
+      const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
+      const client = makeMockClient({ createQURL: mockCreate });
+      const tool = createQurlTool(client);
+
+      const result = await tool.handler({ target_url: "https://example.com" });
+
+      expect(result.structuredContent).toBeDefined();
+      expect(result.structuredContent).toEqual(JSON.parse(result.content[0].text));
+      const parsed = tool.outputSchema.safeParse(result.structuredContent);
+      expect(parsed.success).toBe(true);
+    });
+
     it("formats response as compact JSON", async () => {
       const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ createQURL: mockCreate });

@@ -1,17 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { resolveQurlTool, resolveQurlSchema } from "../../tools/resolve-qurl.js";
-import type { ResolveOutput } from "../../client.js";
-import { makeMockClient } from "../helpers.js";
+import { makeMockClient, sampleResolveOutput as makeResolveOutput } from "../helpers.js";
 
-const sampleResolveOutput: ResolveOutput = {
-  target_url: "https://example.com/secret",
-  resource_id: "r_resolved1",
-  access_grant: {
-    expires_in: 300,
-    granted_at: "2026-03-09T12:00:00Z",
-    src_ip: "192.168.1.100",
-  },
-};
+const sampleResolveOutput = makeResolveOutput();
 
 describe("resolveQurlTool", () => {
   describe("metadata", () => {
@@ -22,7 +13,7 @@ describe("resolveQurlTool", () => {
 
     it("has a description mentioning resolve and firewall", () => {
       const tool = resolveQurlTool(makeMockClient());
-      expect(tool.description).toContain("Resolve");
+      expect(tool.description.toLowerCase()).toContain("resolve");
       expect(tool.description).toContain("firewall");
     });
   });

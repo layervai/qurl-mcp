@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { QURLAPIError } from "../../client.js";
 import { deleteQurlTool, deleteQurlSchema } from "../../tools/delete-qurl.js";
 import { makeMockClient } from "../helpers.js";
 
@@ -11,7 +12,7 @@ describe("deleteQurlTool", () => {
 
     it("has a description mentioning revoke", () => {
       const tool = deleteQurlTool(makeMockClient());
-      expect(tool.description).toContain("Revoke");
+      expect(tool.description.toLowerCase()).toContain("revoke");
     });
   });
 
@@ -65,7 +66,7 @@ describe("deleteQurlTool", () => {
 
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
-      expect(result.content[0].text).toBe("qURL r_abc123 has been revoked.");
+      expect(result.content[0].text).toBe("qURL r_abc123 is revoked.");
     });
 
     it("propagates client errors", async () => {
@@ -74,6 +75,48 @@ describe("deleteQurlTool", () => {
       const tool = deleteQurlTool(client);
 
       await expect(tool.handler({ resource_id: "r_abc" })).rejects.toThrow("Forbidden");
+    });
+
+    it("swallows 404 from a re-delete and flags was_already_revoked", async () => {
+      const mockDelete = vi
+        .fn()
+        .mockRejectedValue(new QURLAPIError(404, "not_found", "Resource not found."));
+      const client = makeMockClient({ deleteQURL: mockDelete });
+      const tool = deleteQurlTool(client);
+
+      const result = await tool.handler({ resource_id: "r_abc123" });
+
+      expect(result.content[0].text).toBe("qURL r_abc123 is revoked.");
+      expect(result.structuredContent).toEqual({
+        resource_id: "r_abc123",
+        revoked: true,
+        was_already_revoked: true,
+        message: "qURL r_abc123 is revoked.",
+      });
+    });
+
+    it("sets was_already_revoked: false on a fresh delete", async () => {
+      const mockDelete = vi.fn().mockResolvedValue(undefined);
+      const client = makeMockClient({ deleteQURL: mockDelete });
+      const tool = deleteQurlTool(client);
+
+      const result = await tool.handler({ resource_id: "r_abc123" });
+
+      expect(result.structuredContent).toMatchObject({
+        was_already_revoked: false,
+      });
+    });
+
+    it("propagates non-404 QURLAPIErrors", async () => {
+      const mockDelete = vi
+        .fn()
+        .mockRejectedValue(new QURLAPIError(403, "forbidden", "Insufficient permissions."));
+      const client = makeMockClient({ deleteQURL: mockDelete });
+      const tool = deleteQurlTool(client);
+
+      await expect(tool.handler({ resource_id: "r_abc" })).rejects.toThrow(
+        "Insufficient permissions.",
+      );
     });
   });
 });

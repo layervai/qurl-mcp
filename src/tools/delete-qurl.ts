@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { IQURLClient } from "../client.js";
+import { type IQURLClient, QURLAPIError } from "../client.js";
 import { withMissingApiKeyHandler } from "./_shared.js";
+import { deleteQurlOutputSchema } from "./output-schemas.js";
 
 export const deleteQurlSchema = z.object({
   // DELETE only accepts r_ (resource) IDs per the API spec — unlike
@@ -19,17 +20,58 @@ export const deleteQurlSchema = z.object({
 export function deleteQurlTool(client: IQURLClient) {
   return {
     name: "delete_qurl",
-    description: "Revoke/delete a qURL. This immediately invalidates the link.",
+    title: "Delete qURL",
+    description:
+      "Permanently revoke a qURL — the link and every access token under it stop working immediately. " +
+      "**This action is irreversible.** Use this when you want to cut off access entirely (compromised link, departed user, end-of-engagement). " +
+      "Use `update_qurl` instead when you only need to shorten/extend the expiration, retag, or rename — those preserve the existing access tokens. " +
+      "Use `extend_qurl` when you only need to push the expiration out. " +
+      "**Idempotent:** re-deletes return success even if the resource was already revoked or never existed — verify with `get_qurl` first if the ID came from user input, or branch on the `was_already_revoked` flag in the response to distinguish the two cases. " +
+      "Returns a confirmation payload. By default the resource is excluded from `list_qurls`; pass `status: \"revoked\"` to see it.",
     inputSchema: deleteQurlSchema,
+    outputSchema: deleteQurlOutputSchema,
+    annotations: {
+      title: "Delete qURL",
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof deleteQurlSchema>) => {
-      await client.deleteQURL(input.resource_id);
+      let wasAlreadyRevoked = false;
+      try {
+        await client.deleteQURL(input.resource_id);
+      } catch (err) {
+        // Re-delete of an already-revoked (or never-existed) resource:
+        // the API returns 404, but the agent's intent ("this resource
+        // should not be live") is already satisfied. Swallow the throw
+        // so the tool is genuinely idempotent, but expose
+        // `was_already_revoked: true` in the payload so defensive
+        // agents can branch when they care.
+        //
+        // Intentionally checks status only, not `code`. A 404 with a
+        // non-JSON body (e.g. an HTML error page from a proxy in front
+        // of the API) lands here as `code: "parse_error"` — the
+        // resource still isn't live, so treating it as already-revoked
+        // is the right behavior; defensive agents see that via the
+        // `was_already_revoked` flag.
+        if (!(err instanceof QURLAPIError) || err.statusCode !== 404) throw err;
+        wasAlreadyRevoked = true;
+      }
+      const payload = {
+        resource_id: input.resource_id,
+        revoked: true as const,
+        was_already_revoked: wasAlreadyRevoked,
+        message: `qURL ${input.resource_id} is revoked.`,
+      };
       return {
         content: [
           {
             type: "text" as const,
-            text: `qURL ${input.resource_id} has been revoked.`,
+            text: payload.message,
           },
         ],
+        structuredContent: payload,
       };
     }),
   };

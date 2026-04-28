@@ -10,24 +10,45 @@ import { extendQurlTool } from "./tools/extend-qurl.js";
 import { updateQurlTool } from "./tools/update-qurl.js";
 import { mintLinkTool } from "./tools/mint-link.js";
 import { batchCreateTool } from "./tools/batch-create.js";
+import type { ToolAnnotations } from "./tools/_shared.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
 import { auditLinksPrompt } from "./prompts/audit-links.js";
 import { rotateAccessPrompt } from "./prompts/rotate-access.js";
 
-/** Shared contract for the objects returned by tool factory functions. */
-type ToolFactory = (client: IQURLClient) => {
+/**
+ * Shape of the object every tool factory returns. Exported so the
+ * TDQS-coverage test can iterate the same canonical list without
+ * redeclaring the type.
+ */
+export type ToolFactory = (client: IQURLClient) => {
   name: string;
+  title: string;
   description: string;
   inputSchema: z.AnyZodObject;
-  // Args vary per tool; exact signatures are validated by server.tool() at each call site.
+  outputSchema: z.AnyZodObject;
+  annotations: ToolAnnotations;
+  // Args vary per tool; exact signatures are validated by registerTool at each call site.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: (...args: any[]) => Promise<{
-    content: Array<{ type: string; text: string }>;
+    content: Array<{ type: "text"; text: string }>;
+    structuredContent?: Record<string, unknown>;
     isError?: boolean;
   }>;
 };
+
+export const toolFactories = [
+  createQurlTool,
+  resolveQurlTool,
+  listQurlsTool,
+  getQurlTool,
+  deleteQurlTool,
+  extendQurlTool,
+  updateQurlTool,
+  mintLinkTool,
+  batchCreateTool,
+] satisfies ToolFactory[];
 
 export function createServer(client: IQURLClient, version: string): McpServer {
   const server = new McpServer({
@@ -35,22 +56,21 @@ export function createServer(client: IQURLClient, version: string): McpServer {
     version,
   });
 
-  // Register tools
-  const toolFactories = [
-    createQurlTool,
-    resolveQurlTool,
-    listQurlsTool,
-    getQurlTool,
-    deleteQurlTool,
-    extendQurlTool,
-    updateQurlTool,
-    mintLinkTool,
-    batchCreateTool,
-  ] satisfies ToolFactory[];
-
   for (const factory of toolFactories) {
     const tool = factory(client);
-    server.tool(tool.name, tool.description, tool.inputSchema.shape, tool.handler);
+    // registerTool wires outputSchema + annotations into tools/list; pass
+    // .shape (ZodRawShape), not the ZodObject itself.
+    server.registerTool(
+      tool.name,
+      {
+        title: tool.title,
+        description: tool.description,
+        inputSchema: tool.inputSchema.shape,
+        outputSchema: tool.outputSchema.shape,
+        annotations: tool.annotations,
+      },
+      tool.handler,
+    );
   }
 
   // Register resources
