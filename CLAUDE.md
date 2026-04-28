@@ -208,7 +208,7 @@ The repository includes an API spec drift detection system:
 
 - **Manifest:** `smithery.yaml`. Powers smithery.ai's auto-detect import flow.
 - **Hand-synced:** `configSchema` is kept in sync with `server.json.environmentVariables` by hand. Adding or renaming an env var means updating both manifests; there's no automated sync.
-- **Default URLs duplicated:** `https://api.layerv.ai` appears in three places — `smithery.yaml`'s schema default, the `commandFunction` fallback, and `src/index.ts` runtime default. If the production URL ever moves, all three move in lockstep. The duplication is deliberate (defense-in-depth against consumers that don't apply JSON Schema defaults).
+- **Default URLs duplicated:** `https://api.layerv.ai` appears in four places — `smithery.yaml`'s schema default, the `commandFunction` fallback, `server.json`'s `environmentVariables[].default`, and `src/index.ts` runtime default. If the production URL ever moves, all four move in lockstep. The duplication is deliberate (defense-in-depth against consumers that don't apply JSON Schema defaults).
 
 ## Security Notes
 
