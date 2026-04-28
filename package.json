@@ -1,6 +1,6 @@
 {
   "name": "@layerv/qurl-mcp",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "MCP server for qURL™ — secure link management for AI agents. Quantum URL is how you enter the hidden layer of the internet.",
   "mcpName": "io.github.layervai/qurl-mcp",
   "type": "module",
