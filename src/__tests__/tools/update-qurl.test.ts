@@ -269,6 +269,23 @@ describe("updateQurlTool", () => {
       });
     });
 
+    it("passes the clear-custom_domain + preserve_host combo through verbatim", async () => {
+      const mockUpdate = vi.fn().mockResolvedValue({ data: fixture });
+      const client = makeMockClient({ updateQURL: mockUpdate });
+      const tool = updateQurlTool(client);
+
+      await tool.handler({
+        resource_id: "r_update1",
+        custom_domain: "",
+        preserve_host: false,
+      });
+
+      expect(mockUpdate).toHaveBeenCalledWith("r_update1", {
+        custom_domain: "",
+        preserve_host: false,
+      });
+    });
+
     it("propagates client errors", async () => {
       const mockUpdate = vi.fn().mockRejectedValue(new Error("QURL expired"));
       const client = makeMockClient({ updateQURL: mockUpdate });
