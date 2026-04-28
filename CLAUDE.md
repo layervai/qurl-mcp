@@ -197,6 +197,13 @@ The repository includes an API spec drift detection system:
 - **Action:** When an issue is opened, review the diff, update `api-spec/qurls.yaml`, update client types/tools as needed, and verify with `npm run build && npm run lint && npm test`.
 - **Spec URL:** Configurable via the `QURL_API_SPEC_URL` repository variable. Defaults to `https://api.layerv.ai/v1/openapi.yaml`.
 
+## MCP Registry
+
+- **Manifest:** `server.json` (validated against the registry's JSON Schema). Both `$.version` and `$.packages[0].version` are kept in sync with `package.json` automatically by release-please's `extra-files` config.
+- **Publishing:** `.github/workflows/publish-mcp-registry.yml` runs on every `qurl-mcp-v*` tag and uses GitHub OIDC for keyless auth (no PATs).
+- **Description divergence:** `server.json.description` is intentionally shorter than `package.json.description` because the registry hard-caps descriptions at 100 characters. Don't "fix" by aligning them — keep the npm/site copy long-form, and the registry copy concise.
+- **Pinning:** the workflow pins both `actions/checkout` and the `mcp-publisher` tarball SHA. Bump them in lockstep when upgrading the publisher.
+
 ## Security Notes
 
 - Never commit API keys or secrets
