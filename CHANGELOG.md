@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.3...qurl-mcp-v0.3.4) (2026-04-28)
+
+
+### Bug Fixes
+
+* **tools:** add custom_domain + preserve_host to update_qurl input ([#88](https://github.com/layervai/qurl-mcp/issues/88)) ([38769db](https://github.com/layervai/qurl-mcp/commit/38769dbd89a4dcae3cb9941dc6739764a2ce1e74))
+
 ## [0.3.3](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.2...qurl-mcp-v0.3.3) (2026-04-28)
 
 
