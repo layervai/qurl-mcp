@@ -13,21 +13,28 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install mcp-publisher
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           version="v1.7.2"
-          url="https://github.com/modelcontextprotocol/registry/releases/download/${version}/mcp-publisher_linux_amd64.tar.gz"
+          tarball="mcp-publisher_linux_amd64.tar.gz"
+          # Pinned sha256 from upstream registry_1.7.2_checksums.txt — bump
+          # alongside the `version` above when upgrading the publisher.
+          expected_sha="9a324bab0bc69bf957599d7975b663d7c4169eba2cdc00baf0f589b847e03898"
+          url="https://github.com/modelcontextprotocol/registry/releases/download/${version}/${tarball}"
           curl -fsSL "$url" -o /tmp/mcp-publisher.tar.gz
+          echo "${expected_sha}  /tmp/mcp-publisher.tar.gz" | sha256sum -c -
           mkdir -p /tmp/mcp-publisher
           tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp/mcp-publisher
           echo "/tmp/mcp-publisher" >> "$GITHUB_PATH"
+
+      - name: Sanity-check publisher binary
+        run: mcp-publisher --help | head -1
 
       - name: Validate server.json
         run: mcp-publisher validate
