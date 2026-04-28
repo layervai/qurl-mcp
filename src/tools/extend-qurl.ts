@@ -19,6 +19,7 @@ export function extendQurlTool(client: IQURLClient) {
       "Use `update_qurl` instead when you also need to change tags, description, or set an absolute `expires_at`. " +
       "Use `delete_qurl` when you want to cut off access entirely. " +
       "Accepts both `r_` and `q_` IDs (q_ is auto-resolved to its parent resource). " +
+      "**Not idempotent:** calling twice with the same `extend_by` extends the expiration twice. If you need an absolute target, use `update_qurl` with `expires_at` so retries on transient errors don't double-push. " +
       "Returns the updated resource with the new `expires_at` (same shape as `get_qurl`).",
     inputSchema: extendQurlSchema,
     outputSchema: extendQurlOutputSchema,

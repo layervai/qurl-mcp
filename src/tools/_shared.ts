@@ -39,10 +39,12 @@ export type ToolAnnotations = {
 // SDK's `structuredContent` is `Record<string, unknown>`; payloads are
 // typed against API response shapes. Single seam for the cast.
 // `T extends object` rules out primitives and `null` at compile time;
-// `{ length?: never }` rules out arrays (which would pass the SDK's
-// runtime type check but violate its JSON-object contract).
-// `Record<string, unknown>` would be tighter still, but client-defined
-// interfaces lack an index signature and don't satisfy it.
+// `{ length?: never }` rules out arrays. The constraint does *not*
+// reject `Map`/`Set`/`Date`/class instances with non-public state — in
+// practice every call site passes a plain object literal derived from
+// an API response, and asserting that contract structurally would need
+// a runtime check. Tighter `Record<string, unknown>` would be ideal,
+// but client-defined interfaces lack the implicit index signature.
 export function toStructuredContent<T extends object & { length?: never }>(
   value: T,
 ): Record<string, unknown> {

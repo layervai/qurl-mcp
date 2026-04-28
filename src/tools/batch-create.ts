@@ -25,7 +25,8 @@ export function batchCreateTool(client: IQURLClient) {
     name: "batch_create_qurls",
     title: "Batch Create qURLs",
     description:
-      "Create up to 100 qURLs in a single request. The atomic-batch alternative to looping `create_qurl` — saves round trips and returns a single envelope of per-item results. " +
+      "Create up to 100 qURLs in a single request. The single-call alternative to looping `create_qurl` — saves round trips and returns a single envelope of per-item results. " +
+      "**Not transactional:** items succeed or fail independently (see `succeeded`/`failed` counts and per-item `error`). " +
       "Use this when you need to mint many qURLs at once (e.g. provisioning a vendor list, distributing per-customer share links). " +
       "Use `create_qurl` for a single resource. " +
       "**Response shape:** `{ succeeded: number, failed: number, results: BatchItemResult[], request_id?: string }`. Each `results[i]` carries `index` (matching the input position), `success`, plus either `qurl_link` + `resource_id` + `qurl_site` + `expires_at` (success) OR `error: { code, message }` (failure). " +
