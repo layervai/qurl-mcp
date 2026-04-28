@@ -1,0 +1,32 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    required:
+      - qurlApiKey
+    properties:
+      qurlApiKey:
+        type: string
+        # JSON Schema's `format: password` is the standard convention for
+        # input-masking. Smithery's UI rendering of this hint isn't formally
+        # documented; mirroring server.json's `isSecret: true` here in the
+        # form Smithery is most likely to honor.
+        format: password
+        description: |
+          API key for the qURL API with qurl:read, qurl:write, and/or qurl:resolve scopes.
+          Obtain from https://layerv.ai.
+      qurlApiUrl:
+        type: string
+        description: |
+          qURL API base URL. Defaults to https://api.layerv.ai. Override only for testing
+          against a non-production qURL backend.
+        default: https://api.layerv.ai
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: ['-y', '@layerv/qurl-mcp'],
+      env: {
+        QURL_API_KEY: config.qurlApiKey,
+        QURL_API_URL: config.qurlApiUrl || 'https://api.layerv.ai',
+      },
+    })

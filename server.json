@@ -27,7 +27,7 @@
         },
         {
           "name": "QURL_API_URL",
-          "description": "qURL API base URL. Defaults to https://api.layerv.ai.",
+          "description": "qURL API base URL. Defaults to https://api.layerv.ai. Override only for testing against a non-production qURL backend.",
           "isRequired": false,
           "format": "string",
           "default": "https://api.layerv.ai"
