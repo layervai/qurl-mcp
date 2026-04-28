@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.1...qurl-mcp-v0.3.2) (2026-04-28)
+
+
+### Features
+
+* **tools:** add output schemas, annotations, and richer descriptions for TDQS ([#82](https://github.com/layervai/qurl-mcp/issues/82)) ([1a675ef](https://github.com/layervai/qurl-mcp/commit/1a675efd97ce74022c49ef3236b34b40dfca5905))
+
 ## [0.3.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.0...qurl-mcp-v0.3.1) (2026-04-27)
 
 
