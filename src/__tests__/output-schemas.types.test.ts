@@ -80,4 +80,28 @@ describe("qurlSchema.status drift tolerance", () => {
     });
     expect(parsed.status).toBe("unknown");
   });
+
+  it("coerces nested access-token unrecognized status to 'unknown' via .catch()", () => {
+    // accessTokenSchema's enum already has 4 values today; a 5th
+    // (future) value would otherwise hard-fail nested `qurls` parse.
+    // Lock the behavior in symmetrically so a refactor that strips
+    // .catch from accessTokenSchema also fails this test.
+    const parsed = qurlSchema.parse({
+      ...sampleQURL(),
+      qurls: [
+        {
+          qurl_id: "q_abc123",
+          // @ts-expect-error simulating an out-of-spec API value
+          status: "future-state",
+          one_time_use: false,
+          max_sessions: 0,
+          session_duration: 3600,
+          use_count: 0,
+          created_at: "2026-01-01T00:00:00Z",
+          expires_at: "2026-12-31T00:00:00Z",
+        },
+      ],
+    });
+    expect(parsed.qurls?.[0].status).toBe("unknown");
+  });
 });
