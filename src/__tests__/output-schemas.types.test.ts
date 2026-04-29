@@ -68,11 +68,16 @@ describe("qurlSchema.status drift tolerance", () => {
   });
 
   it("coerces an unrecognized status to 'unknown' via .catch()", () => {
-    // Cast through a permissive object — the QURL type now omits unrecognized
-    // status values, so this is a deliberate boundary-violating fixture
-    // standing in for an API response with a future-added enum value.
-    const fixture = { ...sampleQURL(), status: "expired" } as unknown as Record<string, unknown>;
-    const parsed = qurlSchema.parse(fixture);
+    // QURL.status doesn't include "expired" — the fixture deliberately
+    // violates the type to stand in for an API response with a
+    // future-added enum value. @ts-expect-error documents the violation
+    // at the source and would itself fail if QURL.status ever widens to
+    // accept "expired" (at which point this test should be revisited).
+    const parsed = qurlSchema.parse({
+      ...sampleQURL(),
+      // @ts-expect-error simulating an out-of-spec API value
+      status: "expired",
+    });
     expect(parsed.status).toBe("unknown");
   });
 });

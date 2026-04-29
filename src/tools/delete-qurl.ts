@@ -26,8 +26,8 @@ export function deleteQurlTool(client: IQURLClient) {
       "**This action is irreversible.** Use this when you want to cut off access entirely (compromised link, departed user, end-of-engagement). " +
       "Use `update_qurl` instead when you only need to shorten/extend the expiration, retag, or rename — those preserve the existing access tokens. " +
       "Use `extend_qurl` when you only need to push the expiration out. " +
-      "**Idempotent:** re-deletes return success even if the resource was already revoked, never existed, or isn't owned by your API key — the qURL API returns 404 in all three cases (ownership-mismatch is collapsed into not-found server-side to avoid existence disclosure), and this tool swallows that 404 to honor the idempotent contract. " +
-      "Branch on the `was_already_revoked` flag if you need to distinguish the no-op case from an actual revoke; verify with `get_qurl` first when the ID came from user input and you need to confirm ownership. " +
+      "**Idempotent:** the API returns 404 for re-deletes, never-existed IDs, and resources owned by another API key (ownership-mismatch is collapsed into 404 server-side to avoid existence disclosure); this tool swallows all three. " +
+      "Branch on `was_already_revoked` to distinguish the no-op case from an actual revoke; `get_qurl` first when the ID came from user input and you need to confirm ownership. " +
       "Returns a confirmation payload. By default the resource is excluded from `list_qurls`; pass `status: \"revoked\"` to see it.",
     inputSchema: deleteQurlSchema,
     outputSchema: deleteQurlOutputSchema,

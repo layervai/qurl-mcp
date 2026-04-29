@@ -45,8 +45,12 @@ const accessTokenSchema = z
   .object({
     qurl_id: z.string(),
     label: z.string().optional(),
+    // Same drift-tolerance rationale as qurlSchema.status — token-level
+    // status is wider and just as exposed to a new server-side value
+    // reaching a host between weekly snapshot runs.
     status: z
-      .enum(["active", "consumed", "expired", "revoked"])
+      .enum(["active", "consumed", "expired", "revoked", "unknown"])
+      .catch("unknown")
       .describe("Per-token status (wider than resource status — tokens may be consumed/expired independently)"),
     one_time_use: z.boolean(),
     max_sessions: z.number(),
