@@ -11,6 +11,9 @@ description: >
 #     the repo on its own)
 #   - declare `id-token: write` on the calling job (needed for
 #     `mcp-publisher login github-oidc`)
+#   - run on a Linux/amd64 runner; the tarball + sha256 below are for
+#     `mcp-publisher_linux_amd64.tar.gz`. macOS or Windows runners
+#     would fail at `sha256sum -c -`.
 runs:
   using: composite
   steps:
