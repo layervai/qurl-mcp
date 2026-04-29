@@ -171,11 +171,13 @@ describe("TDQS tool metadata coverage", () => {
     const spec = readFileSync(specPath, "utf8");
 
     it("create_qurl description matches the spec's expires_in default", () => {
-      // The spec has two `expires_in:` properties (one each on the
-      // CreateQurl and UpdateQurl request schemas) — only the create-side
-      // declares a `Default:`. Iterate every match and pick the block
-      // that carries the default; relying on source order would silently
-      // pick the wrong block if the schemas ever swap positions.
+      // The spec has two `expires_in: type: string` blocks (CreateQurlRequest
+      // and MintLinkRequest) — only the create-side declares a `Default:`
+      // inside its own description (MintLink puts the 24h default in the
+      // parent schema description, not the property's). Iterate every match
+      // and pick the block that carries `Default:`; relying on source
+      // order would silently pick the wrong block if the schemas ever
+      // swap positions.
       //
       // Indent matcher is `[ ]{12,}` (description-body depth) rather than
       // `\s+` so the captured block stops at the next outdented line —
