@@ -83,11 +83,17 @@ export function createQurlTool(client: IQURLClient) {
     name: "create_qurl",
     title: "Create qURL",
     description:
-      "Create a new qURL — a policy-bound, expiring access link to a protected target URL. " +
-      "Use this when an agent needs to mint a fresh resource (e.g. share-once link, time-limited access). " +
-      "Use `mint_link` instead when you already have a resource and only need an additional access link. " +
-      "Use `batch_create_qurls` to create many in one call. " +
-      "Returns the new resource ID and a `qurl_link` that is shown ONCE and never returned by `get_qurl` or `list_qurls` — share it immediately.",
+      "Create a new qURL — a policy-bound, expiring access link that gates a target URL with optional IP/geo/UA/AI-agent filters and time or session limits. " +
+      "**When to use:** minting a fresh protected resource for share-once or time-limited access (e.g. send a customer a 24-hour download link, gate a doc behind an IP allowlist, distribute a one-time-use credential to a contractor). " +
+      "**When NOT to use:** use `mint_link` when you already have a resource (`r_…`) and just need an additional access token under it — `create_qurl` always creates a new resource. " +
+      "Use `batch_create_qurls` to create many in one round-trip. " +
+      "Use `update_qurl` to retag or extend an existing resource without minting a new one. " +
+      "**Behavior:** not idempotent — calling twice produces two distinct resources. " +
+      "The returned `qurl_link` is shown ONCE in this response and is never recoverable through `get_qurl` or `list_qurls`; persist or share it immediately. " +
+      "The newly created resource is in `active` status with the policy and limits applied. " +
+      "If `expires_in` is omitted the API applies its account-default expiration — do not assume the link is permanent. " +
+      "**Returns:** `{ resource_id: string (r_…), qurl_link: string (one-time), target_url: string, expires_at: string (RFC3339), status: 'active' }` plus the policy fields you set. " +
+      "Example: `create_qurl({ target_url: 'https://example.com/private', expires_in: '24h', one_time_use: true, access_policy: { geo_allowlist: ['US'] } })`.",
     inputSchema: createQurlSchema,
     outputSchema: createQurlOutputSchema,
     annotations: {
