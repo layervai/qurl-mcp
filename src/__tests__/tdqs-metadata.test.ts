@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi } from "vitest";
 import type { IQURLClient } from "../client.js";
 import { toolFactories } from "../server.js";
@@ -94,6 +96,19 @@ describe("TDQS tool metadata coverage", () => {
     // structural check — drift inside a nested object surfaces via the
     // round-trip test below.
     //
+    // **One-directional by design.** This enforces description ⊆ schema:
+    // a key claimed in the description must exist in the schema. It does
+    // *not* enforce the inverse (every schema key must be documented).
+    // Adding a schema field without updating the description will pass
+    // this test silently — that's intentional, since not every field is
+    // worth surfacing in the description, but flagging so a future
+    // reader doesn't assume bidirectional coverage.
+    //
+    // **Bare keys only.** The walker matches identifier-followed-by-colon
+    // at depth 0. A future Returns block that wraps keys in backticks or
+    // quotes (e.g. `` `success`: literal `true` ``) will skip them
+    // silently — adapt the walker if/when that pattern shows up.
+    //
     // Tools without a Returns block (or whose block describes a
     // discriminated/wrapped shape) are skipped here.
     const topLevelKeys = (body: string): string[] => {
@@ -140,6 +155,33 @@ describe("TDQS tool metadata coverage", () => {
         }
       });
     }
+  });
+
+  describe("description claims pinned against api-spec defaults", () => {
+    // Strong factual claims about API defaults (e.g. "expires_in defaults
+    // to 24h") become silent lies if the server-side default moves. Read
+    // the snapshot at api-spec/qurls.yaml — the same file the spec-drift
+    // workflow already monitors — and assert the description quotes the
+    // value verbatim. If the spec changes, the drift workflow updates the
+    // file and this test forces a description update at the same time.
+    const specPath = fileURLToPath(new URL("../../api-spec/qurls.yaml", import.meta.url));
+    const spec = readFileSync(specPath, "utf8");
+
+    it("create_qurl description matches the spec's expires_in default", () => {
+      // Anchor on the schema block (`expires_in:` followed by `type:`),
+      // not on the first `expires_in:` token in the file — earlier
+      // occurrences are example values inside response samples and
+      // would let an unrelated `Default:` field between here and the
+      // real schema slip into the capture group.
+      const match = spec.match(/expires_in:\s*\n\s*type:[\s\S]*?Default:\s*(\d+\s*[a-z]+)/);
+      expect(match, "expected to find an `expires_in: type: … Default: …` block in api-spec/qurls.yaml").not.toBeNull();
+      const specDefault = match![1].trim();
+      const description = tools.find((t) => t.name === "create_qurl")!.description;
+      expect(
+        description,
+        `create_qurl description must mention the spec's expires_in default '${specDefault}'`,
+      ).toContain(specDefault);
+    });
   });
 
   describe("safety hints match tool semantics", () => {

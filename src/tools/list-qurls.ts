@@ -55,7 +55,7 @@ export function listQurlsTool(client: IQURLClient) {
       "An empty `data[]` with `meta.has_more: false` means no resource matched the filters (not an error). " +
       "Pagination is cursor-based: when `meta.has_more` is `true`, pass `meta.next_cursor` as `cursor` on the next call to fetch the following page. " +
       "Default page size is 20, configurable via `limit` up to 100. " +
-      "Pass `status: 'revoked'` to see only revoked qURLs, or `'active,revoked'` to see both — see `delete_qurl` for the inverse note about how revoked resources surface in this list. " +
+      "Pass `status: 'revoked'` to see only revoked qURLs, or `'active,revoked'` to see both. " +
       "Default sort is `created_at:desc`; override with `sort: 'expires_at:asc'` etc. " +
       "**Returns:** `{ data: QURL[], meta: { has_more: boolean, next_cursor?: string, page_size?: number, request_id?: string } }` — each `data[]` item is the same stable resource shape returned by `get_qurl` minus per-token detail. " +
       'Example: `list_qurls({ status: "active", sort: "expires_at:asc", limit: 10 })` returns the 10 active qURLs expiring soonest.',
