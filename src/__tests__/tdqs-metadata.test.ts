@@ -93,8 +93,11 @@ describe("TDQS tool metadata coverage", () => {
     // Lock it down by parsing the *top-level* keys from the block and
     // asserting each appears in the tool's outputSchema.shape. Nested
     // shapes (e.g. `meta: { has_more, … }`) are out of scope for this
-    // structural check — drift inside a nested object surfaces via the
-    // round-trip test below.
+    // structural check — and not caught by the round-trip test below
+    // either, which validates the handler's structuredContent against
+    // outputSchema (handler ↔ schema), not the description's nested
+    // claims against the schema. A future test could close that gap;
+    // top-level coverage is the bigger lever for now.
     //
     // **One-directional by design.** This enforces description ⊆ schema:
     // a key claimed in the description must exist in the schema. It does
@@ -194,7 +197,7 @@ describe("TDQS tool metadata coverage", () => {
     for (const tool of tools) {
       const body = extractReturnsBody(tool.description);
       if (body === null) continue;
-      it(`${tool.name} Returns block lists only schema keys`, () => {
+      it(`${tool.name} Returns block claims only keys present in schema`, () => {
         const claimed = topLevelKeys(body);
         expect(claimed.length, `${tool.name} Returns block parsed zero keys`).toBeGreaterThan(0);
         const schemaKeys = new Set(Object.keys(tool.outputSchema.shape));
@@ -264,10 +267,15 @@ describe("TDQS tool metadata coverage", () => {
       ).toBeDefined();
       const specDefault = blockWithDefault![1].match(/Default:\s*(\d+\s*[a-z]+)/)![1].trim();
       const description = tools.find((t) => t.name === "create_qurl")!.description;
+      // Require the bolded form (`**24h**`) used in the Behavior beat,
+      // not just the unbolded literal. Bare `24h` also appears in the
+      // `Example:` line, so plain .toContain would silently pass if the
+      // spec moved to e.g. 48h while the example still read '24h'.
+      const claim = `**${specDefault}**`;
       expect(
         description,
-        `create_qurl description must mention the spec's expires_in default '${specDefault}'`,
-      ).toContain(specDefault);
+        `create_qurl Behavior beat must mention the spec's expires_in default as '${claim}'`,
+      ).toContain(claim);
     });
   });
 
