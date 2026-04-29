@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.4...qurl-mcp-v0.4.0) (2026-04-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* The npm package name has changed from `@layerv/qurl-mcp` to `@layervai/qurl-mcp`. Existing users must update their MCP client config — replace the package identifier in the `args` array. No code, env vars, API keys, or tool surface changed; this is a pure rename. The `@layerv/qurl-mcp` package on npm will be deprecated post-release with `npm deprecate "@layerv/qurl-mcp@*" "moved to @layervai/qurl-mcp"` so existing installs surface a migration warning.
+
+### Features
+
+* rename npm package from @layerv/qurl-mcp to @layervai/qurl-mcp ([#92](https://github.com/layervai/qurl-mcp/issues/92)) ([1724a74](https://github.com/layervai/qurl-mcp/commit/1724a749ce481ea93005490a0229c6fc38ed901d))
+
 ## [0.3.4](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.3...qurl-mcp-v0.3.4) (2026-04-28)
 
 
