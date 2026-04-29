@@ -29,7 +29,12 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Pin to the tag release-please just pushed so a post-merge
+          # commit on `main` can't sneak into the published tarball.
+          ref: ${{ needs.release-please.outputs.tag_name }}
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "22"
@@ -52,35 +57,18 @@ jobs:
     if: needs.release-please.outputs.release_created
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Cheap insurance against an overlap with the manual workflow_dispatch
+    # path in publish-mcp-registry.yml; mcp-publisher publish is not
+    # idempotent on the same version and would error out noisily.
+    concurrency:
+      group: mcp-registry-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write # github-oidc auth for mcp-publisher
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Install mcp-publisher
-        run: |
-          set -euo pipefail
-          version="v1.7.2"
-          tarball="mcp-publisher_linux_amd64.tar.gz"
-          # Pinned sha256 from upstream registry_1.7.2_checksums.txt — bump
-          # alongside the `version` above when upgrading the publisher.
-          expected_sha="9a324bab0bc69bf957599d7975b663d7c4169eba2cdc00baf0f589b847e03898"
-          url="https://github.com/modelcontextprotocol/registry/releases/download/${version}/${tarball}"
-          curl -fsSL --retry 3 --retry-delay 5 "$url" -o /tmp/mcp-publisher.tar.gz
-          echo "${expected_sha}  /tmp/mcp-publisher.tar.gz" | sha256sum -c -
-          mkdir -p /tmp/mcp-publisher
-          tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp/mcp-publisher
-          echo "/tmp/mcp-publisher" >> "$GITHUB_PATH"
-
-      - name: Sanity-check publisher binary
-        run: mcp-publisher --help > /dev/null
-
-      - name: Validate server.json
-        run: mcp-publisher validate
-
-      - name: Authenticate with GitHub OIDC
-        run: mcp-publisher login github-oidc
-
-      - name: Publish to MCP Registry
-        run: mcp-publisher publish
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+      - uses: ./.github/actions/publish-mcp-registry

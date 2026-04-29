@@ -202,7 +202,8 @@ The repository includes an API spec drift detection system:
 - **Manifest:** `server.json` (validated against the registry's JSON Schema). Both `$.version` and `$.packages[0].version` are kept in sync with `package.json` automatically by release-please's `extra-files` config.
 - **Publishing:** the `publish-mcp-registry` job in `.github/workflows/release-please.yml` runs after the npm publish on every release-please-created release. Uses GitHub OIDC for keyless auth (no PATs). `.github/workflows/publish-mcp-registry.yml` is the manual escape hatch (`workflow_dispatch` only) for republishing the current main — used for recovery or registry outage retry. Do not add `on: push: tags:` to it: release-please pushes tags via `GITHUB_TOKEN`, and GitHub suppresses cross-workflow tag triggers from `GITHUB_TOKEN` to prevent recursion, so the trigger would never fire on a real release.
 - **Description divergence:** `server.json.description` is intentionally shorter than `package.json.description` because the registry hard-caps descriptions at 100 characters. Don't "fix" by aligning them — keep the npm/site copy long-form, and the registry copy concise.
-- **Pinning:** both jobs pin `actions/checkout` and the `mcp-publisher` tarball SHA. Bump them in lockstep when upgrading the publisher — and remember there are now two copies (release-please.yml + publish-mcp-registry.yml).
+- **Pinning:** both workflows delegate to the composite action at `.github/actions/publish-mcp-registry/action.yml` — that's the single source of truth for the `mcp-publisher` version + sha256. Bump both fields together there; the workflows themselves only pin `actions/checkout`.
+- **Concurrency:** both publish jobs share a `concurrency: { group: mcp-registry-publish, cancel-in-progress: false }`. `mcp-publisher publish` is not idempotent on the same version, so a manual republish that overlaps an in-flight release would error noisily — the group serializes them.
 
 ## Smithery
 

@@ -24,33 +24,12 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Shared with the release-please.yml publish-mcp-registry job —
+    # prevents a manual republish from racing an in-flight release.
+    concurrency:
+      group: mcp-registry-publish
+      cancel-in-progress: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Install mcp-publisher
-        run: |
-          set -euo pipefail
-          version="v1.7.2"
-          tarball="mcp-publisher_linux_amd64.tar.gz"
-          # Pinned sha256 from upstream registry_1.7.2_checksums.txt — bump
-          # alongside the `version` above when upgrading the publisher.
-          expected_sha="9a324bab0bc69bf957599d7975b663d7c4169eba2cdc00baf0f589b847e03898"
-          url="https://github.com/modelcontextprotocol/registry/releases/download/${version}/${tarball}"
-          curl -fsSL --retry 3 --retry-delay 5 "$url" -o /tmp/mcp-publisher.tar.gz
-          echo "${expected_sha}  /tmp/mcp-publisher.tar.gz" | sha256sum -c -
-          mkdir -p /tmp/mcp-publisher
-          tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp/mcp-publisher
-          echo "/tmp/mcp-publisher" >> "$GITHUB_PATH"
-
-      - name: Sanity-check publisher binary
-        run: mcp-publisher --help > /dev/null
-
-      - name: Validate server.json
-        run: mcp-publisher validate
-
-      - name: Authenticate with GitHub OIDC
-        run: mcp-publisher login github-oidc
-
-      - name: Publish to MCP Registry
-        run: mcp-publisher publish
+      - uses: ./.github/actions/publish-mcp-registry
