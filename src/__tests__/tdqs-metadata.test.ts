@@ -69,6 +69,8 @@ describe("TDQS tool metadata coverage", () => {
       extend_qurl: ["update_qurl"],
       mint_link: ["create_qurl", "update_qurl"],
       batch_create_qurls: ["create_qurl"],
+      list_qurls: ["get_qurl", "resolve_qurl"],
+      create_qurl: ["mint_link", "batch_create_qurls", "update_qurl"],
     };
     const byName = new Map(tools.map((t) => [t.name, t]));
     for (const [name, siblings] of Object.entries(expected)) {
@@ -76,6 +78,65 @@ describe("TDQS tool metadata coverage", () => {
         const description = byName.get(name)?.description ?? "";
         for (const sibling of siblings) {
           expect(description).toContain(sibling);
+        }
+      });
+    }
+  });
+
+  describe("Returns block keys exist in outputSchema", () => {
+    // The TDQS template includes a `**Returns:** \`{ ... }\`` block listing
+    // the response shape. An out-of-date Returns block tells an LLM agent
+    // to plan against fields that don't exist (or omits real ones), which
+    // is exactly the disambiguation rot the rewrite is trying to prevent.
+    // Lock it down by parsing the *top-level* keys from the block and
+    // asserting each appears in the tool's outputSchema.shape. Nested
+    // shapes (e.g. `meta: { has_more, … }`) are out of scope for this
+    // structural check — drift inside a nested object surfaces via the
+    // round-trip test below.
+    //
+    // Tools without a Returns block (or whose block describes a
+    // discriminated/wrapped shape) are skipped here.
+    const topLevelKeys = (body: string): string[] => {
+      const keys: string[] = [];
+      // Sticky regex: anchored to lastIndex, so we walk `body` without
+      // re-slicing on every iteration.
+      const keyRe = /([a-zA-Z_]\w*)\??\s*:/y;
+      let depth = 0;
+      let i = 0;
+      while (i < body.length) {
+        const ch = body[i];
+        if (ch === "{") {
+          depth++;
+          i++;
+          continue;
+        }
+        if (ch === "}") {
+          depth--;
+          i++;
+          continue;
+        }
+        if (depth === 0) {
+          keyRe.lastIndex = i;
+          const m = keyRe.exec(body);
+          if (m) {
+            keys.push(m[1]);
+            i = keyRe.lastIndex;
+            continue;
+          }
+        }
+        i++;
+      }
+      return keys;
+    };
+    for (const tool of tools) {
+      const match = tool.description.match(/\*\*Returns:\*\*\s*`\{([\s\S]+?)\}`/);
+      if (!match) continue;
+      it(`${tool.name} Returns block lists only schema keys`, () => {
+        const claimed = topLevelKeys(match[1]);
+        expect(claimed.length, `${tool.name} Returns block parsed zero keys`).toBeGreaterThan(0);
+        const schemaKeys = new Set(Object.keys(tool.outputSchema.shape));
+        for (const key of claimed) {
+          expect(schemaKeys, `Returns block claims '${key}' but it isn't in ${tool.name}'s outputSchema`).toContain(key);
         }
       });
     }
