@@ -116,7 +116,7 @@ npm run format
   "mcpServers": {
     "qurl": {
       "command": "npx",
-      "args": ["@layerv/qurl-mcp"],
+      "args": ["@layervai/qurl-mcp"],
       "env": { "QURL_API_KEY": "lv_live_xxx" }
     }
   }

@@ -1,6 +1,8 @@
-# @layerv/qurl-mcp
+# @layervai/qurl-mcp
 
-[![npm version](https://img.shields.io/npm/v/@layerv/qurl-mcp.svg)](https://www.npmjs.com/package/@layerv/qurl-mcp)
+[![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
+
+> **⚠️ Renamed from `@layerv/qurl-mcp` in v0.4.0.** The old package is deprecated and will not receive further updates. If you're using `@layerv/qurl-mcp@0.3.x`, swap the scope in your MCP client config — same binary, same API key, no other changes.
 
 MCP server for qURL™ secure link management.
 
@@ -19,7 +21,7 @@ Add the server to your MCP client configuration (Claude Desktop, Claude Code, et
   "mcpServers": {
     "qurl": {
       "command": "npx",
-      "args": ["@layerv/qurl-mcp"],
+      "args": ["@layervai/qurl-mcp"],
       "env": { "QURL_API_KEY": "lv_live_xxx" }
     }
   }

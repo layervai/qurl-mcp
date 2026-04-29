@@ -24,7 +24,7 @@ startCommand:
   commandFunction: |-
     (config) => ({
       command: 'npx',
-      args: ['-y', '@layerv/qurl-mcp'],
+      args: ['-y', '@layervai/qurl-mcp'],
       env: {
         QURL_API_KEY: config.qurlApiKey,
         QURL_API_URL: config.qurlApiUrl || 'https://api.layerv.ai',
