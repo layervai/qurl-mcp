@@ -168,14 +168,26 @@ describe("TDQS tool metadata coverage", () => {
     const spec = readFileSync(specPath, "utf8");
 
     it("create_qurl description matches the spec's expires_in default", () => {
-      // Anchor on the schema block (`expires_in:` followed by `type:`),
-      // not on the first `expires_in:` token in the file — earlier
-      // occurrences are example values inside response samples and
-      // would let an unrelated `Default:` field between here and the
-      // real schema slip into the capture group.
-      const match = spec.match(/expires_in:\s*\n\s*type:[\s\S]*?Default:\s*(\d+\s*[a-z]+)/);
-      expect(match, "expected to find an `expires_in: type: … Default: …` block in api-spec/qurls.yaml").not.toBeNull();
-      const specDefault = match![1].trim();
+      // Two-step extraction to avoid the non-greedy `[\s\S]*?Default:` walking
+      // past expires_in into a sibling property's description block:
+      //   1. Capture the multi-line `description: |` block under `expires_in:`
+      //      (consecutive indented continuation lines).
+      //   2. Search for `Default:` only inside that captured block.
+      // If Default isn't in expires_in's own block, the second match is null
+      // and the assertion fires — regardless of what later properties carry.
+      const blockMatch = spec.match(
+        /expires_in:\s*\n\s*type:\s*string\s*\n\s*description:\s*\|\s*\n((?:\s+[^\n]+\n)+)/,
+      );
+      expect(
+        blockMatch,
+        "expected an `expires_in: type: string, description: |` block in api-spec/qurls.yaml",
+      ).not.toBeNull();
+      const defaultMatch = blockMatch![1].match(/Default:\s*(\d+\s*[a-z]+)/);
+      expect(
+        defaultMatch,
+        "expected a `Default: …` line inside expires_in's description block",
+      ).not.toBeNull();
+      const specDefault = defaultMatch![1].trim();
       const description = tools.find((t) => t.name === "create_qurl")!.description;
       expect(
         description,

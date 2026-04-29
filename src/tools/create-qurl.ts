@@ -92,7 +92,7 @@ export function createQurlTool(client: IQURLClient) {
       "The returned `qurl_link` is shown ONCE in this response and is never recoverable through `get_qurl` or `list_qurls`; persist or share it immediately. " +
       "The newly created resource is in `active` status with the policy and limits applied. " +
       "If `expires_in` is omitted the API defaults to **24h** — do not assume the link is permanent. " +
-      "**Returns:** `{ qurl_id: string (q_…), resource_id: string (r_…), qurl_link: string (one-time), qurl_site: string, expires_at: string (RFC3339), label?: string }`. " +
+      "**Returns:** `{ qurl_id: string (q_…), resource_id: string (r_…), qurl_link: string (one-time), qurl_site: string, expires_at: string (RFC 3339), label?: string }`. " +
       "`qurl_id` is the only `q_…` display ID an agent gets in this response — keep it if you plan a follow-up against `get_qurl`/`update_qurl`/`mint_link` (which accept either prefix). " +
       "Example: `create_qurl({ target_url: 'https://example.com/private', expires_in: '24h', one_time_use: true, access_policy: { geo_allowlist: ['US'] } })`.",
     inputSchema: createQurlSchema,
