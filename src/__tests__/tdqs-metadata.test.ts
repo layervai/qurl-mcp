@@ -117,9 +117,29 @@ describe("TDQS tool metadata coverage", () => {
       // re-slicing on every iteration.
       const keyRe = /([a-zA-Z_]\w*)\??\s*:/y;
       let depth = 0;
+      // Skip everything inside a quoted/backticked literal so a prose
+      // colon (e.g. `string ("RFC 3339: timestamps")`) doesn't capture
+      // the preceding word as a fake key. Tracks the active opener; null
+      // means we're not in a string.
+      let inString: '"' | "'" | "`" | null = null;
       let i = 0;
       while (i < body.length) {
         const ch = body[i];
+        if (inString !== null) {
+          if (ch === "\\") {
+            // Skip the escaped char so an escaped quote doesn't end the literal.
+            i += 2;
+            continue;
+          }
+          if (ch === inString) inString = null;
+          i++;
+          continue;
+        }
+        if (ch === '"' || ch === "'" || ch === "`") {
+          inString = ch;
+          i++;
+          continue;
+        }
         if (ch === "{") {
           depth++;
           i++;

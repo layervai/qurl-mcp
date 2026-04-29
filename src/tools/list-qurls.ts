@@ -17,7 +17,10 @@ export const listQurlsSchema = z.object({
     .string()
     .min(1)
     .optional()
-    .describe("Filter by status (comma-separated, e.g., 'active,revoked')"),
+    .describe(
+      "Filter by status (comma-separated, e.g. 'active,revoked'). " +
+        "Defaults to 'active' when omitted; pass 'revoked' or 'active,revoked' to override.",
+    ),
   created_after: z.string().datetime().optional().describe("Filter: created after this date (RFC 3339)"),
   created_before: z.string().datetime().optional().describe("Filter: created before this date (RFC 3339)"),
   expires_before: z.string().datetime().optional().describe("Filter: expires before this date (RFC 3339)"),
