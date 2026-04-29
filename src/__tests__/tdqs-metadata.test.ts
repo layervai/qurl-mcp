@@ -218,11 +218,19 @@ describe("TDQS tool metadata coverage", () => {
       const { listQurlsSchema } = await import("../tools/list-qurls.js");
       const description = tools.find((t) => t.name === "list_qurls")!.description;
       const statusFieldDescription = listQurlsSchema.shape.status.description ?? "";
-      const sentinel = "active";
-      expect(statusFieldDescription, "list_qurls.status .describe() must mention the active default").toContain(
-        sentinel,
-      );
-      expect(description, "list_qurls description must mention the active default").toContain(sentinel);
+      // Sentinels must uniquely encode the *default-active claim*, not just
+      // mention the word `active` (which appears in unrelated contexts: the
+      // example block, the "everything still active" prose, the comma-
+      // separated enum). Without a claim-specific phrase, the test would
+      // silently pass if both sides dropped the default claim entirely.
+      expect(
+        statusFieldDescription,
+        "list_qurls.status .describe() must assert the active default with the phrase \"Defaults to 'active'\"",
+      ).toContain("Defaults to 'active'");
+      expect(
+        description,
+        "list_qurls description must assert the active default with the phrase \"By default only `active`\"",
+      ).toContain("By default only `active`");
     });
   });
 
