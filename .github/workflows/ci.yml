@@ -103,14 +103,24 @@ jobs:
     # API (read by external probes like Glama's MCP catalog) only sees commit
     # statuses. This job mirrors the aggregate result onto the legacy API so
     # `GET /commits/main/status` flips from `pending` to `success`.
+    #
+    # DO NOT add `ci/aggregate` to branch protection required checks: this
+    # job only fires on `push` to `main`, so configuring it as a required PR
+    # check would block all PRs from merging (the check would never report).
+    # The legacy status exists for external probes (Glama), not for gating.
+    #
+    # `if: always()` is intentional: even when lint/test/docker fail, we want
+    # to mirror `failure`/`error` to the legacy API instead of leaving it
+    # stuck at `pending`. `continue-on-error: true` is the complementary
+    # safety: a transient gh-api blip on the mirror itself shouldn't redden
+    # the workflow when the upstream check-runs (the source of truth) are
+    # already authoritative.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Best-effort mirror: the upstream check-runs are authoritative. A
-    # transient GitHub API blip leaves the legacy status unset for that SHA;
-    # the next push to main overwrites it. Don't fail the workflow over it.
     continue-on-error: true
     permissions:
+      actions: read
       statuses: write
     steps:
       - name: Set commit status
@@ -122,6 +132,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           GH_SHA: ${{ github.sha }}
           GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
           GH_SERVER_URL: ${{ github.server_url }}
         run: |
           # All three jobs always run on push to main today; if any gain a
@@ -137,11 +148,23 @@ jobs:
           else
             STATE="failure"
           fi
+          # Resolve this job's numeric runner-job id so the legacy status
+          # deep-links to the mirror step, not the run summary. `github.job`
+          # gives the YAML key; the URL needs the numeric id from the API.
+          # On any lookup failure, fall back to the run-level URL.
+          TARGET_URL="$GH_SERVER_URL/$GH_REPO/actions/runs/$GH_RUN_ID"
+          JOB_ID=$(gh api \
+            "repos/$GH_REPO/actions/runs/$GH_RUN_ID/attempts/$GH_RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.name == "ci-status") | .id' 2>/dev/null \
+            | head -n1) || JOB_ID=""
+          if [[ -n "$JOB_ID" ]]; then
+            TARGET_URL="$GH_SERVER_URL/$GH_REPO/actions/runs/$GH_RUN_ID/job/$JOB_ID"
+          fi
           gh api -X POST "repos/$GH_REPO/statuses/$GH_SHA" \
             -f state="$STATE" \
             -f context="ci/aggregate" \
             -f description="lint=$LINT_RESULT test=$TEST_RESULT docker=$DOCKER_RESULT" \
-            -f target_url="$GH_SERVER_URL/$GH_REPO/actions/runs/$GH_RUN_ID"
+            -f target_url="$TARGET_URL"
 
   notify:
     name: Notify
