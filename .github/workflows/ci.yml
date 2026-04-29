@@ -96,6 +96,36 @@ jobs:
           echo "$out" | grep -q "QURL_API_KEY is not set" || { echo "tools/call response missing the actionable error message"; echo "$out"; exit 1; }
           echo "MCP introspection OK; all 9 tools exposed; warning printed; tools/call surfaces missing_api_key as expected"
 
+  ci-status:
+    name: ci-status
+    needs: [lint, test, docker]
+    # GitHub Actions only writes check-runs, but the legacy combined-status
+    # API (read by external probes like Glama's MCP catalog) only sees commit
+    # statuses. This job mirrors the aggregate result onto the legacy API so
+    # `GET /commits/main/status` flips from `pending` to `success`.
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - name: Set commit status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+        run: |
+          if [[ "$LINT_RESULT" == "success" && "$TEST_RESULT" == "success" && "$DOCKER_RESULT" == "success" ]]; then
+            STATE="success"
+          else
+            STATE="failure"
+          fi
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+            -f state="$STATE" \
+            -f context="ci/aggregate" \
+            -f description="lint=$LINT_RESULT test=$TEST_RESULT docker=$DOCKER_RESULT" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
   notify:
     name: Notify
     needs: [lint, test, docker]
