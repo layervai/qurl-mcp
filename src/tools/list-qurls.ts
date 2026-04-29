@@ -56,7 +56,12 @@ export function listQurlsTool(client: IQURLClient) {
       "Pagination is cursor-based: when `meta.has_more` is `true`, pass `meta.next_cursor` as `cursor` on the next call to fetch the following page. " +
       "Default page size is 20, configurable via `limit` up to 100. " +
       "By default only `active` qURLs are returned; pass `status: 'revoked'` to see only revoked qURLs or `'active,revoked'` to see both. " +
-      "Sort defaults to `created_at:desc` (only the `desc` direction is spec-pinned; the field default is asserted from current API behavior — override with `sort: 'expires_at:asc'` etc.). " +
+      // The default-active and default-sort-field claims are asserted from
+      // current API behavior; the spec only pins the sort *direction*
+      // default. See issue #99 for spec/staging pinning. The description
+      // intentionally drops the epistemics caveat — overhedging in
+      // LLM-facing prose invites defensive over-specification on every call.
+      "Sort defaults to `created_at:desc`; override with `sort: 'expires_at:asc'` etc. " +
       "**Returns:** `{ data: QURL[], meta: { has_more: boolean, next_cursor?: string, page_size?: number, request_id?: string } }` — each `data[]` item is the same stable resource shape returned by `get_qurl` minus per-token detail. " +
       'Example: `list_qurls({ status: "active", sort: "expires_at:asc", limit: 10 })` returns the 10 active qURLs expiring soonest.',
     inputSchema: listQurlsSchema,
