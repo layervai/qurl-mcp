@@ -51,13 +51,14 @@ export function deleteQurlTool(client: IQURLClient) {
         // agents can branch when they care.
         //
         // Verified against qurl-service: the service-layer
-        // `RevokeQurl` collapses ownership-mismatch into
-        // `ErrResourceNotFound` (qurl-service/internal/service/
-        // qurl_service.go:407-409) — i.e. 404 here also covers
-        // "you don't own this resource." That collapse is server-side
-        // policy to avoid existence disclosure; the tool description
-        // documents the conflation so callers who need to confirm
-        // ownership can `get_qurl` first.
+        // `QurlService.RevokeQurl` collapses ownership-mismatch into
+        // `ErrResourceNotFound` — i.e. 404 here also covers "you don't
+        // own this resource." That collapse is server-side policy to
+        // avoid existence disclosure; the tool description documents
+        // the conflation so callers who need to confirm ownership can
+        // `get_qurl` first. (Function name only — line numbers in a
+        // separate repo rot on the next refactor; grep
+        // `func.*RevokeQurl\b` in qurl-service if you need the source.)
         //
         // Intentionally checks status only, not `code`. A 404 with a
         // non-JSON body (e.g. an HTML error page from a proxy in front

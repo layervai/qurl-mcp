@@ -82,10 +82,10 @@ describe("qurlSchema.status drift tolerance", () => {
   });
 
   it("coerces nested access-token unrecognized status to 'unknown' via .catch()", () => {
-    // accessTokenSchema's enum already has 4 values today; a 5th
-    // (future) value would otherwise hard-fail nested `qurls` parse.
-    // Lock the behavior in symmetrically so a refactor that strips
-    // .catch from accessTokenSchema also fails this test.
+    // The API side has 4 status values today (active/consumed/expired/
+    // revoked); a future-added value would otherwise hard-fail nested
+    // `qurls` parse. Lock the behavior in symmetrically so a refactor
+    // that strips .catch from accessTokenSchema also fails this test.
     const parsed = qurlSchema.parse({
       ...sampleQURL(),
       qurls: [
