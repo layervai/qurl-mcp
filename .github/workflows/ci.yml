@@ -105,6 +105,10 @@ jobs:
     # `GET /commits/main/status` flips from `pending` to `success`.
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    # Best-effort mirror: the upstream check-runs are authoritative. A
+    # transient GitHub API blip leaves the legacy status unset for that SHA;
+    # the next push to main overwrites it. Don't fail the workflow over it.
+    continue-on-error: true
     permissions:
       statuses: write
     steps:
@@ -114,17 +118,24 @@ jobs:
           LINT_RESULT: ${{ needs.lint.result }}
           TEST_RESULT: ${{ needs.test.result }}
           DOCKER_RESULT: ${{ needs.docker.result }}
+          GH_REPO: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_SERVER_URL: ${{ github.server_url }}
         run: |
+          # All three jobs always run on push to main today; if any gain a
+          # `paths:` filter later, a `skipped` result would falsely report
+          # `failure` here. Revisit the skipped→failure mapping at that point.
           if [[ "$LINT_RESULT" == "success" && "$TEST_RESULT" == "success" && "$DOCKER_RESULT" == "success" ]]; then
             STATE="success"
           else
             STATE="failure"
           fi
-          gh api -X POST "repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+          gh api -X POST "repos/$GH_REPO/statuses/$GH_SHA" \
             -f state="$STATE" \
             -f context="ci/aggregate" \
             -f description="lint=$LINT_RESULT test=$TEST_RESULT docker=$DOCKER_RESULT" \
-            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            -f target_url="$GH_SERVER_URL/$GH_REPO/actions/runs/$GH_RUN_ID"
 
   notify:
     name: Notify
