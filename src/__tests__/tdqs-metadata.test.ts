@@ -126,7 +126,10 @@ describe("TDQS tool metadata coverage", () => {
           continue;
         }
         if (ch === "}") {
-          depth--;
+          // Clamp at zero. Returns blocks should be balanced, but a
+          // malformed input shouldn't make `depth` go negative and
+          // accidentally re-enter the depth-0 capture branch.
+          depth = Math.max(0, depth - 1);
           i++;
           continue;
         }
@@ -185,7 +188,9 @@ describe("TDQS tool metadata coverage", () => {
       ];
       expect(
         blocks.length,
-        "expected at least one `expires_in: type: string, description: |` block in api-spec/qurls.yaml",
+        "no `expires_in:` block in api-spec/qurls.yaml matched the structural pattern " +
+          "(`type: string` immediately, then `description: |`). If the spec was reordered, " +
+          "added `nullable:`, switched to a quoted scalar, or moved to a $ref, loosen the regex to match.",
       ).toBeGreaterThan(0);
       const blockWithDefault = blocks.find((m) => /Default:\s*\d+\s*[a-z]+/.test(m[1]));
       expect(

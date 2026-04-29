@@ -47,7 +47,7 @@ export function listQurlsTool(client: IQURLClient) {
     title: "List qURLs",
     description:
       "List qURL resources, paginated and optionally filtered by status, date range, or search text. " +
-      "**When to use:** discovery — finding qURLs by status (e.g. everything still active), auditing date ranges, or full-text search across descriptions and target URLs. " +
+      "**When to use:** discovery — finding qURLs by status (e.g. everything still active), auditing date ranges, or full-text search across descriptions and target URLs (via the `q` parameter). " +
       "Filters AND together (e.g. `status: 'active'` + `expires_before: '2026-05-01T00:00:00Z'` returns active qURLs about to expire). " +
       "**When NOT to use:** use `get_qurl` instead when you already have a specific resource ID — it returns the same per-resource shape more cheaply and includes the `qurls[]` per-token detail that `list_qurls` omits. " +
       "Use `resolve_qurl` to actually open access to a target URL. " +
@@ -55,8 +55,8 @@ export function listQurlsTool(client: IQURLClient) {
       "An empty `data[]` with `meta.has_more: false` means no resource matched the filters (not an error). " +
       "Pagination is cursor-based: when `meta.has_more` is `true`, pass `meta.next_cursor` as `cursor` on the next call to fetch the following page. " +
       "Default page size is 20, configurable via `limit` up to 100. " +
-      "Pass `status: 'revoked'` to see only revoked qURLs, or `'active,revoked'` to see both. " +
-      "Default sort is `created_at:desc`; override with `sort: 'expires_at:asc'` etc. " +
+      "By default only `active` qURLs are returned; pass `status: 'revoked'` to see only revoked qURLs or `'active,revoked'` to see both. " +
+      "Sort defaults to `created_at:desc` (only the `desc` direction is spec-pinned; the field default is asserted from current API behavior — override with `sort: 'expires_at:asc'` etc.). " +
       "**Returns:** `{ data: QURL[], meta: { has_more: boolean, next_cursor?: string, page_size?: number, request_id?: string } }` — each `data[]` item is the same stable resource shape returned by `get_qurl` minus per-token detail. " +
       'Example: `list_qurls({ status: "active", sort: "expires_at:asc", limit: 10 })` returns the 10 active qURLs expiring soonest.',
     inputSchema: listQurlsSchema,
