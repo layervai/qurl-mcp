@@ -34,7 +34,12 @@ export interface QURL {
   tags?: string[];
   expires_at: string;
   created_at: string;
-  status: "active" | "revoked";
+  // "unknown" is a sentinel emitted by the structuredContent schema
+  // (output-schemas.ts) when the API returns a value the spec snapshot
+  // doesn't enumerate. The client itself doesn't synthesize it — but
+  // typing the field this way keeps the type-only check in
+  // output-schemas.types.test.ts aligned with the runtime parse.
+  status: "active" | "revoked" | "unknown";
   custom_domain?: string | null;
   preserve_host?: boolean;
   qurl_count?: number;

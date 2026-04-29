@@ -1,4 +1,4 @@
-import { describe, it, expectTypeOf } from "vitest";
+import { describe, it, expect, expectTypeOf } from "vitest";
 import type { z } from "zod";
 import type {
   BatchCreateOutput,
@@ -16,6 +16,7 @@ import {
   qurlSchema,
   resolveQurlOutputSchema,
 } from "../tools/output-schemas.js";
+import { sampleQURL } from "./helpers.js";
 
 // Lock each Zod output schema to its corresponding client interface so a
 // new field on either side breaks compilation. The MCP-spec-drift workflow
@@ -52,5 +53,26 @@ describe("output schema <-> client type alignment", () => {
     // compile error here.
     type FlatBatchPayload = BatchCreateOutput["data"] & { request_id?: string };
     expectTypeOf<z.infer<typeof batchCreateOutputSchema>>().toEqualTypeOf<FlatBatchPayload>();
+  });
+});
+
+// `.catch("unknown")` lets the schema absorb a future API value the spec
+// snapshot doesn't enumerate (e.g. "expired", "pending") instead of
+// hard-failing structuredContent validation between weekly drift runs.
+// Lock the behavior in so a future "fix" that removes the .catch trips
+// these tests instead of silently breaking hosts.
+describe("qurlSchema.status drift tolerance", () => {
+  it("accepts 'active' and 'revoked' as-is", () => {
+    expect(qurlSchema.parse(sampleQURL({ status: "active" })).status).toBe("active");
+    expect(qurlSchema.parse(sampleQURL({ status: "revoked" })).status).toBe("revoked");
+  });
+
+  it("coerces an unrecognized status to 'unknown' via .catch()", () => {
+    // Cast through a permissive object — the QURL type now omits unrecognized
+    // status values, so this is a deliberate boundary-violating fixture
+    // standing in for an API response with a future-added enum value.
+    const fixture = { ...sampleQURL(), status: "expired" } as unknown as Record<string, unknown>;
+    const parsed = qurlSchema.parse(fixture);
+    expect(parsed.status).toBe("unknown");
   });
 });
