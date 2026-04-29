@@ -88,7 +88,7 @@ export function createQurlTool(client: IQURLClient) {
       "**When NOT to use:** use `mint_link` when you already have a resource (`r_…`) and just need an additional access token under it — `create_qurl` always creates a new resource. " +
       "Use `batch_create_qurls` to create many in one round-trip. " +
       "Use `update_qurl` to retag or extend an existing resource without minting a new one. " +
-      "**Behavior:** not idempotent — calling twice produces two distinct resources. " +
+      "**Behavior:** not idempotent — calling twice produces two distinct resources (this tool doesn't surface the underlying API's `Idempotency-Key` header). " +
       "The returned `qurl_link` is shown ONCE in this response and is never recoverable through `get_qurl` or `list_qurls`; persist or share it immediately. " +
       "The newly created resource is in `active` status with the policy and limits applied. " +
       "If `expires_in` is omitted the API defaults to **24h** — do not assume the link is permanent. " +
