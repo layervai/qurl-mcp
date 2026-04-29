@@ -97,7 +97,10 @@ jobs:
           echo "MCP introspection OK; all 9 tools exposed; warning printed; tools/call surfaces missing_api_key as expected"
 
   ci-status:
-    name: ci-status
+    # `name:` is intentionally omitted: the runner-job lookup below filters
+    # by `${{ github.job }}` (the YAML key), and the API's `.name` defaults
+    # to the key when `name:` is unset. Keeping them auto-aligned avoids a
+    # silent deep-link miss if someone renames one but forgets the other.
     needs: [lint, test, docker]
     # GitHub Actions only writes check-runs, but the legacy combined-status
     # API (read by external probes like Glama's MCP catalog) only sees commit
@@ -149,14 +152,17 @@ jobs:
             STATE="failure"
           fi
           # Resolve this job's numeric runner-job id so the legacy status
-          # deep-links to the mirror step, not the run summary. `github.job`
-          # gives the YAML key; the URL needs the numeric id from the API.
-          # On any lookup failure, fall back to the run-level URL.
+          # deep-links to the mirror step, not the run summary. The URL
+          # needs the numeric id from the API. Self-heal on rename by
+          # matching on `${{ github.job }}` (the YAML key) — the job's
+          # `name:` is omitted, so the API's `.name` defaults to the key
+          # and the two stay aligned automatically.
+          # On any lookup miss, fall back to the run-level URL.
           TARGET_URL="$GH_SERVER_URL/$GH_REPO/actions/runs/$GH_RUN_ID"
           JOB_ID=$(gh api \
             "repos/$GH_REPO/actions/runs/$GH_RUN_ID/attempts/$GH_RUN_ATTEMPT/jobs" \
-            --jq '.jobs[] | select(.name == "ci-status") | .id' 2>/dev/null \
-            | head -n1) || JOB_ID=""
+            --jq ".jobs[] | select(.name == \"${{ github.job }}\") | .id" 2>/dev/null \
+            | head -n1)
           if [[ -n "$JOB_ID" ]]; then
             TARGET_URL="$GH_SERVER_URL/$GH_REPO/actions/runs/$GH_RUN_ID/job/$JOB_ID"
           fi
