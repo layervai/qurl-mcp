@@ -1,0 +1,46 @@
+name: Publish to MCP Registry
+description: >
+  Install pinned mcp-publisher, validate server.json, authenticate via
+  GitHub OIDC, and publish to the MCP Registry. Single source of truth
+  for the publisher version + sha256 — used by both the automatic
+  release-please publish job and the manual workflow_dispatch escape
+  hatch.
+
+# Caller must:
+#   - have already run actions/checkout (this action does not check out
+#     the repo on its own)
+#   - declare `id-token: write` on the calling job (needed for
+#     `mcp-publisher login github-oidc`)
+#   - run on a Linux/amd64 runner; the tarball + sha256 below are for
+#     `mcp-publisher_linux_amd64.tar.gz`. macOS or Windows runners
+#     would fail at `sha256sum -c -`.
+runs:
+  using: composite
+  steps:
+    - name: Install mcp-publisher
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="v1.7.2"
+        tarball="mcp-publisher_linux_amd64.tar.gz"
+        # Pinned sha256 from upstream registry_1.7.2_checksums.txt — bump
+        # alongside the `version` above when upgrading the publisher.
+        expected_sha="9a324bab0bc69bf957599d7975b663d7c4169eba2cdc00baf0f589b847e03898"
+        url="https://github.com/modelcontextprotocol/registry/releases/download/${version}/${tarball}"
+        curl -fsSL --retry 3 --retry-delay 5 "$url" -o /tmp/mcp-publisher.tar.gz
+        echo "${expected_sha}  /tmp/mcp-publisher.tar.gz" | sha256sum -c -
+        mkdir -p /tmp/mcp-publisher
+        tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp/mcp-publisher
+        echo "/tmp/mcp-publisher" >> "$GITHUB_PATH"
+
+    - name: Validate server.json
+      shell: bash
+      run: mcp-publisher validate
+
+    - name: Authenticate with GitHub OIDC
+      shell: bash
+      run: mcp-publisher login github-oidc
+
+    - name: Publish to MCP Registry
+      shell: bash
+      run: mcp-publisher publish
