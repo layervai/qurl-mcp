@@ -146,11 +146,30 @@ describe("TDQS tool metadata coverage", () => {
       }
       return keys;
     };
+    // Find `**Returns:** \`{ ... }\`` and return the body between the
+    // outermost balanced braces. A non-greedy regex would truncate at
+    // the first `}` (e.g. inside `meta: { … }`) and silently miss any
+    // top-level keys that follow the nested object — this walker
+    // returns the full balanced body so topLevelKeys sees them all.
+    const extractReturnsBody = (description: string): string | null => {
+      const marker = description.match(/\*\*Returns:\*\*\s*`\{/);
+      if (!marker || marker.index === undefined) return null;
+      const open = marker.index + marker[0].length - 1;
+      let depth = 0;
+      for (let i = open; i < description.length; i++) {
+        if (description[i] === "{") depth++;
+        else if (description[i] === "}") {
+          depth--;
+          if (depth === 0) return description.slice(open + 1, i);
+        }
+      }
+      return null;
+    };
     for (const tool of tools) {
-      const match = tool.description.match(/\*\*Returns:\*\*\s*`\{([\s\S]+?)\}`/);
-      if (!match) continue;
+      const body = extractReturnsBody(tool.description);
+      if (body === null) continue;
       it(`${tool.name} Returns block lists only schema keys`, () => {
-        const claimed = topLevelKeys(match[1]);
+        const claimed = topLevelKeys(body);
         expect(claimed.length, `${tool.name} Returns block parsed zero keys`).toBeGreaterThan(0);
         const schemaKeys = new Set(Object.keys(tool.outputSchema.shape));
         for (const key of claimed) {
