@@ -33,10 +33,6 @@ runs:
         tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp/mcp-publisher
         echo "/tmp/mcp-publisher" >> "$GITHUB_PATH"
 
-    - name: Sanity-check publisher binary
-      shell: bash
-      run: mcp-publisher --help > /dev/null
-
     - name: Validate server.json
       shell: bash
       run: mcp-publisher validate
