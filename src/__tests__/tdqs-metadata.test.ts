@@ -120,14 +120,20 @@ describe("TDQS tool metadata coverage", () => {
       // Skip everything inside a quoted/backticked literal so a prose
       // colon (e.g. `string ("RFC 3339: timestamps")`) doesn't capture
       // the preceding word as a fake key. Tracks the active opener; null
-      // means we're not in a string.
+      // means we're not in a string. Backticks are treated as flat
+      // strings — Returns blocks today don't carry template-literal
+      // `${…}` interpolations, and any future block that does will need
+      // an interpolation-aware extension to this walker.
       let inString: '"' | "'" | "`" | null = null;
       let i = 0;
       while (i < body.length) {
         const ch = body[i];
         if (inString !== null) {
           if (ch === "\\") {
-            // Skip the escaped char so an escaped quote doesn't end the literal.
+            // Skip the escaped char so an escaped quote doesn't end the
+            // literal. Guard against a trailing backslash so `i += 2`
+            // doesn't overshoot — exit cleanly instead.
+            if (i + 1 >= body.length) break;
             i += 2;
             continue;
           }
@@ -197,6 +203,24 @@ describe("TDQS tool metadata coverage", () => {
         }
       });
     }
+  });
+
+  describe("schema describe() and tool description stay aligned", () => {
+    // Defense-in-depth: some hosts surface the schema-level `.describe()`
+    // in argument hints without rendering the tool's overall description.
+    // When a strong factual claim (like "default to active") lives in
+    // both, lock both to a shared substring so a future copy edit can't
+    // drift one without the other.
+    it("list_qurls.status default-active claim appears in both .describe() and the tool description", async () => {
+      const { listQurlsSchema } = await import("../tools/list-qurls.js");
+      const description = tools.find((t) => t.name === "list_qurls")!.description;
+      const statusFieldDescription = listQurlsSchema.shape.status.description ?? "";
+      const sentinel = "active";
+      expect(statusFieldDescription, "list_qurls.status .describe() must mention the active default").toContain(
+        sentinel,
+      );
+      expect(description, "list_qurls description must mention the active default").toContain(sentinel);
+    });
   });
 
   describe("description claims pinned against api-spec defaults", () => {
