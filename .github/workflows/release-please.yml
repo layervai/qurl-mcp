@@ -55,9 +55,9 @@ jobs:
     # See CLAUDE.md §"MCP Registry" for the why (GITHUB_TOKEN cross-
     # workflow tag-trigger suppression forces this fold-in instead of
     # a separate tag-triggered workflow). Sequencing `needs: publish`
-    # keeps the registry from advertising a version that npm rejected.
+    # keeps the registry from advertising a version that npm rejected
+    # and inherits its `release_created` gate via skip-propagation.
     needs: [release-please, publish]
-    if: needs.release-please.outputs.release_created
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # Cheap insurance against an overlap with the manual workflow_dispatch

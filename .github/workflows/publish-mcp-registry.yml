@@ -9,6 +9,10 @@ name: Publish to MCP Registry (manual)
 # default, not the most recent tag — fine for re-publishing the
 # current main's server.json. To publish an older release, add
 # `inputs.ref` and pass it to actions/checkout.
+#
+# Selecting a pre-PR-94 branch in the dispatch UI will fail at the
+# `uses: ./.github/actions/publish-mcp-registry` step (action didn't
+# exist there). That's an acceptable, loud failure mode.
 on:
   workflow_dispatch:
 
