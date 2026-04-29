@@ -1,13 +1,19 @@
-name: Publish to MCP Registry
+name: Publish to MCP Registry (manual)
 
+# Automatic publish on release lives in release-please.yml. This workflow
+# is the manual escape hatch — use it to republish the current main's
+# server.json (recovery, registry outage retry, etc.).
+#
+# Why no `on: push: tags:` here: release-please pushes the tag via
+# GITHUB_TOKEN, and GitHub suppresses cross-workflow tag triggers from
+# GITHUB_TOKEN to prevent recursion, so a tag-trigger here would never
+# actually fire on a real release.
+#
+# workflow_dispatch checks out the workflow file's branch (main) by
+# default, not the most recent tag — fine for re-publishing the current
+# main's server.json, but if you need to publish an older release, add
+# `inputs.ref` and pass it to actions/checkout.
 on:
-  push:
-    tags:
-      - "qurl-mcp-v*"
-  # workflow_dispatch checks out the workflow file's branch (main) by default,
-  # not the most recent tag — fine for re-publishing the current main's
-  # server.json, but if you need to publish an older release, add
-  # `inputs.ref` and pass it to actions/checkout.
   workflow_dispatch:
 
 permissions:
