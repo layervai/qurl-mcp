@@ -96,6 +96,82 @@ jobs:
           echo "$out" | grep -q "QURL_API_KEY is not set" || { echo "tools/call response missing the actionable error message"; echo "$out"; exit 1; }
           echo "MCP introspection OK; all 9 tools exposed; warning printed; tools/call surfaces missing_api_key as expected"
 
+  ci-status:
+    # `name:` is intentionally omitted: the runner-job lookup below filters
+    # by `${{ github.job }}` (the YAML key), and the API's `.name` defaults
+    # to the key when `name:` is unset. Keeping them auto-aligned avoids a
+    # silent deep-link miss if someone renames one but forgets the other.
+    needs: [lint, test, docker]
+    # GitHub Actions only writes check-runs, but the legacy combined-status
+    # API (read by external probes like Glama's MCP catalog) only sees commit
+    # statuses. This job mirrors the aggregate result onto the legacy API so
+    # `GET /commits/main/status` flips from `pending` to `success`.
+    #
+    # DO NOT add `ci/aggregate` to branch protection required checks: this
+    # job only fires on `push` to `main`, so configuring it as a required PR
+    # check would block all PRs from merging (the check would never report).
+    # The legacy status exists for external probes (Glama), not for gating.
+    #
+    # `if: always()` is intentional: even when lint/test/docker fail, we want
+    # to mirror `failure`/`error` to the legacy API instead of leaving it
+    # stuck at `pending`. `continue-on-error: true` is the complementary
+    # safety: a transient gh-api blip on the mirror itself shouldn't redden
+    # the workflow when the upstream check-runs (the source of truth) are
+    # already authoritative.
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      actions: read
+      statuses: write
+    steps:
+      - name: Set commit status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
+          GH_REPO: ${{ github.repository }}
+          GH_SHA: ${{ github.sha }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_SERVER_URL: ${{ github.server_url }}
+        run: |
+          # All three jobs always run on push to main today; if any gain a
+          # `paths:` filter later, a `skipped` result would falsely report
+          # `failure` here. Revisit the skipped→failure mapping at that point.
+          # Map cancellations to `error` (the legacy status enum's
+          # conventional slot for "didn't run to completion") rather than
+          # collapsing them into `failure`.
+          if [[ "$LINT_RESULT" == "success" && "$TEST_RESULT" == "success" && "$DOCKER_RESULT" == "success" ]]; then
+            STATE="success"
+          elif [[ "$LINT_RESULT" == "cancelled" || "$TEST_RESULT" == "cancelled" || "$DOCKER_RESULT" == "cancelled" ]]; then
+            STATE="error"
+          else
+            STATE="failure"
+          fi
+          # Resolve this job's numeric runner-job id so the legacy status
+          # deep-links to the mirror step, not the run summary. The URL
+          # needs the numeric id from the API. Self-heal on rename by
+          # matching on `${{ github.job }}` (the YAML key) — the job's
+          # `name:` is omitted, so the API's `.name` defaults to the key
+          # and the two stay aligned automatically.
+          # On any lookup miss, fall back to the run-level URL.
+          TARGET_URL="$GH_SERVER_URL/$GH_REPO/actions/runs/$GH_RUN_ID"
+          JOB_ID=$(gh api \
+            "repos/$GH_REPO/actions/runs/$GH_RUN_ID/attempts/$GH_RUN_ATTEMPT/jobs" \
+            --jq ".jobs[] | select(.name == \"${{ github.job }}\") | .id" 2>/dev/null \
+            | head -n1)
+          if [[ -n "$JOB_ID" ]]; then
+            TARGET_URL="$GH_SERVER_URL/$GH_REPO/actions/runs/$GH_RUN_ID/job/$JOB_ID"
+          fi
+          gh api -X POST "repos/$GH_REPO/statuses/$GH_SHA" \
+            -f state="$STATE" \
+            -f context="ci/aggregate" \
+            -f description="lint=$LINT_RESULT test=$TEST_RESULT docker=$DOCKER_RESULT" \
+            -f target_url="$TARGET_URL"
+
   notify:
     name: Notify
     needs: [lint, test, docker]
