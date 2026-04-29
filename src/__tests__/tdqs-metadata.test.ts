@@ -168,26 +168,31 @@ describe("TDQS tool metadata coverage", () => {
     const spec = readFileSync(specPath, "utf8");
 
     it("create_qurl description matches the spec's expires_in default", () => {
-      // Two-step extraction to avoid the non-greedy `[\s\S]*?Default:` walking
-      // past expires_in into a sibling property's description block:
-      //   1. Capture the multi-line `description: |` block under `expires_in:`
-      //      (consecutive indented continuation lines).
-      //   2. Search for `Default:` only inside that captured block.
-      // If Default isn't in expires_in's own block, the second match is null
-      // and the assertion fires — regardless of what later properties carry.
-      const blockMatch = spec.match(
-        /expires_in:\s*\n\s*type:\s*string\s*\n\s*description:\s*\|\s*\n((?:\s+[^\n]+\n)+)/,
-      );
+      // The spec has two `expires_in:` properties (one each on the
+      // CreateQurl and UpdateQurl request schemas) — only the create-side
+      // declares a `Default:`. Iterate every match and pick the block
+      // that carries the default; relying on source order would silently
+      // pick the wrong block if the schemas ever swap positions.
+      //
+      // Indent matcher is `[ ]{12,}` (description-body depth) rather than
+      // `\s+` so the captured block stops at the next outdented line —
+      // sibling property values (`example:`) sit at 10 spaces, sibling
+      // properties (`one_time_use:`) at 8 — both correctly excluded.
+      const blocks = [
+        ...spec.matchAll(
+          /expires_in:\s*\n\s*type:\s*string\s*\n\s*description:\s*\|\s*\n((?:[ ]{12,}[^\n]+\n)+)/g,
+        ),
+      ];
       expect(
-        blockMatch,
-        "expected an `expires_in: type: string, description: |` block in api-spec/qurls.yaml",
-      ).not.toBeNull();
-      const defaultMatch = blockMatch![1].match(/Default:\s*(\d+\s*[a-z]+)/);
+        blocks.length,
+        "expected at least one `expires_in: type: string, description: |` block in api-spec/qurls.yaml",
+      ).toBeGreaterThan(0);
+      const blockWithDefault = blocks.find((m) => /Default:\s*\d+\s*[a-z]+/.test(m[1]));
       expect(
-        defaultMatch,
-        "expected a `Default: …` line inside expires_in's description block",
-      ).not.toBeNull();
-      const specDefault = defaultMatch![1].trim();
+        blockWithDefault,
+        "no expires_in description block in api-spec/qurls.yaml carries a `Default: …` line",
+      ).toBeDefined();
+      const specDefault = blockWithDefault![1].match(/Default:\s*(\d+\s*[a-z]+)/)![1].trim();
       const description = tools.find((t) => t.name === "create_qurl")!.description;
       expect(
         description,
