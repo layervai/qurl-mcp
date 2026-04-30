@@ -33,6 +33,11 @@ export function getPromptText(result: GetPromptResult, index = 0): string {
   return content.text;
 }
 
+// Defaults satisfy the AccessToken type but aren't behaviorally
+// coherent (e.g. `max_sessions: 0` with `one_time_use: false` is a
+// shape that grants nothing). Suitable for schema/structural tests;
+// override fields explicitly when exercising session-accounting or
+// expiration logic.
 export function sampleAccessToken(overrides: Partial<AccessToken> = {}): AccessToken {
   return {
     qurl_id: "q_abc123",

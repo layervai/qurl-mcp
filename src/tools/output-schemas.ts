@@ -72,22 +72,13 @@ export const qurlSchema = z.object({
   tags: z.array(z.string()).optional(),
   expires_at: z.string(),
   created_at: z.string(),
-  // Enum sourced from api-spec/qurls.yaml's `Qurl.properties.status`.
-  // `"expired"` is included even though the spec's `enum:` line lists
-  // only `[active, revoked]` — the same property's description
-  // documents that resources past their expires_at are reported as
-  // `"expired"`. Treating it as a first-class value preserves the
-  // lifecycle semantics for any agent that wants to branch on it,
-  // rather than coercing to the drift sentinel below.
-  //
-  // The spec-drift workflow catches new values at the snapshot level on
-  // its weekly run, but not before they reach a host. `.catch("unknown")`
-  // widens the accepted set so an unanticipated value (e.g. "pending")
-  // doesn't hard-fail `structuredContent` validation between drift
-  // detections — it surfaces as the sentinel `unknown` that a defensive
-  // agent can branch on. The fail-soft scope (any parse failure, not
-  // just unrecognized strings) is locked in by tests in
-  // output-schemas.types.test.ts; #101 tracks operator-visibility.
+  // `"expired"` is first-class because api-spec/qurls.yaml's
+  // `Qurl.properties.status` description documents it as a real
+  // lifecycle value (despite the spec's `enum:` line listing only
+  // `[active, revoked]`). `"unknown"` is the fail-soft drift sentinel
+  // emitted by `.catch()` for any parse failure (unknown enum value,
+  // null, wrong type, missing field) — see fail-soft-scope tests in
+  // output-schemas.types.test.ts and #101 for operator-visibility.
   status: z.enum(["active", "revoked", "expired", "unknown"]).catch("unknown"),
   custom_domain: z.string().nullable().optional(),
   preserve_host: z
