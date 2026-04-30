@@ -146,4 +146,22 @@ describe("qurlSchema.status drift tolerance", () => {
     expect(parsed.qurls).toHaveLength(1);
     expect(parsed.qurls?.[0].status).toBe("unknown");
   });
+
+  it("survives schema composition through listQurlsOutputSchema", () => {
+    // qurlSchema is referenced (not inlined) by listQurlsOutputSchema, so
+    // .catch() should propagate through composition. Guard against a
+    // future refactor that inlines or re-shapes the field at the list
+    // boundary.
+    const parsed = listQurlsOutputSchema.parse({
+      data: [
+        {
+          ...sampleQURL(),
+          // @ts-expect-error simulating an out-of-spec API value through the list envelope
+          status: "pending",
+        },
+      ],
+      meta: { has_more: false },
+    });
+    expect(parsed.data[0].status).toBe("unknown");
+  });
 });
