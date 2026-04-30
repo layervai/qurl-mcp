@@ -81,6 +81,34 @@ describe("qurlSchema.status drift tolerance", () => {
     expect(parsed.status).toBe("unknown");
   });
 
+  it("coerces null / wrong-type / missing status to 'unknown' via .catch()", () => {
+    // `.catch()` triggers on ANY parse failure for the field — not just
+    // unrecognized enum strings. Lock that broader scope in so a future
+    // refactor that narrows the catch (e.g. via a custom handler that
+    // only coerces strings) trips this test rather than silently hard-
+    // failing structuredContent for null/wrong-type values an upstream
+    // bug might emit.
+    expect(
+      qurlSchema.parse({
+        ...sampleQURL(),
+        // @ts-expect-error simulating null on a string-enum field
+        status: null,
+      }).status,
+    ).toBe("unknown");
+    expect(
+      qurlSchema.parse({
+        ...sampleQURL(),
+        // @ts-expect-error simulating a non-string value
+        status: 42,
+      }).status,
+    ).toBe("unknown");
+    const { status: _drop, ...withoutStatus } = sampleQURL();
+    void _drop;
+    expect(
+      qurlSchema.parse(withoutStatus as unknown as Parameters<typeof qurlSchema.parse>[0]).status,
+    ).toBe("unknown");
+  });
+
   it("coerces nested access-token unrecognized status to 'unknown' via .catch()", () => {
     // The API side has 4 status values today (active/consumed/expired/
     // revoked); a future-added value would otherwise hard-fail nested

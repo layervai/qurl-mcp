@@ -79,6 +79,12 @@ export const qurlSchema = z.object({
   // doesn't hard-fail `structuredContent` validation between drift
   // detections — it instead surfaces as the sentinel `unknown`, which
   // a defensive agent can branch on.
+  //
+  // Note: `.catch()` triggers on *any* parse failure for this field —
+  // not just unrecognized enum strings, but also null, wrong-type, or
+  // missing values. That's the deliberate fail-soft posture; real
+  // shape regressions surface via the weekly drift workflow and #101
+  // (operator-visibility logging follow-up) rather than at parse time.
   status: z.enum(["active", "revoked", "unknown"]).catch("unknown"),
   custom_domain: z.string().nullable().optional(),
   preserve_host: z
