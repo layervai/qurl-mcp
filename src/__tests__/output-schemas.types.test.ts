@@ -16,7 +16,7 @@ import {
   qurlSchema,
   resolveQurlOutputSchema,
 } from "../tools/output-schemas.js";
-import { sampleQURL } from "./helpers.js";
+import { sampleAccessToken, sampleQURL } from "./helpers.js";
 
 // Lock each Zod output schema to its corresponding client interface so a
 // new field on either side breaks compilation. The MCP-spec-drift workflow
@@ -116,19 +116,8 @@ describe("qurlSchema.status drift tolerance", () => {
     // that strips .catch from accessTokenSchema also fails this test.
     const parsed = qurlSchema.parse({
       ...sampleQURL(),
-      qurls: [
-        {
-          qurl_id: "q_abc123",
-          // @ts-expect-error simulating an out-of-spec API value
-          status: "future-state",
-          one_time_use: false,
-          max_sessions: 0,
-          session_duration: 3600,
-          use_count: 0,
-          created_at: "2026-01-01T00:00:00Z",
-          expires_at: "2026-12-31T00:00:00Z",
-        },
-      ],
+      // @ts-expect-error simulating an out-of-spec API value on the nested token
+      qurls: [sampleAccessToken({ status: "future-state" })],
     });
     expect(parsed.qurls?.[0].status).toBe("unknown");
   });

@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type {
+  AccessToken,
   BatchCreateOutput,
   CreateQURLData,
   IQURLClient,
@@ -30,6 +31,20 @@ export function getPromptText(result: GetPromptResult, index = 0): string {
   if (typeof content === "string") return content;
   if (content.type !== "text") throw new Error(`Expected text content, got ${content.type}`);
   return content.text;
+}
+
+export function sampleAccessToken(overrides: Partial<AccessToken> = {}): AccessToken {
+  return {
+    qurl_id: "q_abc123",
+    status: "active",
+    one_time_use: false,
+    max_sessions: 0,
+    session_duration: 3600,
+    use_count: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    expires_at: "2026-12-31T00:00:00Z",
+    ...overrides,
+  };
 }
 
 export function sampleQURL(overrides: Partial<QURL> = {}): QURL {
