@@ -79,6 +79,12 @@ export const qurlSchema = z.object({
   // emitted by `.catch()` for any parse failure (unknown enum value,
   // null, wrong type, missing field) — see fail-soft-scope tests in
   // output-schemas.types.test.ts and #101 for operator-visibility.
+  //
+  // Hypothetical-collision: if the API ever introduces a real
+  // `"unknown"` lifecycle value, it would be indistinguishable from a
+  // .catch() coercion. Accepted as low-probability vs. the cost of a
+  // synthetic-name sentinel; #101's telemetry will need to log the
+  // raw-input value (not just the coerced output) to disambiguate.
   status: z.enum(["active", "revoked", "expired", "unknown"]).catch("unknown"),
   custom_domain: z.string().nullable().optional(),
   preserve_host: z
