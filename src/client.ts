@@ -15,7 +15,8 @@ export interface AccessToken {
   // Per-token status is a wider enum than resource status, since individual
   // tokens can be consumed (one-time-use) or expire independently of the
   // parent resource. See qurl/api/openapi.yaml -> QurlSummary.status.
-  status: "active" | "consumed" | "expired" | "revoked";
+  // `"unknown"` is the same drift sentinel as on QURL.status below.
+  status: "active" | "consumed" | "expired" | "revoked" | "unknown";
   one_time_use: boolean;
   max_sessions: number;
   session_duration: number;
@@ -34,7 +35,15 @@ export interface QURL {
   tags?: string[];
   expires_at: string;
   created_at: string;
-  status: "active" | "revoked";
+  // "expired" is documented in api-spec/qurls.yaml's
+  // `QurlData.properties.status` description (resources past their
+  // expires_at are reported as "expired" without being explicitly
+  // revoked) even though the same enum line is narrower. "unknown" is
+  // the drift sentinel emitted by qurlSchema.parse via .catch when the
+  // API returns a value the spec snapshot doesn't enumerate; see
+  // output-schemas.ts for the rationale and the hypothetical-collision
+  // note.
+  status: "active" | "revoked" | "expired" | "unknown";
   custom_domain?: string | null;
   preserve_host?: boolean;
   qurl_count?: number;

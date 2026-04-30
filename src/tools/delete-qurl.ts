@@ -26,7 +26,9 @@ export function deleteQurlTool(client: IQURLClient) {
       "**This action is irreversible.** Use this when you want to cut off access entirely (compromised link, departed user, end-of-engagement). " +
       "Use `update_qurl` instead when you only need to shorten/extend the expiration, retag, or rename — those preserve the existing access tokens. " +
       "Use `extend_qurl` when you only need to push the expiration out. " +
-      "**Idempotent:** re-deletes return success even if the resource was already revoked or never existed — verify with `get_qurl` first if the ID came from user input, or branch on the `was_already_revoked` flag in the response to distinguish the two cases. " +
+      "**Idempotent:** the API returns 404 for re-deletes, never-existed IDs, and resources owned by another API key (ownership-mismatch is collapsed into 404 server-side to avoid existence disclosure); this tool swallows all three. " +
+      "Branch on `was_already_revoked` to distinguish the no-op case from a successful revoke on this call. " +
+      "When the ID came from user input and ownership matters, call `get_qurl` first — a 200 confirms ownership; a thrown 404 is equally ambiguous on that endpoint too. " +
       "Returns a confirmation payload. By default the resource is excluded from `list_qurls`; pass `status: \"revoked\"` to see it.",
     inputSchema: deleteQurlSchema,
     outputSchema: deleteQurlOutputSchema,
@@ -48,6 +50,18 @@ export function deleteQurlTool(client: IQURLClient) {
         // so the tool is genuinely idempotent, but expose
         // `was_already_revoked: true` in the payload so defensive
         // agents can branch when they care.
+        //
+        // Verified against qurl-service: the service-layer
+        // `QurlService.RevokeQurl` and `QurlService.GetQurl` both
+        // collapse ownership-mismatch into `ErrResourceNotFound` — so
+        // 404 covers "you don't own this resource" on both endpoints.
+        // The collapse is server-side policy to avoid existence
+        // disclosure. The tool description tells callers that
+        // `get_qurl` only confirms ownership in the *positive* case
+        // (200), since `get_qurl`'s 404 is just as ambiguous as
+        // `delete_qurl`'s. (Function names only — line numbers in a
+        // separate repo rot on the next refactor; grep
+        // `func.*RevokeQurl\b` / `func.*GetQurl\b` in qurl-service.)
         //
         // Intentionally checks status only, not `code`. A 404 with a
         // non-JSON body (e.g. an HTML error page from a proxy in front

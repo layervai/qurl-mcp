@@ -45,8 +45,12 @@ const accessTokenSchema = z
   .object({
     qurl_id: z.string(),
     label: z.string().optional(),
+    // Same drift-tolerance rationale as qurlSchema.status — token-level
+    // status is wider and just as exposed to a new server-side value
+    // reaching a host between weekly snapshot runs.
     status: z
-      .enum(["active", "consumed", "expired", "revoked"])
+      .enum(["active", "consumed", "expired", "revoked", "unknown"])
+      .catch("unknown")
       .describe("Per-token status (wider than resource status — tokens may be consumed/expired independently)"),
     one_time_use: z.boolean(),
     max_sessions: z.number(),
@@ -68,9 +72,20 @@ export const qurlSchema = z.object({
   tags: z.array(z.string()).optional(),
   expires_at: z.string(),
   created_at: z.string(),
-  // Enum sourced from api-spec/qurls.yaml; if the API adds a value, the
-  // spec-drift workflow catches it before this validation hard-fails.
-  status: z.enum(["active", "revoked"]),
+  // `"expired"` is first-class because api-spec/qurls.yaml's
+  // `QurlData.properties.status` description documents it as a real
+  // lifecycle value (despite the spec's `enum:` line listing only
+  // `[active, revoked]`). `"unknown"` is the fail-soft drift sentinel
+  // emitted by `.catch()` for any parse failure (unknown enum value,
+  // null, wrong type, missing field) — see fail-soft-scope tests in
+  // output-schemas.types.test.ts and #101 for operator-visibility.
+  //
+  // Hypothetical-collision: if the API ever introduces a real
+  // `"unknown"` lifecycle value, it would be indistinguishable from a
+  // .catch() coercion. Accepted as low-probability vs. the cost of a
+  // synthetic-name sentinel; #101's telemetry will need to log the
+  // raw-input value (not just the coerced output) to disambiguate.
+  status: z.enum(["active", "revoked", "expired", "unknown"]).catch("unknown"),
   custom_domain: z.string().nullable().optional(),
   preserve_host: z
     .boolean()

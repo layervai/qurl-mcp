@@ -1,6 +1,7 @@
-import { describe, it, expectTypeOf } from "vitest";
+import { describe, it, expect, expectTypeOf } from "vitest";
 import type { z } from "zod";
 import type {
+  AccessToken,
   BatchCreateOutput,
   CreateQURLData,
   ListQURLsOutput,
@@ -16,6 +17,7 @@ import {
   qurlSchema,
   resolveQurlOutputSchema,
 } from "../tools/output-schemas.js";
+import { sampleAccessToken, sampleQURL } from "./helpers.js";
 
 // Lock each Zod output schema to its corresponding client interface so a
 // new field on either side breaks compilation. The MCP-spec-drift workflow
@@ -52,5 +54,114 @@ describe("output schema <-> client type alignment", () => {
     // compile error here.
     type FlatBatchPayload = BatchCreateOutput["data"] & { request_id?: string };
     expectTypeOf<z.infer<typeof batchCreateOutputSchema>>().toEqualTypeOf<FlatBatchPayload>();
+  });
+});
+
+// `.catch("unknown")` lets the schema absorb a future API value the spec
+// snapshot doesn't enumerate (e.g. "expired", "pending") instead of
+// hard-failing structuredContent validation between weekly drift runs.
+// Lock the behavior in so a future "fix" that removes the .catch trips
+// these tests instead of silently breaking hosts.
+describe("qurlSchema.status drift tolerance", () => {
+  it("accepts 'active', 'revoked', and 'expired' as-is", () => {
+    // "expired" round-trips because api-spec/qurls.yaml's
+    // `QurlData.properties.status` description documents it as a real
+    // lifecycle value despite the spec's `enum:` line missing it.
+    // Coercing it to the drift sentinel would lose semantics agents
+    // care about.
+    expect(qurlSchema.parse(sampleQURL({ status: "active" })).status).toBe("active");
+    expect(qurlSchema.parse(sampleQURL({ status: "revoked" })).status).toBe("revoked");
+    expect(qurlSchema.parse(sampleQURL({ status: "expired" })).status).toBe("expired");
+  });
+
+  it("coerces an unrecognized status to 'unknown' via .catch()", () => {
+    // QURL.status doesn't include "pending" — the fixture deliberately
+    // violates the type to stand in for an API response with a
+    // future-added enum value. @ts-expect-error documents the violation
+    // at the source and would itself fail if QURL.status ever widens to
+    // accept "pending" (at which point this test should be revisited).
+    const parsed = qurlSchema.parse({
+      ...sampleQURL(),
+      // @ts-expect-error simulating an out-of-spec API value
+      status: "pending",
+    });
+    expect(parsed.status).toBe("unknown");
+  });
+
+  it("coerces null / wrong-type / missing status to 'unknown' via .catch()", () => {
+    // `.catch()` triggers on ANY parse failure for the field — not just
+    // unrecognized enum strings. Lock that broader scope in so a future
+    // refactor that narrows the catch (e.g. via a custom handler that
+    // only coerces strings) trips this test rather than silently hard-
+    // failing structuredContent for null/wrong-type values an upstream
+    // bug might emit.
+    expect(
+      qurlSchema.parse({
+        ...sampleQURL(),
+        // @ts-expect-error simulating null on a string-enum field
+        status: null,
+      }).status,
+    ).toBe("unknown");
+    expect(
+      qurlSchema.parse({
+        ...sampleQURL(),
+        // @ts-expect-error simulating a non-string value
+        status: 42,
+      }).status,
+    ).toBe("unknown");
+    const withoutStatus: Record<string, unknown> = { ...sampleQURL() };
+    delete withoutStatus.status;
+    expect(qurlSchema.parse(withoutStatus).status).toBe("unknown");
+  });
+
+  it("accepts the documented access-token statuses on the nested array", () => {
+    // Symmetric pass-through assertion for the wider nested enum.
+    // Cheap insurance against an enum typo on accessTokenSchema.
+    // `satisfies` gives drift insurance: removing one of these from
+    // AccessToken["status"] (e.g. dropping "consumed") fails compilation
+    // here instead of letting the test silently miss a documented value.
+    const documented = ["active", "consumed", "expired", "revoked"] as const satisfies ReadonlyArray<
+      AccessToken["status"]
+    >;
+    for (const s of documented) {
+      const parsed = qurlSchema.parse({
+        ...sampleQURL(),
+        qurls: [sampleAccessToken({ status: s })],
+      });
+      expect(parsed.qurls).toHaveLength(1);
+      expect(parsed.qurls?.[0].status).toBe(s);
+    }
+  });
+
+  it("coerces nested access-token unrecognized status to 'unknown' via .catch()", () => {
+    // The API side has 4 status values today (active/consumed/expired/
+    // revoked); a future-added value would otherwise hard-fail nested
+    // `qurls` parse. Lock the behavior in symmetrically so a refactor
+    // that strips .catch from accessTokenSchema also fails this test.
+    const parsed = qurlSchema.parse({
+      ...sampleQURL(),
+      // @ts-expect-error simulating an out-of-spec API value on the nested token
+      qurls: [sampleAccessToken({ status: "future-state" })],
+    });
+    expect(parsed.qurls).toHaveLength(1);
+    expect(parsed.qurls?.[0].status).toBe("unknown");
+  });
+
+  it("survives schema composition through listQurlsOutputSchema", () => {
+    // qurlSchema is referenced (not inlined) by listQurlsOutputSchema, so
+    // .catch() should propagate through composition. Guard against a
+    // future refactor that inlines or re-shapes the field at the list
+    // boundary.
+    const parsed = listQurlsOutputSchema.parse({
+      data: [
+        {
+          ...sampleQURL(),
+          // @ts-expect-error simulating an out-of-spec API value through the list envelope
+          status: "pending",
+        },
+      ],
+      meta: { has_more: false },
+    });
+    expect(parsed.data[0].status).toBe("unknown");
   });
 });
