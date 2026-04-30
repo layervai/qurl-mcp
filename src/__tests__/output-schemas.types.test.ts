@@ -109,9 +109,9 @@ describe("qurlSchema.status drift tolerance", () => {
         status: 42,
       }).status,
     ).toBe("unknown");
-    const { status: _drop, ...withoutStatus } = sampleQURL();
-    void _drop;
-    expect(qurlSchema.parse(withoutStatus as Record<string, unknown>).status).toBe("unknown");
+    const withoutStatus: Record<string, unknown> = { ...sampleQURL() };
+    delete withoutStatus.status;
+    expect(qurlSchema.parse(withoutStatus).status).toBe("unknown");
   });
 
   it("accepts the documented access-token statuses on the nested array", () => {
