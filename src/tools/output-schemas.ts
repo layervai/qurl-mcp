@@ -73,7 +73,7 @@ export const qurlSchema = z.object({
   expires_at: z.string(),
   created_at: z.string(),
   // `"expired"` is first-class because api-spec/qurls.yaml's
-  // `Qurl.properties.status` description documents it as a real
+  // `QurlData.properties.status` description documents it as a real
   // lifecycle value (despite the spec's `enum:` line listing only
   // `[active, revoked]`). `"unknown"` is the fail-soft drift sentinel
   // emitted by `.catch()` for any parse failure (unknown enum value,

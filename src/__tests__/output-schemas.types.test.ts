@@ -65,7 +65,7 @@ describe("output schema <-> client type alignment", () => {
 describe("qurlSchema.status drift tolerance", () => {
   it("accepts 'active', 'revoked', and 'expired' as-is", () => {
     // "expired" round-trips because api-spec/qurls.yaml's
-    // `Qurl.properties.status` description documents it as a real
+    // `QurlData.properties.status` description documents it as a real
     // lifecycle value despite the spec's `enum:` line missing it.
     // Coercing it to the drift sentinel would lose semantics agents
     // care about.
@@ -128,6 +128,7 @@ describe("qurlSchema.status drift tolerance", () => {
         ...sampleQURL(),
         qurls: [sampleAccessToken({ status: s })],
       });
+      expect(parsed.qurls).toHaveLength(1);
       expect(parsed.qurls?.[0].status).toBe(s);
     }
   });
@@ -142,6 +143,7 @@ describe("qurlSchema.status drift tolerance", () => {
       // @ts-expect-error simulating an out-of-spec API value on the nested token
       qurls: [sampleAccessToken({ status: "future-state" })],
     });
+    expect(parsed.qurls).toHaveLength(1);
     expect(parsed.qurls?.[0].status).toBe("unknown");
   });
 });

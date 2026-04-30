@@ -36,7 +36,7 @@ export interface QURL {
   expires_at: string;
   created_at: string;
   // "expired" is documented in api-spec/qurls.yaml's
-  // `Qurl.properties.status` description (resources past their
+  // `QurlData.properties.status` description (resources past their
   // expires_at are reported as "expired" without being explicitly
   // revoked) even though the same enum line is narrower. "unknown" is
   // the drift sentinel emitted by qurlSchema.parse via .catch when the
