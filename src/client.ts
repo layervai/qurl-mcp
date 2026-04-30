@@ -35,12 +35,16 @@ export interface QURL {
   tags?: string[];
   expires_at: string;
   created_at: string;
-  // "unknown" is a drift sentinel emitted by qurlSchema.parse via
-  // `.catch("unknown")` when the API returns a value not in the spec
-  // snapshot. (Hypothetical collision: if the API ever literally
-  // returns "unknown", consumers can't distinguish it from a coercion
-  // — accepted as low-probability vs. the cost of a synthetic name.)
-  status: "active" | "revoked" | "unknown";
+  // "expired" is documented in the spec's `status` description even
+  // though it's missing from the enum line (api-spec/qurls.yaml:2745-2746):
+  // resources past their expires_at are reported as "expired" without
+  // being explicitly revoked. "unknown" is a drift sentinel emitted by
+  // qurlSchema.parse via `.catch("unknown")` when the API returns a
+  // value not in the spec snapshot. (Hypothetical collision: if the
+  // API ever literally returns "unknown", consumers can't distinguish
+  // it from a coercion — accepted as low-probability vs. the cost of
+  // a synthetic name.)
+  status: "active" | "revoked" | "expired" | "unknown";
   custom_domain?: string | null;
   preserve_host?: boolean;
   qurl_count?: number;

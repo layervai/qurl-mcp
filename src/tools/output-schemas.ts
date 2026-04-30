@@ -72,10 +72,17 @@ export const qurlSchema = z.object({
   tags: z.array(z.string()).optional(),
   expires_at: z.string(),
   created_at: z.string(),
-  // Enum sourced from api-spec/qurls.yaml. The spec-drift workflow
-  // catches a new value at the snapshot level on its weekly run, but
-  // not before it reaches a host. `.catch("unknown")` widens the
-  // accepted set so an unanticipated value (e.g. "expired", "pending")
+  // Enum sourced from api-spec/qurls.yaml. `"expired"` is included even
+  // though the spec's `enum:` line lists only `[active, revoked]`,
+  // because the same property's description (api-spec/qurls.yaml:2745-2746)
+  // documents that resources past their expires_at are reported as
+  // `"expired"`. Treating it as a first-class value preserves the
+  // lifecycle semantics for any agent that wants to branch on it,
+  // rather than coercing to the drift sentinel below.
+  //
+  // The spec-drift workflow catches new values at the snapshot level on
+  // its weekly run, but not before they reach a host. `.catch("unknown")`
+  // widens the accepted set so an unanticipated value (e.g. "pending")
   // doesn't hard-fail `structuredContent` validation between drift
   // detections — it instead surfaces as the sentinel `unknown`, which
   // a defensive agent can branch on.
@@ -85,7 +92,7 @@ export const qurlSchema = z.object({
   // missing values. That's the deliberate fail-soft posture; real
   // shape regressions surface via the weekly drift workflow and #101
   // (operator-visibility logging follow-up) rather than at parse time.
-  status: z.enum(["active", "revoked", "unknown"]).catch("unknown"),
+  status: z.enum(["active", "revoked", "expired", "unknown"]).catch("unknown"),
   custom_domain: z.string().nullable().optional(),
   preserve_host: z
     .boolean()

@@ -62,21 +62,26 @@ describe("output schema <-> client type alignment", () => {
 // Lock the behavior in so a future "fix" that removes the .catch trips
 // these tests instead of silently breaking hosts.
 describe("qurlSchema.status drift tolerance", () => {
-  it("accepts 'active' and 'revoked' as-is", () => {
+  it("accepts 'active', 'revoked', and 'expired' as-is", () => {
+    // "expired" round-trips because the spec's status description
+    // (api-spec/qurls.yaml:2745-2746) documents it as a real lifecycle
+    // value despite the spec's `enum:` line missing it. Coercing it to
+    // the drift sentinel would lose semantics agents care about.
     expect(qurlSchema.parse(sampleQURL({ status: "active" })).status).toBe("active");
     expect(qurlSchema.parse(sampleQURL({ status: "revoked" })).status).toBe("revoked");
+    expect(qurlSchema.parse(sampleQURL({ status: "expired" })).status).toBe("expired");
   });
 
   it("coerces an unrecognized status to 'unknown' via .catch()", () => {
-    // QURL.status doesn't include "expired" — the fixture deliberately
+    // QURL.status doesn't include "pending" — the fixture deliberately
     // violates the type to stand in for an API response with a
     // future-added enum value. @ts-expect-error documents the violation
     // at the source and would itself fail if QURL.status ever widens to
-    // accept "expired" (at which point this test should be revisited).
+    // accept "pending" (at which point this test should be revisited).
     const parsed = qurlSchema.parse({
       ...sampleQURL(),
       // @ts-expect-error simulating an out-of-spec API value
-      status: "expired",
+      status: "pending",
     });
     expect(parsed.status).toBe("unknown");
   });
@@ -104,9 +109,19 @@ describe("qurlSchema.status drift tolerance", () => {
     ).toBe("unknown");
     const { status: _drop, ...withoutStatus } = sampleQURL();
     void _drop;
-    expect(
-      qurlSchema.parse(withoutStatus as unknown as Parameters<typeof qurlSchema.parse>[0]).status,
-    ).toBe("unknown");
+    expect(qurlSchema.parse(withoutStatus as Record<string, unknown>).status).toBe("unknown");
+  });
+
+  it("accepts the documented access-token statuses on the nested array", () => {
+    // Symmetric pass-through assertion for the wider nested enum.
+    // Cheap insurance against an enum typo on accessTokenSchema.
+    for (const s of ["active", "consumed", "expired", "revoked"] as const) {
+      const parsed = qurlSchema.parse({
+        ...sampleQURL(),
+        qurls: [sampleAccessToken({ status: s })],
+      });
+      expect(parsed.qurls?.[0].status).toBe(s);
+    }
   });
 
   it("coerces nested access-token unrecognized status to 'unknown' via .catch()", () => {
