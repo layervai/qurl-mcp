@@ -27,7 +27,7 @@ export function deleteQurlTool(client: IQURLClient) {
       "Use `update_qurl` instead when you only need to shorten/extend the expiration, retag, or rename — those preserve the existing access tokens. " +
       "Use `extend_qurl` when you only need to push the expiration out. " +
       "**Idempotent:** the API returns 404 for re-deletes, never-existed IDs, and resources owned by another API key (ownership-mismatch is collapsed into 404 server-side to avoid existence disclosure); this tool swallows all three. " +
-      "Branch on `was_already_revoked` to distinguish the no-op case from an actual revoke. " +
+      "Branch on `was_already_revoked` to distinguish the no-op case from a successful revoke on this call. " +
       "When the ID came from user input and ownership matters, call `get_qurl` first (200 = yours; 404 is equally ambiguous on that endpoint too). " +
       "Returns a confirmation payload. By default the resource is excluded from `list_qurls`; pass `status: \"revoked\"` to see it.",
     inputSchema: deleteQurlSchema,
