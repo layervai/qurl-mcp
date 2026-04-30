@@ -1,6 +1,7 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import type { z } from "zod";
 import type {
+  AccessToken,
   BatchCreateOutput,
   CreateQURLData,
   ListQURLsOutput,
@@ -63,10 +64,11 @@ describe("output schema <-> client type alignment", () => {
 // these tests instead of silently breaking hosts.
 describe("qurlSchema.status drift tolerance", () => {
   it("accepts 'active', 'revoked', and 'expired' as-is", () => {
-    // "expired" round-trips because the spec's status description
-    // (api-spec/qurls.yaml:2745-2746) documents it as a real lifecycle
-    // value despite the spec's `enum:` line missing it. Coercing it to
-    // the drift sentinel would lose semantics agents care about.
+    // "expired" round-trips because api-spec/qurls.yaml's
+    // `Qurl.properties.status` description documents it as a real
+    // lifecycle value despite the spec's `enum:` line missing it.
+    // Coercing it to the drift sentinel would lose semantics agents
+    // care about.
     expect(qurlSchema.parse(sampleQURL({ status: "active" })).status).toBe("active");
     expect(qurlSchema.parse(sampleQURL({ status: "revoked" })).status).toBe("revoked");
     expect(qurlSchema.parse(sampleQURL({ status: "expired" })).status).toBe("expired");
@@ -115,7 +117,13 @@ describe("qurlSchema.status drift tolerance", () => {
   it("accepts the documented access-token statuses on the nested array", () => {
     // Symmetric pass-through assertion for the wider nested enum.
     // Cheap insurance against an enum typo on accessTokenSchema.
-    for (const s of ["active", "consumed", "expired", "revoked"] as const) {
+    // `satisfies` gives drift insurance: removing one of these from
+    // AccessToken["status"] (e.g. dropping "consumed") fails compilation
+    // here instead of letting the test silently miss a documented value.
+    const documented = ["active", "consumed", "expired", "revoked"] as const satisfies ReadonlyArray<
+      AccessToken["status"]
+    >;
+    for (const s of documented) {
       const parsed = qurlSchema.parse({
         ...sampleQURL(),
         qurls: [sampleAccessToken({ status: s })],

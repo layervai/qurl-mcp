@@ -72,9 +72,9 @@ export const qurlSchema = z.object({
   tags: z.array(z.string()).optional(),
   expires_at: z.string(),
   created_at: z.string(),
-  // Enum sourced from api-spec/qurls.yaml. `"expired"` is included even
-  // though the spec's `enum:` line lists only `[active, revoked]`,
-  // because the same property's description (api-spec/qurls.yaml:2745-2746)
+  // Enum sourced from api-spec/qurls.yaml's `Qurl.properties.status`.
+  // `"expired"` is included even though the spec's `enum:` line lists
+  // only `[active, revoked]` — the same property's description
   // documents that resources past their expires_at are reported as
   // `"expired"`. Treating it as a first-class value preserves the
   // lifecycle semantics for any agent that wants to branch on it,
@@ -84,14 +84,10 @@ export const qurlSchema = z.object({
   // its weekly run, but not before they reach a host. `.catch("unknown")`
   // widens the accepted set so an unanticipated value (e.g. "pending")
   // doesn't hard-fail `structuredContent` validation between drift
-  // detections — it instead surfaces as the sentinel `unknown`, which
-  // a defensive agent can branch on.
-  //
-  // Note: `.catch()` triggers on *any* parse failure for this field —
-  // not just unrecognized enum strings, but also null, wrong-type, or
-  // missing values. That's the deliberate fail-soft posture; real
-  // shape regressions surface via the weekly drift workflow and #101
-  // (operator-visibility logging follow-up) rather than at parse time.
+  // detections — it surfaces as the sentinel `unknown` that a defensive
+  // agent can branch on. The fail-soft scope (any parse failure, not
+  // just unrecognized strings) is locked in by tests in
+  // output-schemas.types.test.ts; #101 tracks operator-visibility.
   status: z.enum(["active", "revoked", "expired", "unknown"]).catch("unknown"),
   custom_domain: z.string().nullable().optional(),
   preserve_host: z
