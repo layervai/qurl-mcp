@@ -37,8 +37,20 @@ jobs:
     # only if/name/needs/permissions/secrets/strategy/uses/with/concurrency
     # are valid on a job that calls a reusable workflow. The reusable
     # workflow itself sets `timeout-minutes: 5` internally.
-    uses: layervai/ops-routines-workflows/.github/workflows/age-check-actions.yml@39fcb54fc36ea7b6032e138bd8b57647f2bb32f0 # v0.4.0
+    uses: layervai/ops-routines-workflows/.github/workflows/age-check-actions.yml@4edea7408d64f424780e08f68a54000308817a08 # v0.6.1
     with:
       min_age_days: 7
+      # Post a sticky PR comment when an age-check fails, listing each
+      # pin with its eligible-after date and days remaining. The PR
+      # author / reviewer sees the retry-after date inline on the PR
+      # instead of having to click into the run log to find it. Sticky
+      # comment is updated in place on re-runs and deleted on a clean
+      # pass; soft-fails to a `::notice` if the token can't write.
+      comment_on_failure: true
     permissions:
       contents: read
+      # Required for `comment_on_failure: true` to actually post.
+      # Dependabot PRs default to read-only and need this grant
+      # explicitly. Without it, the workflow still fails the age check
+      # correctly — only the inline comment is suppressed.
+      pull-requests: write
