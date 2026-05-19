@@ -48,6 +48,6 @@ jobs:
     # reusable's own `sender.type != 'Bot'` check short-circuits them
     # before setFailed — net effect is a near-instant no-op run.
     if: ${{ github.actor != 'github-actions[bot]' }}
-    uses: layervai/ops-routines-workflows/.github/workflows/issue-priority.yml@4edea7408d64f424780e08f68a54000308817a08 # v0.6.1
+    uses: layervai/ops-routines-workflows/.github/workflows/issue-priority.yml@ca41c7123c507ad45331a723851da6c010541154 # v0.6.2
     permissions:
       issues: write
