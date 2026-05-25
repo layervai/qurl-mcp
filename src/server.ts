@@ -26,8 +26,8 @@ export type ToolFactory = (client: IQURLClient) => {
   name: string;
   title: string;
   description: string;
-  inputSchema: z.AnyZodObject;
-  outputSchema: z.AnyZodObject;
+  inputSchema: z.ZodObject;
+  outputSchema: z.ZodObject;
   annotations: ToolAnnotations;
   // Args vary per tool; exact signatures are validated by registerTool at each call site.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
