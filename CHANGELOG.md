@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.4.0...qurl-mcp-v0.4.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* **deps:** replace removed z.AnyZodObject with z.ZodObject for zod v4 ([#133](https://github.com/layervai/qurl-mcp/issues/133)) ([c367ef8](https://github.com/layervai/qurl-mcp/commit/c367ef8b6ed4a42304eb1b76b6dd77789fe63188))
+* **tools:** close items 1 and 3 from issue [#83](https://github.com/layervai/qurl-mcp/issues/83) follow-ups ([#100](https://github.com/layervai/qurl-mcp/issues/100)) ([48b55e5](https://github.com/layervai/qurl-mcp/commit/48b55e57179d572df494b9cc4245bb26c83e8bb0))
+
 ## [0.4.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.4...qurl-mcp-v0.4.0) (2026-04-29)
 
 
