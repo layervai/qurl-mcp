@@ -3,7 +3,7 @@
 # node:22-alpine pinned by digest (Renovate/Dependabot will keep it current).
 # Floating tags would shift between builds and reopen a supply-chain seam the
 # rest of this workflow's SHA-pinned actions are designed to close.
-FROM node:26-alpine@sha256:7c6af15abe4e3de859690e7db171d0d711bf37d27528eddfe625b2fe89e097f8 AS build
+FROM node:26-alpine@sha256:144769ec3f32e8ee36b3cfde91e82bee25d9367b20f31a151f3f7eea3a2a8541 AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -12,7 +12,7 @@ COPY src ./src
 RUN npm run build
 RUN npm prune --omit=dev
 
-FROM node:26-alpine@sha256:7c6af15abe4e3de859690e7db171d0d711bf37d27528eddfe625b2fe89e097f8
+FROM node:26-alpine@sha256:144769ec3f32e8ee36b3cfde91e82bee25d9367b20f31a151f3f7eea3a2a8541
 LABEL org.opencontainers.image.source="https://github.com/layervai/qurl-mcp" \
       org.opencontainers.image.description="MCP server for qURL — secure expiring access links for AI agents." \
       org.opencontainers.image.licenses="MIT"
