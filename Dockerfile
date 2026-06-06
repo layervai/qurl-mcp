@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-# node:22-alpine pinned by digest (Renovate/Dependabot will keep it current).
+# Base image pinned by digest (Renovate/Dependabot will keep it current).
 # Floating tags would shift between builds and reopen a supply-chain seam the
 # rest of this workflow's SHA-pinned actions are designed to close.
 FROM node:26-alpine@sha256:144769ec3f32e8ee36b3cfde91e82bee25d9367b20f31a151f3f7eea3a2a8541 AS build
