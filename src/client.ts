@@ -22,14 +22,14 @@ export interface AccessToken {
   // parent resource. See qurl/api/openapi.yaml -> QurlSummary.status.
   // `"unknown"` is the same drift sentinel as on QURL.status below.
   status: "active" | "consumed" | "expired" | "revoked" | "unknown";
-  one_time_use: boolean;
-  max_sessions: number;
-  session_duration: number;
-  use_count: number;
+  one_time_use?: boolean;
+  max_sessions?: number;
+  session_duration?: number;
+  use_count?: number;
   qurl_site?: string;
   access_policy?: AccessPolicy;
-  created_at: string;
-  expires_at: string;
+  created_at?: string;
+  expires_at?: string;
 }
 
 export interface SessionData {

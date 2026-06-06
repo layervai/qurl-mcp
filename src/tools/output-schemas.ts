@@ -54,14 +54,20 @@ export const accessTokenOutputSchema = z
       .describe(
         "Per-token status (wider than resource status — tokens may be consumed/expired independently)",
       ),
-    one_time_use: z.boolean(),
-    max_sessions: z.number(),
-    session_duration: z.number().describe("Seconds of access granted after a successful resolve"),
-    use_count: z.number(),
+    // QurlSummary in api-spec/qurls.yaml intentionally has no `required`
+    // list, so these server-owned details are optional even though most
+    // responses include them.
+    one_time_use: z.boolean().optional(),
+    max_sessions: z.number().optional(),
+    session_duration: z
+      .number()
+      .optional()
+      .describe("Seconds of access granted after a successful resolve"),
+    use_count: z.number().optional(),
     qurl_site: z.string().optional(),
     access_policy: accessPolicy.optional(),
-    created_at: z.string(),
-    expires_at: z.string(),
+    created_at: z.string().optional(),
+    expires_at: z.string().optional(),
   })
   .describe("Single access token belonging to a qURL resource");
 

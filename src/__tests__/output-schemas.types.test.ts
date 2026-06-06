@@ -60,6 +60,12 @@ describe("output schema <-> client type alignment", () => {
     expectTypeOf<z.infer<typeof updateQurlTokenOutputSchema>>().toEqualTypeOf<AccessToken>();
   });
 
+  it("accepts sparse QurlSummary responses allowed by the OpenAPI spec", () => {
+    const sparse = { qurl_id: "q_sparse12345", status: "active" };
+    expect(accessTokenOutputSchema.parse(sparse)).toEqual(sparse);
+    expect(updateQurlTokenOutputSchema.parse(sparse)).toEqual(sparse);
+  });
+
   it("listQurlSessionsOutputSchema matches SessionListOutput", () => {
     expectTypeOf<z.infer<typeof listQurlSessionsOutputSchema>>().toEqualTypeOf<SessionListOutput>();
   });
