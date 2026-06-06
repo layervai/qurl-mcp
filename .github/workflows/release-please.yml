@@ -32,7 +32,7 @@ jobs:
       id-token: write
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           # Pin to the tag release-please just pushed so a post-merge
           # commit on `main` can't sneak into the published tarball.
@@ -72,7 +72,7 @@ jobs:
       id-token: write # github-oidc auth for mcp-publisher
     steps:
       - name: Checkout release tag
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
       - name: Publish to MCP Registry
