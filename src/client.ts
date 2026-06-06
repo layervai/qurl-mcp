@@ -133,6 +133,11 @@ export interface UpdateQURLInput {
   expires_at?: string;
   tags?: string[];
   description?: string;
+}
+
+export interface UpdateResourceInput {
+  tags?: string[];
+  description?: string;
   custom_domain?: string;
   preserve_host?: boolean;
 }
@@ -288,6 +293,7 @@ export interface IQURLClient {
   listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput>;
   deleteQURL(id: string): Promise<void>;
   updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }>;
+  updateResource(id: string, input: UpdateResourceInput): Promise<{ data: QURL }>;
   extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }>;
   resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }>;
   getQuota(): Promise<{ data: QuotaOutput }>;
@@ -479,6 +485,10 @@ export class QURLClient implements IQURLClient {
 
   async updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }> {
     return this.request("PATCH", this.qurlPath(id), input);
+  }
+
+  async updateResource(id: string, input: UpdateResourceInput): Promise<{ data: QURL }> {
+    return this.request("PATCH", this.resourcePath(id), input);
   }
 
   async extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }> {

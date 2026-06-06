@@ -84,6 +84,7 @@ describe("QURLClient", () => {
           () => noKeyClient.listQURLs(),
           () => noKeyClient.deleteQURL("r_x"),
           () => noKeyClient.updateQURL("r_x", { extend_by: "1h" }),
+          () => noKeyClient.updateResource("r_x", { custom_domain: "app.example.com" }),
           () => noKeyClient.extendQURL("r_x", { extend_by: "1h" }),
           () => noKeyClient.resolveQURL({ access_token: "at_x" }),
           () => noKeyClient.getQuota(),
@@ -612,6 +613,27 @@ describe("QURLClient", () => {
           body: JSON.stringify({ tags: ["prod", "api"], description: "Updated description" }),
         }),
       );
+    });
+  });
+
+  describe("updateResource", () => {
+    it("sends PATCH to /v1/resources/:id with resource metadata body", async () => {
+      const mockData = { data: { resource_id: "r_abc", custom_domain: "app.example.com" } };
+      const mock = stubFetch(mockData);
+
+      const result = await client.updateResource("r_abc", {
+        custom_domain: "app.example.com",
+        preserve_host: true,
+      });
+
+      expect(mock).toHaveBeenCalledWith(
+        "https://api.test.com/v1/resources/r_abc",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ custom_domain: "app.example.com", preserve_host: true }),
+        }),
+      );
+      expect(result).toEqual(mockData);
     });
   });
 

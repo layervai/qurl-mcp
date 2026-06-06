@@ -18,6 +18,7 @@ export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClien
     listQURLs: vi.fn(),
     deleteQURL: vi.fn(),
     updateQURL: vi.fn(),
+    updateResource: vi.fn(),
     extendQURL: vi.fn(),
     resolveQURL: vi.fn(),
     getQuota: vi.fn(),

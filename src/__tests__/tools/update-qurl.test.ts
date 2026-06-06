@@ -256,8 +256,12 @@ describe("updateQurlTool", () => {
     });
 
     it("passes custom_domain and preserve_host to client", async () => {
-      const mockUpdate = vi.fn().mockResolvedValue({ data: fixture });
-      const client = makeMockClient({ updateQURL: mockUpdate });
+      const mockUpdateQurl = vi.fn();
+      const mockUpdateResource = vi.fn().mockResolvedValue({ data: fixture });
+      const client = makeMockClient({
+        updateQURL: mockUpdateQurl,
+        updateResource: mockUpdateResource,
+      });
       const tool = updateQurlTool(client);
 
       await tool.handler({
@@ -266,15 +270,16 @@ describe("updateQurlTool", () => {
         preserve_host: true,
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith(updateResourceId, {
+      expect(mockUpdateQurl).not.toHaveBeenCalled();
+      expect(mockUpdateResource).toHaveBeenCalledWith(updateResourceId, {
         custom_domain: "app.example.com",
         preserve_host: true,
       });
     });
 
     it("passes the clear-custom_domain + preserve_host combo through verbatim", async () => {
-      const mockUpdate = vi.fn().mockResolvedValue({ data: fixture });
-      const client = makeMockClient({ updateQURL: mockUpdate });
+      const mockUpdateResource = vi.fn().mockResolvedValue({ data: fixture });
+      const client = makeMockClient({ updateResource: mockUpdateResource });
       const tool = updateQurlTool(client);
 
       await tool.handler({
@@ -283,10 +288,75 @@ describe("updateQurlTool", () => {
         preserve_host: false,
       });
 
-      expect(mockUpdate).toHaveBeenCalledWith(updateResourceId, {
+      expect(mockUpdateResource).toHaveBeenCalledWith(updateResourceId, {
         custom_domain: "",
         preserve_host: false,
       });
+    });
+
+    it("routes tags and description with custom_domain through the resource endpoint", async () => {
+      const mockUpdateQurl = vi.fn();
+      const mockUpdateResource = vi.fn().mockResolvedValue({ data: fixture });
+      const client = makeMockClient({
+        updateQURL: mockUpdateQurl,
+        updateResource: mockUpdateResource,
+      });
+      const tool = updateQurlTool(client);
+
+      await tool.handler({
+        resource_id: updateResourceId,
+        tags: ["prod"],
+        description: "New desc",
+        custom_domain: "app.example.com",
+      });
+
+      expect(mockUpdateQurl).not.toHaveBeenCalled();
+      expect(mockUpdateResource).toHaveBeenCalledWith(updateResourceId, {
+        tags: ["prod"],
+        description: "New desc",
+        custom_domain: "app.example.com",
+      });
+    });
+
+    it("rejects custom_domain when called with a q_ display ID", async () => {
+      const mockUpdateQurl = vi.fn();
+      const mockUpdateResource = vi.fn();
+      const client = makeMockClient({
+        updateQURL: mockUpdateQurl,
+        updateResource: mockUpdateResource,
+      });
+      const tool = updateQurlTool(client);
+
+      const result = await tool.handler({
+        resource_id: "q_abc123def45",
+        custom_domain: "app.example.com",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("require an r_ resource ID");
+      expect(mockUpdateQurl).not.toHaveBeenCalled();
+      expect(mockUpdateResource).not.toHaveBeenCalled();
+    });
+
+    it("rejects combining expiration changes with resource-endpoint updates", async () => {
+      const mockUpdateQurl = vi.fn();
+      const mockUpdateResource = vi.fn();
+      const client = makeMockClient({
+        updateQURL: mockUpdateQurl,
+        updateResource: mockUpdateResource,
+      });
+      const tool = updateQurlTool(client);
+
+      const result = await tool.handler({
+        resource_id: updateResourceId,
+        extend_by: "24h",
+        custom_domain: "app.example.com",
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("cannot be combined with extend_by or expires_at");
+      expect(mockUpdateQurl).not.toHaveBeenCalled();
+      expect(mockUpdateResource).not.toHaveBeenCalled();
     });
 
     it("propagates client errors", async () => {
