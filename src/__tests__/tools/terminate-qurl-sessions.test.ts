@@ -43,6 +43,17 @@ describe("terminateQurlSessionsTool", () => {
       });
     });
 
+    it("fails cleanly when the terminate-all response is malformed", async () => {
+      const mockTerminateAll = vi.fn().mockResolvedValue({ data: {} });
+      const tool = terminateQurlSessionsTool(
+        makeMockClient({ terminateAllResourceSessions: mockTerminateAll }),
+      );
+
+      await expect(tool.handler({ resource_id: resourceId })).rejects.toThrow(
+        "qURL API returned an invalid session termination response.",
+      );
+    });
+
     it("terminates one session when session_id is provided", async () => {
       const mockTerminateOne = vi.fn().mockResolvedValue(undefined);
       const tool = terminateQurlSessionsTool(

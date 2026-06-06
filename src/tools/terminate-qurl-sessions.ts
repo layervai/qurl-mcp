@@ -40,6 +40,8 @@ export function terminateQurlSessionsTool(client: IQURLClient) {
           const payload = {
             resource_id: input.resource_id,
             session_id: input.session_id,
+            // The API returns 204 for a single session delete, so the tool
+            // synthesizes the count from the successful operation.
             terminated: 1,
             message: `qURL session ${input.session_id} is terminated.`,
           };
@@ -50,10 +52,15 @@ export function terminateQurlSessionsTool(client: IQURLClient) {
         }
 
         const result = await client.terminateAllResourceSessions(input.resource_id);
+        const terminated = result.data?.terminated;
+        if (typeof terminated !== "number") {
+          throw new Error("qURL API returned an invalid session termination response.");
+        }
+
         const payload = {
           resource_id: input.resource_id,
-          terminated: result.data.terminated,
-          message: `Terminated ${result.data.terminated} qURL session(s).`,
+          terminated,
+          message: `Terminated ${terminated} qURL session(s).`,
         };
         return {
           content: [{ type: "text" as const, text: JSON.stringify(payload) }],
