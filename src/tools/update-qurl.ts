@@ -116,6 +116,9 @@ export function updateQurlTool(client: IQURLClient) {
       const parsed = updateQurlSchema.safeParse(raw);
       if (!parsed.success) return zodErrorToToolResult(parsed.error);
       const { resource_id } = parsed.data;
+      // Both API endpoints accept tags/description; keep qURL-only updates
+      // on /v1/qurls/{id} for q_ auto-resolution, and move custom-domain /
+      // host-header changes to /v1/resources/{id} per UpdateResourceRequest.
       const result = hasResourceEndpointUpdate(parsed.data)
         ? await client.updateResource(resource_id, buildResourceUpdateBody(parsed.data))
         : await client.updateQURL(resource_id, buildQurlUpdateBody(parsed.data));
