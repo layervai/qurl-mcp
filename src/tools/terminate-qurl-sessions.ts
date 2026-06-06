@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { IQURLClient } from "../client.js";
+import { type IQURLClient, QURLAPIError } from "../client.js";
 import { resourceOnlyIdSchema, toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
 import { terminateQurlSessionsOutputSchema } from "./output-schemas.js";
 
@@ -54,7 +54,11 @@ export function terminateQurlSessionsTool(client: IQURLClient) {
         const result = await client.terminateAllResourceSessions(input.resource_id);
         const terminated = result.data?.terminated;
         if (typeof terminated !== "number") {
-          throw new Error("qURL API returned an invalid session termination response.");
+          throw new QURLAPIError(
+            502,
+            "invalid_response",
+            "qURL API returned an invalid session termination response.",
+          );
         }
 
         const payload = {

@@ -43,7 +43,7 @@ describe("deleteQurlTool", () => {
       const result = deleteQurlSchema.safeParse({ resource_id: "q_abcdef12345" });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toContain("Expected an r_ resource ID");
+        expect(result.error.issues[0].message).toContain("Use update_qurl or mint_link");
       }
     });
   });

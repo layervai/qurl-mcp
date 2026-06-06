@@ -49,9 +49,11 @@ describe("terminateQurlSessionsTool", () => {
         makeMockClient({ terminateAllResourceSessions: mockTerminateAll }),
       );
 
-      await expect(tool.handler({ resource_id: resourceId })).rejects.toThrow(
-        "qURL API returned an invalid session termination response.",
-      );
+      await expect(tool.handler({ resource_id: resourceId })).rejects.toMatchObject({
+        name: "QURLAPIError",
+        statusCode: 502,
+        code: "invalid_response",
+      });
     });
 
     it("terminates one session when session_id is provided", async () => {

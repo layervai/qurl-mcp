@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type IQURLClient, QURLAPIError } from "../client.js";
-import { resourceOnlyIdSchema, withMissingApiKeyHandler } from "./_shared.js";
+import { withMissingApiKeyHandler } from "./_shared.js";
 import { deleteQurlOutputSchema } from "./output-schemas.js";
 
 export const deleteQurlSchema = z.object({
@@ -8,9 +8,13 @@ export const deleteQurlSchema = z.object({
   // get/update/extend/mint_link which also accept q_ prefixes. Reject
   // non-r_ IDs at the schema boundary so agents get a clear error
   // instead of a confusing API-side rejection.
-  resource_id: resourceOnlyIdSchema("delete").describe(
-    "The resource ID (r_ prefix). delete_qurl does not accept q_ (qURL display) IDs.",
-  ),
+  resource_id: z
+    .string()
+    .regex(
+      /^r_[a-z0-9_-]{11}$/,
+      "delete_qurl only accepts resource IDs (r_ prefix). Use update_qurl or mint_link for q_ IDs.",
+    )
+    .describe("The resource ID (r_ prefix). delete_qurl does not accept q_ (qURL display) IDs."),
 });
 
 export function deleteQurlTool(client: IQURLClient) {
