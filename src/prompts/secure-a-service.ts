@@ -3,14 +3,8 @@ import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
 
 export const secureAServiceArgs = {
   target_url: z.string().describe("The URL of the service to protect with qURL"),
-  label: z
-    .string()
-    .optional()
-    .describe("Human-readable label identifying who this qURL is for"),
-  description: z
-    .string()
-    .optional()
-    .describe("Human-readable description of what this service is"),
+  label: z.string().optional().describe("Human-readable label identifying who this qURL is for"),
+  description: z.string().optional().describe("Human-readable description of what this service is"),
   expires_in: z
     .string()
     .optional()
@@ -23,7 +17,7 @@ export const secureAServiceArgs = {
     .string()
     .regex(/^[1-9]\d*$/, "Must be a positive integer")
     .optional()
-    .describe("Maximum number of concurrent sessions (e.g., \"1\", \"5\")"),
+    .describe('Maximum number of concurrent sessions (e.g., "1", "5")'),
   session_duration: z
     .string()
     .optional()
@@ -31,7 +25,9 @@ export const secureAServiceArgs = {
   ip_allowlist: z
     .string()
     .optional()
-    .describe("Comma-separated IP addresses or CIDR ranges allowed to access (e.g., \"10.0.0.0/8,192.168.1.1\")"),
+    .describe(
+      'Comma-separated IP addresses or CIDR ranges allowed to access (e.g., "10.0.0.0/8,192.168.1.1")',
+    ),
   ip_denylist: z
     .string()
     .optional()
@@ -39,11 +35,11 @@ export const secureAServiceArgs = {
   geo_allowlist: z
     .string()
     .optional()
-    .describe("Comma-separated ISO 3166-1 alpha-2 country codes allowed (e.g., \"US,CA,GB\")"),
+    .describe('Comma-separated ISO 3166-1 alpha-2 country codes allowed (e.g., "US,CA,GB")'),
   geo_denylist: z
     .string()
     .optional()
-    .describe("Comma-separated country codes to block (e.g., \"CN,RU\")"),
+    .describe('Comma-separated country codes to block (e.g., "CN,RU")'),
   block_ai_agents: z
     .enum(["true", "false"])
     .optional()
@@ -108,9 +104,7 @@ export function secureAServicePrompt() {
       if (geoDeny) policy.geo_denylist = geoDeny;
       if (blockAI) policy.ai_agent_policy = { block_all: true };
 
-      const policyLines = hasPolicy
-        ? [`- access_policy: ${JSON.stringify(policy)}`]
-        : [];
+      const policyLines = hasPolicy ? [`- access_policy: ${JSON.stringify(policy)}`] : [];
 
       const descriptionFollowUp = args.description
         ? [

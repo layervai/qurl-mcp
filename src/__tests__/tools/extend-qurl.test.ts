@@ -2,8 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { extendQurlTool, extendQurlSchema } from "../../tools/extend-qurl.js";
 import { makeMockClient, sampleQURL } from "../helpers.js";
 
+const validResourceId = "r_abc123def45";
+const extendResourceId = "r_extend12345";
+
 const fixture = sampleQURL({
-  resource_id: "r_extend1",
+  resource_id: extendResourceId,
   qurl_site: "https://ext.qurl.site",
   target_url: "https://example.com/extended",
   expires_at: "2026-04-09T00:00:00Z",
@@ -26,13 +29,13 @@ describe("extendQurlTool", () => {
   describe("schema", () => {
     it("requires both resource_id and extend_by", () => {
       expect(extendQurlSchema.safeParse({}).success).toBe(false);
-      expect(extendQurlSchema.safeParse({ resource_id: "r_abc" }).success).toBe(false);
+      expect(extendQurlSchema.safeParse({ resource_id: validResourceId }).success).toBe(false);
       expect(extendQurlSchema.safeParse({ extend_by: "24h" }).success).toBe(false);
     });
 
     it("accepts valid input", () => {
       const result = extendQurlSchema.safeParse({
-        resource_id: "r_abc",
+        resource_id: validResourceId,
         extend_by: "24h",
       });
       expect(result.success).toBe(true);
@@ -40,7 +43,7 @@ describe("extendQurlTool", () => {
 
     it("rejects non-string extend_by", () => {
       const result = extendQurlSchema.safeParse({
-        resource_id: "r_abc",
+        resource_id: validResourceId,
         extend_by: 24,
       });
       expect(result.success).toBe(false);
@@ -56,7 +59,7 @@ describe("extendQurlTool", () => {
 
     it("rejects empty extend_by", () => {
       const result = extendQurlSchema.safeParse({
-        resource_id: "r_abc",
+        resource_id: validResourceId,
         extend_by: "",
       });
       expect(result.success).toBe(false);
@@ -69,9 +72,9 @@ describe("extendQurlTool", () => {
       const client = makeMockClient({ extendQURL: mockExtend });
       const tool = extendQurlTool(client);
 
-      await tool.handler({ resource_id: "r_extend1", extend_by: "48h" });
+      await tool.handler({ resource_id: extendResourceId, extend_by: "48h" });
 
-      expect(mockExtend).toHaveBeenCalledWith("r_extend1", { extend_by: "48h" });
+      expect(mockExtend).toHaveBeenCalledWith(extendResourceId, { extend_by: "48h" });
     });
 
     it("returns updated qURL data as formatted JSON", async () => {
@@ -79,13 +82,13 @@ describe("extendQurlTool", () => {
       const client = makeMockClient({ extendQURL: mockExtend });
       const tool = extendQurlTool(client);
 
-      const result = await tool.handler({ resource_id: "r_extend1", extend_by: "48h" });
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "48h" });
 
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
 
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.resource_id).toBe("r_extend1");
+      expect(parsed.resource_id).toBe(extendResourceId);
       expect(parsed.expires_at).toBe("2026-04-09T00:00:00Z");
     });
 
@@ -94,7 +97,7 @@ describe("extendQurlTool", () => {
       const client = makeMockClient({ extendQURL: mockExtend });
       const tool = extendQurlTool(client);
 
-      const result = await tool.handler({ resource_id: "r_extend1", extend_by: "24h" });
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "24h" });
       expect(result.content[0].text).toBe(JSON.stringify(fixture));
     });
 
@@ -104,7 +107,7 @@ describe("extendQurlTool", () => {
       const tool = extendQurlTool(client);
 
       await expect(
-        tool.handler({ resource_id: "r_expired", extend_by: "24h" }),
+        tool.handler({ resource_id: "r_expired1234", extend_by: "24h" }),
       ).rejects.toThrow("QURL expired");
     });
   });

@@ -28,11 +28,11 @@ describe("createServer", () => {
   }
 
   describe("tools", () => {
-    it("registers all 9 tools", async () => {
+    it("registers all 13 tools", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();
 
-      expect(tools).toHaveLength(9);
+      expect(tools).toHaveLength(13);
     });
 
     it("registers tools with correct names", async () => {
@@ -46,10 +46,14 @@ describe("createServer", () => {
         "delete_qurl",
         "extend_qurl",
         "get_qurl",
+        "list_qurl_sessions",
         "list_qurls",
         "mint_link",
         "resolve_qurl",
+        "revoke_qurl_token",
+        "terminate_qurl_sessions",
         "update_qurl",
+        "update_qurl_token",
       ]);
     });
 

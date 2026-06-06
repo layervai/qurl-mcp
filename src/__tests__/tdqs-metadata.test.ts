@@ -5,11 +5,13 @@ import type { IQURLClient } from "../client.js";
 import { toolFactories } from "../server.js";
 import {
   makeMockClient,
+  sampleAccessToken,
   sampleBatchCreateOutput,
   sampleCreateQURLData,
   sampleMintLinkOutput,
   sampleQURL,
   sampleResolveOutput,
+  sampleSession,
 } from "./helpers.js";
 
 const tools = toolFactories.map((factory) => factory(makeMockClient()));
@@ -73,6 +75,10 @@ describe("TDQS tool metadata coverage", () => {
       batch_create_qurls: ["create_qurl"],
       list_qurls: ["get_qurl", "resolve_qurl"],
       create_qurl: ["mint_link", "batch_create_qurls", "update_qurl"],
+      revoke_qurl_token: ["delete_qurl"],
+      update_qurl_token: ["update_qurl", "revoke_qurl_token"],
+      list_qurl_sessions: ["terminate_qurl_sessions", "get_qurl"],
+      terminate_qurl_sessions: ["list_qurl_sessions"],
     };
     const byName = new Map(tools.map((t) => [t.name, t]));
     for (const [name, siblings] of Object.entries(expected)) {
@@ -202,7 +208,10 @@ describe("TDQS tool metadata coverage", () => {
         expect(claimed.length, `${tool.name} Returns block parsed zero keys`).toBeGreaterThan(0);
         const schemaKeys = new Set(Object.keys(tool.outputSchema.shape));
         for (const key of claimed) {
-          expect(schemaKeys, `Returns block claims '${key}' but it isn't in ${tool.name}'s outputSchema`).toContain(key);
+          expect(
+            schemaKeys,
+            `Returns block claims '${key}' but it isn't in ${tool.name}'s outputSchema`,
+          ).toContain(key);
         }
       });
     }
@@ -229,7 +238,7 @@ describe("TDQS tool metadata coverage", () => {
       ).toContain("Defaults to 'active'");
       expect(
         description,
-        "list_qurls description must assert the active default with the phrase \"By default only `active`\"",
+        'list_qurls description must assert the active default with the phrase "By default only `active`"',
       ).toContain("By default only `active`");
     });
   });
@@ -291,7 +300,7 @@ describe("TDQS tool metadata coverage", () => {
     const byName = new Map(tools.map((t) => [t.name, t]));
 
     it("marks read-only tools as readOnlyHint", () => {
-      const readOnlyNames = new Set(["list_qurls", "get_qurl"]);
+      const readOnlyNames = new Set(["list_qurls", "get_qurl", "list_qurl_sessions"]);
       for (const tool of tools) {
         if (readOnlyNames.has(tool.name)) {
           expect(tool.annotations.readOnlyHint).toBe(true);
@@ -302,8 +311,10 @@ describe("TDQS tool metadata coverage", () => {
       }
     });
 
-    it("marks delete_qurl as destructiveHint", () => {
+    it("marks destructive tools as destructiveHint", () => {
       expect(byName.get("delete_qurl")?.annotations.destructiveHint).toBe(true);
+      expect(byName.get("revoke_qurl_token")?.annotations.destructiveHint).toBe(true);
+      expect(byName.get("terminate_qurl_sessions")?.annotations.destructiveHint).toBe(true);
     });
   });
 });
@@ -317,7 +328,7 @@ describe("TDQS tool metadata coverage", () => {
  */
 describe("structuredContent ↔ outputSchema round-trip", () => {
   type Case = {
-    // Generic over 9 schemas, so input is loosely typed; per-tool tests
+    // Generic over all tool schemas, so input is loosely typed; per-tool tests
     // exercise the strict input schema.
     input: Record<string, unknown>;
     clientOverrides: Partial<IQURLClient>;
@@ -345,24 +356,24 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       },
     },
     get_qurl: {
-      input: { resource_id: "r_test123" },
+      input: { resource_id: "r_test1234567" },
       clientOverrides: { getQURL: vi.fn().mockResolvedValue({ data: qurlFixture }) },
     },
     delete_qurl: {
-      input: { resource_id: "r_test123" },
+      input: { resource_id: "r_test1234567" },
       clientOverrides: { deleteQURL: vi.fn().mockResolvedValue(undefined) },
       textIsJson: false,
     },
     extend_qurl: {
-      input: { resource_id: "r_test123", extend_by: "24h" },
+      input: { resource_id: "r_test1234567", extend_by: "24h" },
       clientOverrides: { extendQURL: vi.fn().mockResolvedValue({ data: qurlFixture }) },
     },
     update_qurl: {
-      input: { resource_id: "r_test123", extend_by: "24h" },
+      input: { resource_id: "r_test1234567", extend_by: "24h" },
       clientOverrides: { updateQURL: vi.fn().mockResolvedValue({ data: qurlFixture }) },
     },
     mint_link: {
-      input: { resource_id: "r_test123" },
+      input: { resource_id: "r_test1234567" },
       clientOverrides: {
         mintLink: vi.fn().mockResolvedValue({ data: sampleMintLinkOutput() }),
       },
@@ -370,6 +381,36 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
     batch_create_qurls: {
       input: { items: [{ target_url: "https://example.com" }] },
       clientOverrides: { batchCreate: vi.fn().mockResolvedValue(sampleBatchCreateOutput()) },
+    },
+    revoke_qurl_token: {
+      input: { resource_id: "r_test1234567", qurl_id: "q_abcdef12345" },
+      clientOverrides: { revokeQurlToken: vi.fn().mockResolvedValue(undefined) },
+    },
+    update_qurl_token: {
+      input: { resource_id: "r_test1234567", qurl_id: "q_abcdef12345", extend_by: "24h" },
+      clientOverrides: {
+        updateQurlToken: vi.fn().mockResolvedValue({
+          data: sampleAccessToken({ qurl_id: "q_abcdef12345" }),
+        }),
+      },
+    },
+    list_qurl_sessions: {
+      input: { resource_id: "r_test1234567" },
+      clientOverrides: {
+        listResourceSessions: vi.fn().mockResolvedValue({
+          data: [sampleSession()],
+          meta: { request_id: "req_sessions" },
+        }),
+      },
+    },
+    terminate_qurl_sessions: {
+      input: { resource_id: "r_test1234567" },
+      clientOverrides: {
+        terminateAllResourceSessions: vi.fn().mockResolvedValue({
+          data: { terminated: 2 },
+          meta: { request_id: "req_term" },
+        }),
+      },
     },
   };
 

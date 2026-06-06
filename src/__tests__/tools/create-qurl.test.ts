@@ -39,6 +39,7 @@ describe("createQurlTool", () => {
 
     it("accepts all optional fields", () => {
       const result = createQurlSchema.safeParse({
+        type: "url",
         target_url: "https://example.com",
         label: "Alice from Acme",
         expires_in: "24h",

@@ -35,7 +35,7 @@ Replace `lv_live_xxx` with your actual API key. The key must have the appropriat
 | Tool | Description | Required Scope |
 |------|-------------|----------------|
 | `create_qurl` | Create a secure, policy-bound link to a protected resource | `qurl:write` |
-| `resolve_qurl` | Resolve an access token to get the target URL and open firewall access | `qurl:resolve` |
+| `resolve_qurl` | Resolve an access token to get the target URL and grant network access | `qurl:resolve` |
 | `list_qurls` | List active qURLs with optional pagination | `qurl:read` |
 | `get_qurl` | Get details of a specific qURL by resource ID | `qurl:read` |
 | `delete_qurl` | Revoke a qURL, immediately invalidating the link | `qurl:write` |
@@ -43,6 +43,10 @@ Replace `lv_live_xxx` with your actual API key. The key must have the appropriat
 | `update_qurl` | Update expiration, tags, or description on an active qURL | `qurl:write` |
 | `mint_link` | Mint a new access link for an existing protected resource | `qurl:write` |
 | `batch_create_qurls` | Create multiple qURLs in a single call | `qurl:write` |
+| `revoke_qurl_token` | Revoke one qURL token without revoking sibling tokens on the resource | `qurl:write` |
+| `update_qurl_token` | Update expiry, label, policy, or session limits on one qURL token | `qurl:write` |
+| `list_qurl_sessions` | List active access sessions for a qURL resource | `qurl:read` |
+| `terminate_qurl_sessions` | Terminate one or all active sessions for a qURL resource | `qurl:write` |
 
 ## Available Resources
 

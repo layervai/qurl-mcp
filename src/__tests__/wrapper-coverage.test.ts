@@ -6,9 +6,13 @@ import { deleteQurlTool } from "../tools/delete-qurl.js";
 import { extendQurlTool } from "../tools/extend-qurl.js";
 import { getQurlTool } from "../tools/get-qurl.js";
 import { listQurlsTool } from "../tools/list-qurls.js";
+import { listQurlSessionsTool } from "../tools/list-qurl-sessions.js";
 import { mintLinkTool } from "../tools/mint-link.js";
 import { resolveQurlTool } from "../tools/resolve-qurl.js";
+import { revokeQurlTokenTool } from "../tools/revoke-qurl-token.js";
+import { terminateQurlSessionsTool } from "../tools/terminate-qurl-sessions.js";
 import { updateQurlTool } from "../tools/update-qurl.js";
+import { updateQurlTokenTool } from "../tools/update-qurl-token.js";
 import { linksResource } from "../resources/links.js";
 import { usageResource } from "../resources/usage.js";
 import { makeMockClient } from "./helpers.js";
@@ -25,8 +29,7 @@ import { makeMockClient } from "./helpers.js";
  * also wouldn't catch the regression.
  */
 
-const missingKeyError = () =>
-  new QURLAPIError(0, "missing_api_key", MISSING_API_KEY_MESSAGE);
+const missingKeyError = () => new QURLAPIError(0, "missing_api_key", MISSING_API_KEY_MESSAGE);
 
 type ToolCase = {
   name: string;
@@ -63,13 +66,13 @@ const toolCases: ToolCase[] = [
     name: "get_qurl",
     build: getQurlTool,
     stubs: ["getQURL"],
-    input: { resource_id: "r_x" },
+    input: { resource_id: "r_test1234567" },
   },
   {
     name: "delete_qurl",
     build: deleteQurlTool,
     stubs: ["deleteQURL"],
-    input: { resource_id: "r_x" },
+    input: { resource_id: "r_test1234567" },
   },
   {
     name: "extend_qurl",
@@ -77,25 +80,49 @@ const toolCases: ToolCase[] = [
     // assertion holds whether or not the delegation is preserved.
     build: extendQurlTool,
     stubs: ["extendQURL", "updateQURL"],
-    input: { resource_id: "r_x", extend_by: "1h" },
+    input: { resource_id: "r_test1234567", extend_by: "1h" },
   },
   {
     name: "update_qurl",
     build: updateQurlTool,
     stubs: ["updateQURL"],
-    input: { resource_id: "r_x", extend_by: "1h" },
+    input: { resource_id: "r_test1234567", extend_by: "1h" },
   },
   {
     name: "mint_link",
     build: mintLinkTool,
     stubs: ["mintLink"],
-    input: { resource_id: "r_x" },
+    input: { resource_id: "r_test1234567" },
   },
   {
     name: "batch_create_qurls",
     build: batchCreateTool,
     stubs: ["batchCreate"],
     input: { items: [{ target_url: "https://example.com" }] },
+  },
+  {
+    name: "revoke_qurl_token",
+    build: revokeQurlTokenTool,
+    stubs: ["revokeQurlToken"],
+    input: { resource_id: "r_test1234567", qurl_id: "q_abcdef12345" },
+  },
+  {
+    name: "update_qurl_token",
+    build: updateQurlTokenTool,
+    stubs: ["updateQurlToken"],
+    input: { resource_id: "r_test1234567", qurl_id: "q_abcdef12345", extend_by: "1h" },
+  },
+  {
+    name: "list_qurl_sessions",
+    build: listQurlSessionsTool,
+    stubs: ["listResourceSessions"],
+    input: { resource_id: "r_test1234567" },
+  },
+  {
+    name: "terminate_qurl_sessions",
+    build: terminateQurlSessionsTool,
+    stubs: ["terminateAllResourceSessions"],
+    input: { resource_id: "r_test1234567" },
   },
 ];
 

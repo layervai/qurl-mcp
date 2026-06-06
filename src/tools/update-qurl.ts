@@ -22,8 +22,16 @@ const tagSchema = z
 
 export const updateQurlBaseSchema = z.object({
   resource_id: resourceIdSchema("update"),
-  extend_by: z.string().min(1).optional().describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
-  expires_at: z.string().datetime().optional().describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with extend_by."),
+  extend_by: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
+  expires_at: z
+    .string()
+    .datetime()
+    .optional()
+    .describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with extend_by."),
   tags: z
     .array(tagSchema)
     .max(10)
@@ -82,7 +90,7 @@ export function updateQurlTool(client: IQURLClient) {
       "Update a qURL's expiration, tags, description, custom domain, or proxy host-header behavior. The richer alternative to `extend_qurl` — use `update_qurl` whenever you need anything beyond a relative time push. " +
       "Accepts both `r_` and `q_` IDs (q_ is auto-resolved). " +
       "**Constraints:** `extend_by` and `expires_at` are mutually exclusive; at least one update field (`extend_by`, `expires_at`, `tags`, `description`, `custom_domain`, `preserve_host`) must be set. " +
-      "**Clearing fields:** pass `description: \"\"`, `tags: []`, or `custom_domain: \"\"` to clear those fields explicitly. " +
+      '**Clearing fields:** pass `description: ""`, `tags: []`, or `custom_domain: ""` to clear those fields explicitly. ' +
       "Use `extend_qurl` when the only change is a relative time push. " +
       "Use `delete_qurl` when you want to revoke entirely. " +
       "**Errors:** if the input fails schema refinements (both extend_by + expires_at, or no fields set), the handler returns an `isError: true` content block before any API call. Other API errors throw with the API's `code`/`statusCode`. " +

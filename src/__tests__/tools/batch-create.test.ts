@@ -6,8 +6,23 @@ const fixture = {
   succeeded: 2,
   failed: 0,
   results: [
-    { index: 0, success: true, resource_id: "r_abc", qurl_link: "https://qurl.link/at_1" },
-    { index: 1, success: true, resource_id: "r_def", qurl_link: "https://qurl.link/at_2" },
+    {
+      index: 0,
+      success: true,
+      resource_id: "r_abc123def45",
+      qurl_link: "https://qurl.link/at_1",
+      qurl_site: "https://q_abc123def45.qurl.site",
+      expires_at: "2026-04-01T00:00:00Z",
+    },
+    {
+      index: 1,
+      success: true,
+      resource_id: "r_def123abc45",
+      qurl_link: "https://qurl.link/at_2",
+      branded_domain: "share.example.com",
+      qurl_site: "https://q_def123abc45.qurl.site",
+      expires_at: "2026-04-01T00:00:00Z",
+    },
   ],
 };
 
@@ -130,8 +145,19 @@ describe("batchCreateTool", () => {
         succeeded: 1,
         failed: 1,
         results: [
-          { index: 0, success: true, resource_id: "r_abc" },
-          { index: 1, success: false, error: { code: "invalid_target_url", message: "Invalid URL" } },
+          {
+            index: 0,
+            success: true,
+            resource_id: "r_abc123def45",
+            qurl_link: "https://qurl.link/at_1",
+            qurl_site: "https://q_abc123def45.qurl.site",
+            expires_at: "2026-04-01T00:00:00Z",
+          },
+          {
+            index: 1,
+            success: false,
+            error: { code: "invalid_target_url", message: "Invalid URL" },
+          },
         ],
       };
       const mockBatch = vi.fn().mockResolvedValue({
@@ -194,10 +220,7 @@ describe("batchCreateTool", () => {
       const tool = batchCreateTool(client);
 
       const result = await tool.handler({
-        items: [
-          { target_url: "http://a.example.com" },
-          { target_url: "http://b.example.com" },
-        ],
+        items: [{ target_url: "http://a.example.com" }, { target_url: "http://b.example.com" }],
       });
 
       expect(result.isError).toBe(true);

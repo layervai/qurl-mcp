@@ -30,6 +30,7 @@ export function batchCreateTool(client: IQURLClient) {
       "Use this when you need to mint many qURLs at once (e.g. provisioning a vendor list, distributing per-customer share links). " +
       "Use `create_qurl` for a single resource. " +
       "**Response shape:** `{ succeeded: number, failed: number, results: BatchItemResult[], request_id?: string }`. Each `results[i]` carries `index` (matching the input position), `success`, plus either `qurl_link` + `resource_id` + `qurl_site` + `expires_at` (success) OR `error: { code, message }` (failure). " +
+      "Successful items may also carry `branded_domain` for custom-domain anchor text. " +
       "**Partial failure signaling:** the handler sets `isError: true` on the tool response whenever `failed > 0`, so agents can branch without parsing JSON. The HTTP layer also returns 400 when every item fails — that's surfaced through the same shape (read `data.results[*].error`). " +
       "**One-shot links:** like `create_qurl`, every `qurl_link` in the response is shown ONCE. Don't lose them.",
     inputSchema: batchCreateSchema,

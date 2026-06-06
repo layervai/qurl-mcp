@@ -9,6 +9,11 @@ export interface QURLClientConfig {
 
 // --- Response data types ---
 
+export interface TombstoneInfo {
+  tombstoned_at: string;
+  final_access_count?: number;
+}
+
 export interface AccessToken {
   qurl_id: string;
   label?: string;
@@ -27,10 +32,21 @@ export interface AccessToken {
   expires_at: string;
 }
 
+export interface SessionData {
+  session_id: string;
+  qurl_id?: string;
+  src_ip?: string;
+  user_agent?: string;
+  created_at?: string;
+  last_seen_at?: string;
+}
+
 export interface QURL {
   resource_id: string;
   qurl_site?: string;
-  target_url: string;
+  // Connector-owned resources intentionally omit target_url from management
+  // reads. The field is absent rather than serialized as null.
+  target_url?: string;
   description?: string;
   tags?: string[];
   expires_at: string;
@@ -45,6 +61,7 @@ export interface QURL {
   // note.
   status: "active" | "revoked" | "expired" | "unknown";
   custom_domain?: string | null;
+  slug?: string;
   preserve_host?: boolean;
   qurl_count?: number;
   qurls?: AccessToken[];
@@ -54,9 +71,11 @@ export interface CreateQURLData {
   qurl_id: string;
   resource_id: string;
   qurl_link: string;
+  branded_domain?: string;
   qurl_site: string;
   expires_at: string;
   label?: string;
+  type?: string;
 }
 
 export interface AIAgentPolicy {
@@ -78,6 +97,8 @@ export interface AccessPolicy {
 // --- Input types ---
 
 export interface CreateQURLInput {
+  /** Resource type for integrations that are allowed to mint non-url qURLs. Defaults to "url". */
+  type?: string;
   target_url: string;
   label?: string;
   expires_in?: string;
@@ -138,6 +159,15 @@ export interface BatchCreateInput {
   items: CreateQURLInput[];
 }
 
+export interface UpdateQurlTokenInput {
+  extend_by?: string;
+  expires_at?: string;
+  label?: string;
+  access_policy?: AccessPolicy;
+  max_sessions?: number;
+  session_duration?: string;
+}
+
 // --- Output types ---
 
 export interface ListQURLsOutput {
@@ -182,8 +212,11 @@ export interface QuotaOutput {
 }
 
 export interface MintLinkOutput {
+  qurl_id: string;
   qurl_link: string;
+  branded_domain?: string;
   expires_at: string;
+  type?: string;
 }
 
 // Discriminated on `success` so consumers narrowing on the boolean get
@@ -197,6 +230,7 @@ export type BatchItemResult =
       success: true;
       resource_id: string;
       qurl_link: string;
+      branded_domain?: string;
       qurl_site: string;
       expires_at: string;
     }
@@ -216,6 +250,22 @@ export interface BatchCreateOutput {
     results: BatchItemResult[];
   };
   meta: {
+    request_id?: string;
+  };
+}
+
+export interface SessionListOutput {
+  data: SessionData[];
+  meta?: {
+    request_id?: string;
+  };
+}
+
+export interface SessionTerminateOutput {
+  data: {
+    terminated: number;
+  };
+  meta?: {
     request_id?: string;
   };
 }
@@ -243,6 +293,15 @@ export interface IQURLClient {
   getQuota(): Promise<{ data: QuotaOutput }>;
   mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }>;
   batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput>;
+  revokeQurlToken(resourceId: string, qurlId: string): Promise<void>;
+  updateQurlToken(
+    resourceId: string,
+    qurlId: string,
+    input: UpdateQurlTokenInput,
+  ): Promise<{ data: AccessToken }>;
+  listResourceSessions(resourceId: string): Promise<SessionListOutput>;
+  terminateResourceSession(resourceId: string, sessionId: string): Promise<void>;
+  terminateAllResourceSessions(resourceId: string): Promise<SessionTerminateOutput>;
 }
 
 // --- Error class ---
@@ -263,6 +322,7 @@ export class QURLAPIError extends Error {
     public type?: string,
     public instance?: string,
     public requestId?: string,
+    public tombstone?: TombstoneInfo,
   ) {
     super(message);
     this.name = "QURLAPIError";
@@ -342,9 +402,16 @@ export class QURLClient implements IQURLClient {
       // the API documents. The fallback chain below tolerates missing fields,
       // so a malformed error response still degrades to `HTTP ${status}`.
       const error = json.error as
-        | { type?: string; title?: string; detail?: string; code?: string; message?: string; instance?: string }
+        | {
+            type?: string;
+            title?: string;
+            detail?: string;
+            code?: string;
+            message?: string;
+            instance?: string;
+          }
         | undefined;
-      const meta = json.meta as { request_id?: string } | undefined;
+      const meta = json.meta as { request_id?: string; tombstone?: TombstoneInfo } | undefined;
       throw new QURLAPIError(
         response.status,
         error?.code ?? "unknown",
@@ -352,6 +419,7 @@ export class QURLClient implements IQURLClient {
         error?.type,
         error?.instance,
         meta?.request_id,
+        meta?.tombstone,
       );
     }
 
@@ -372,6 +440,14 @@ export class QURLClient implements IQURLClient {
 
   private qurlPath(id: string): string {
     return `/v1/qurls/${encodeURIComponent(id)}`;
+  }
+
+  private resourcePath(id: string): string {
+    return `/v1/resources/${encodeURIComponent(id)}`;
+  }
+
+  private resourceQurlPath(resourceId: string, qurlId: string): string {
+    return `${this.resourcePath(resourceId)}/qurls/${encodeURIComponent(qurlId)}`;
   }
 
   async createQURL(input: CreateQURLInput): Promise<{ data: CreateQURLData }> {
@@ -420,11 +496,38 @@ export class QURLClient implements IQURLClient {
   }
 
   async mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }> {
-    return this.request("POST", `${this.qurlPath(id)}/mint_link`, input);
+    return this.request("POST", `${this.qurlPath(id)}/mint_link`, input ?? {});
   }
 
   async batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput> {
     // 400 carries per-item errors (see request() JSDoc).
     return this.request("POST", "/v1/qurls/batch", input, [400]);
+  }
+
+  async revokeQurlToken(resourceId: string, qurlId: string): Promise<void> {
+    await this.request("DELETE", this.resourceQurlPath(resourceId, qurlId));
+  }
+
+  async updateQurlToken(
+    resourceId: string,
+    qurlId: string,
+    input: UpdateQurlTokenInput,
+  ): Promise<{ data: AccessToken }> {
+    return this.request("PATCH", this.resourceQurlPath(resourceId, qurlId), input);
+  }
+
+  async listResourceSessions(resourceId: string): Promise<SessionListOutput> {
+    return this.request("GET", `${this.resourcePath(resourceId)}/sessions`);
+  }
+
+  async terminateResourceSession(resourceId: string, sessionId: string): Promise<void> {
+    await this.request(
+      "DELETE",
+      `${this.resourcePath(resourceId)}/sessions/${encodeURIComponent(sessionId)}`,
+    );
+  }
+
+  async terminateAllResourceSessions(resourceId: string): Promise<SessionTerminateOutput> {
+    return this.request("DELETE", `${this.resourcePath(resourceId)}/sessions`);
   }
 }

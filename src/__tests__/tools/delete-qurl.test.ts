@@ -3,6 +3,8 @@ import { QURLAPIError } from "../../client.js";
 import { deleteQurlTool, deleteQurlSchema } from "../../tools/delete-qurl.js";
 import { makeMockClient } from "../helpers.js";
 
+const validResourceId = "r_abc123def45";
+
 describe("deleteQurlTool", () => {
   describe("metadata", () => {
     it("has correct name", () => {
@@ -23,7 +25,7 @@ describe("deleteQurlTool", () => {
     });
 
     it("accepts valid resource_id string", () => {
-      const result = deleteQurlSchema.safeParse({ resource_id: "r_abc" });
+      const result = deleteQurlSchema.safeParse({ resource_id: validResourceId });
       expect(result.success).toBe(true);
     });
 
@@ -38,10 +40,10 @@ describe("deleteQurlTool", () => {
     });
 
     it("rejects q_ prefix IDs (DELETE only accepts r_)", () => {
-      const result = deleteQurlSchema.safeParse({ resource_id: "q_abc123456" });
+      const result = deleteQurlSchema.safeParse({ resource_id: "q_abcdef12345" });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toContain("delete_qurl only accepts resource IDs");
+        expect(result.error.issues[0].message).toContain("Expected an r_ resource ID");
       }
     });
   });
@@ -52,9 +54,9 @@ describe("deleteQurlTool", () => {
       const client = makeMockClient({ deleteQURL: mockDelete });
       const tool = deleteQurlTool(client);
 
-      await tool.handler({ resource_id: "r_abc123" });
+      await tool.handler({ resource_id: validResourceId });
 
-      expect(mockDelete).toHaveBeenCalledWith("r_abc123");
+      expect(mockDelete).toHaveBeenCalledWith(validResourceId);
     });
 
     it("returns confirmation message with resource_id", async () => {
@@ -62,11 +64,11 @@ describe("deleteQurlTool", () => {
       const client = makeMockClient({ deleteQURL: mockDelete });
       const tool = deleteQurlTool(client);
 
-      const result = await tool.handler({ resource_id: "r_abc123" });
+      const result = await tool.handler({ resource_id: validResourceId });
 
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
-      expect(result.content[0].text).toBe("qURL r_abc123 is revoked.");
+      expect(result.content[0].text).toBe(`qURL ${validResourceId} is revoked.`);
     });
 
     it("propagates client errors", async () => {
@@ -74,7 +76,7 @@ describe("deleteQurlTool", () => {
       const client = makeMockClient({ deleteQURL: mockDelete });
       const tool = deleteQurlTool(client);
 
-      await expect(tool.handler({ resource_id: "r_abc" })).rejects.toThrow("Forbidden");
+      await expect(tool.handler({ resource_id: validResourceId })).rejects.toThrow("Forbidden");
     });
 
     it("swallows 404 from a re-delete and flags was_already_revoked", async () => {
@@ -84,14 +86,14 @@ describe("deleteQurlTool", () => {
       const client = makeMockClient({ deleteQURL: mockDelete });
       const tool = deleteQurlTool(client);
 
-      const result = await tool.handler({ resource_id: "r_abc123" });
+      const result = await tool.handler({ resource_id: validResourceId });
 
-      expect(result.content[0].text).toBe("qURL r_abc123 is revoked.");
+      expect(result.content[0].text).toBe(`qURL ${validResourceId} is revoked.`);
       expect(result.structuredContent).toEqual({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         revoked: true,
         was_already_revoked: true,
-        message: "qURL r_abc123 is revoked.",
+        message: `qURL ${validResourceId} is revoked.`,
       });
     });
 
@@ -100,7 +102,7 @@ describe("deleteQurlTool", () => {
       const client = makeMockClient({ deleteQURL: mockDelete });
       const tool = deleteQurlTool(client);
 
-      const result = await tool.handler({ resource_id: "r_abc123" });
+      const result = await tool.handler({ resource_id: validResourceId });
 
       expect(result.structuredContent).toMatchObject({
         was_already_revoked: false,
@@ -114,7 +116,7 @@ describe("deleteQurlTool", () => {
       const client = makeMockClient({ deleteQURL: mockDelete });
       const tool = deleteQurlTool(client);
 
-      await expect(tool.handler({ resource_id: "r_abc" })).rejects.toThrow(
+      await expect(tool.handler({ resource_id: validResourceId })).rejects.toThrow(
         "Insufficient permissions.",
       );
     });

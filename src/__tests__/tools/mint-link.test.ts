@@ -3,9 +3,11 @@ import { mintLinkTool, mintLinkBaseSchema, mintLinkSchema } from "../../tools/mi
 import { makeMockClient } from "../helpers.js";
 
 const fixture = {
+  qurl_id: "q_abc123def45",
   qurl_link: "https://qurl.link/at_newtoken123",
   expires_at: "2026-04-01T00:00:00Z",
 };
+const validResourceId = "r_abc123def45";
 
 describe("mintLinkTool", () => {
   describe("metadata", () => {
@@ -33,13 +35,13 @@ describe("mintLinkTool", () => {
     });
 
     it("accepts valid resource_id", () => {
-      const result = mintLinkSchema.safeParse({ resource_id: "r_abc123" });
+      const result = mintLinkSchema.safeParse({ resource_id: validResourceId });
       expect(result.success).toBe(true);
     });
 
     it("accepts expires_in", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         expires_in: "7d",
       });
       expect(result.success).toBe(true);
@@ -47,7 +49,7 @@ describe("mintLinkTool", () => {
 
     it("accepts expires_at", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         expires_at: "2026-04-01T00:00:00Z",
       });
       expect(result.success).toBe(true);
@@ -55,7 +57,7 @@ describe("mintLinkTool", () => {
 
     it("rejects both expires_in and expires_at", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         expires_in: "7d",
         expires_at: "2026-04-01T00:00:00Z",
       });
@@ -64,7 +66,7 @@ describe("mintLinkTool", () => {
 
     it("accepts optional fields", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         label: "Alice",
         expires_in: "5m",
         one_time_use: true,
@@ -76,7 +78,7 @@ describe("mintLinkTool", () => {
 
     it("accepts access_policy", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         access_policy: {
           geo_allowlist: ["US", "CA"],
           ip_denylist: ["10.0.0.0/8"],
@@ -87,7 +89,7 @@ describe("mintLinkTool", () => {
 
     it("rejects max_sessions above 1000 (API hard limit)", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         max_sessions: 1001,
       });
       expect(result.success).toBe(false);
@@ -95,7 +97,7 @@ describe("mintLinkTool", () => {
 
     it("rejects label longer than 500 characters", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         label: "x".repeat(501),
       });
       expect(result.success).toBe(false);
@@ -103,7 +105,7 @@ describe("mintLinkTool", () => {
 
     it("rejects empty expires_in so mutual exclusion refine can't be bypassed", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         expires_in: "",
         expires_at: "2026-04-01T00:00:00Z",
       });
@@ -112,7 +114,7 @@ describe("mintLinkTool", () => {
 
     it("rejects empty session_duration", () => {
       const result = mintLinkSchema.safeParse({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         session_duration: "",
       });
       expect(result.success).toBe(false);
@@ -125,19 +127,19 @@ describe("mintLinkTool", () => {
       const client = makeMockClient({ mintLink: mockMint });
       const tool = mintLinkTool(client);
 
-      await tool.handler({ resource_id: "r_abc123", label: "Alice" });
+      await tool.handler({ resource_id: validResourceId, label: "Alice" });
 
-      expect(mockMint).toHaveBeenCalledWith("r_abc123", { label: "Alice" });
+      expect(mockMint).toHaveBeenCalledWith(validResourceId, { label: "Alice" });
     });
 
-    it("passes undefined body when only resource_id is provided", async () => {
+    it("passes an empty body when only resource_id is provided", async () => {
       const mockMint = vi.fn().mockResolvedValue({ data: fixture });
       const client = makeMockClient({ mintLink: mockMint });
       const tool = mintLinkTool(client);
 
-      await tool.handler({ resource_id: "r_abc123" });
+      await tool.handler({ resource_id: validResourceId });
 
-      expect(mockMint).toHaveBeenCalledWith("r_abc123", undefined);
+      expect(mockMint).toHaveBeenCalledWith(validResourceId, {});
     });
 
     it("returns mint data as formatted JSON", async () => {
@@ -145,12 +147,13 @@ describe("mintLinkTool", () => {
       const client = makeMockClient({ mintLink: mockMint });
       const tool = mintLinkTool(client);
 
-      const result = await tool.handler({ resource_id: "r_abc123" });
+      const result = await tool.handler({ resource_id: validResourceId });
 
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
 
       const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.qurl_id).toBe("q_abc123def45");
       expect(parsed.qurl_link).toBe("https://qurl.link/at_newtoken123");
       expect(parsed.expires_at).toBe("2026-04-01T00:00:00Z");
     });
@@ -160,7 +163,7 @@ describe("mintLinkTool", () => {
       const client = makeMockClient({ mintLink: mockMint });
       const tool = mintLinkTool(client);
 
-      await expect(tool.handler({ resource_id: "r_nope" })).rejects.toThrow("Not found");
+      await expect(tool.handler({ resource_id: "r_nope1234567" })).rejects.toThrow("Not found");
     });
 
     it("returns isError response when both expires_in and expires_at are provided", async () => {
@@ -169,7 +172,7 @@ describe("mintLinkTool", () => {
       const tool = mintLinkTool(client);
 
       const result = await tool.handler({
-        resource_id: "r_abc123",
+        resource_id: validResourceId,
         expires_in: "7d",
         expires_at: "2026-04-01T00:00:00Z",
       });

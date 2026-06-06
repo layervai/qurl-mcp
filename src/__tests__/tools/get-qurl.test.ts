@@ -33,7 +33,12 @@ describe("getQurlTool", () => {
     });
 
     it("accepts valid resource_id string", () => {
-      const result = getQurlSchema.safeParse({ resource_id: "r_abc123" });
+      const result = getQurlSchema.safeParse({ resource_id: "r_abc123def45" });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts valid qURL display ID string", () => {
+      const result = getQurlSchema.safeParse({ resource_id: "q_abcdef12345" });
       expect(result.success).toBe(true);
     });
 

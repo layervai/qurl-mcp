@@ -106,8 +106,8 @@ export function zodErrorToToolResult(error: ZodError) {
  *
  * The API accepts both a resource ID (r_ prefix) and a qURL display ID
  * (q_ prefix) on get/update/extend/mint_link, and resolves a q_ ID to its
- * parent resource automatically. DELETE is the one exception — it only
- * accepts r_ IDs and defines its own schema.
+ * parent resource automatically. Resource-scoped endpoints use the
+ * narrower `resourceOnlyIdSchema` / `qurlDisplayIdSchema` helpers below.
  *
  * Rejects empty strings so a malformed call can't hit `/v1/qurls/` with
  * an empty path segment.
@@ -115,9 +115,26 @@ export function zodErrorToToolResult(error: ZodError) {
 export function resourceIdSchema(verb: string) {
   return z
     .string()
-    .min(1)
+    .regex(
+      /^(r_[a-z0-9_-]{11}|q_[0-9a-f]{11})$/,
+      "Expected an r_ resource ID or q_ qURL display ID",
+    )
     .describe(
       `The resource ID (r_ prefix) or qURL display ID (q_ prefix) to ${verb}. ` +
         "If a q_ ID is passed, the API resolves it to the parent resource automatically.",
     );
+}
+
+export function resourceOnlyIdSchema(verb: string) {
+  return z
+    .string()
+    .regex(/^r_[a-z0-9_-]{11}$/, "Expected an r_ resource ID")
+    .describe(`The resource ID (r_ prefix) to ${verb}.`);
+}
+
+export function qurlDisplayIdSchema(verb: string) {
+  return z
+    .string()
+    .regex(/^q_[0-9a-f]{11}$/, "Expected a q_ qURL display ID")
+    .describe(`The qURL display ID (q_ prefix) to ${verb}.`);
 }

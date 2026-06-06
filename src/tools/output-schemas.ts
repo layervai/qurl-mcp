@@ -41,7 +41,7 @@ const accessPolicy = z
   })
   .describe("Access control policy snapshot for this token");
 
-const accessTokenSchema = z
+export const accessTokenOutputSchema = z
   .object({
     qurl_id: z.string(),
     label: z.string().optional(),
@@ -51,7 +51,9 @@ const accessTokenSchema = z
     status: z
       .enum(["active", "consumed", "expired", "revoked", "unknown"])
       .catch("unknown")
-      .describe("Per-token status (wider than resource status — tokens may be consumed/expired independently)"),
+      .describe(
+        "Per-token status (wider than resource status — tokens may be consumed/expired independently)",
+      ),
     one_time_use: z.boolean(),
     max_sessions: z.number(),
     session_duration: z.number().describe("Seconds of access granted after a successful resolve"),
@@ -67,7 +69,10 @@ const accessTokenSchema = z
 export const qurlSchema = z.object({
   resource_id: z.string().describe("Stable resource identifier (r_ prefix)"),
   qurl_site: z.string().optional(),
-  target_url: z.string().describe("Underlying URL the qURL protects"),
+  target_url: z
+    .string()
+    .optional()
+    .describe("Underlying URL the qURL protects; omitted on connector-owned resources"),
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
   expires_at: z.string(),
@@ -87,6 +92,10 @@ export const qurlSchema = z.object({
   // raw-input value (not just the coerced output) to disambiguate.
   status: z.enum(["active", "revoked", "expired", "unknown"]).catch("unknown"),
   custom_domain: z.string().nullable().optional(),
+  slug: z
+    .string()
+    .optional()
+    .describe("Immutable per-owner resource identity, when one was supplied at create time"),
   preserve_host: z
     .boolean()
     .optional()
@@ -95,7 +104,7 @@ export const qurlSchema = z.object({
         "Only meaningful when custom_domain is set; defaults to false on the API side.",
     ),
   qurl_count: z.number().optional().describe("Number of access tokens minted for this resource"),
-  qurls: z.array(accessTokenSchema).optional(),
+  qurls: z.array(accessTokenOutputSchema).optional(),
 });
 
 /** Ephemeral create-time payload — note `qurl_link` is one-shot. */
@@ -104,10 +113,17 @@ export const createQurlOutputSchema = z.object({
   resource_id: z.string().describe("Stable resource identifier (r_ prefix)"),
   qurl_link: z
     .string()
-    .describe("Single-use access link — shown ONCE on creation, never returned again. Share immediately."),
+    .describe(
+      "One-shot display access link — shown ONCE on creation, never returned again. Share immediately.",
+    ),
+  branded_domain: z
+    .string()
+    .optional()
+    .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
   qurl_site: z.string(),
   expires_at: z.string(),
   label: z.string().optional(),
+  type: z.string().optional().describe("Resource type echoed from the create request"),
 });
 
 export const getQurlOutputSchema = qurlSchema;
@@ -121,14 +137,17 @@ export const extendQurlOutputSchema = qurlSchema;
 export const listQurlsOutputSchema = z.object({
   data: z.array(qurlSchema),
   meta: z.object({
-    next_cursor: z.string().optional().describe("Pass to a subsequent list_qurls call to fetch the next page"),
+    next_cursor: z
+      .string()
+      .optional()
+      .describe("Pass to a subsequent list_qurls call to fetch the next page"),
     has_more: z.boolean().describe("True if more pages are available beyond this response"),
     page_size: z.number().optional(),
     request_id: z.string().optional(),
   }),
 });
 
-/** Resolve response: target_url + the access_grant that opens the firewall. */
+/** Resolve response: target_url + the access_grant that grants network access. */
 export const resolveQurlOutputSchema = z.object({
   target_url: z.string().describe("Underlying URL revealed by the resolve"),
   resource_id: z.string(),
@@ -136,17 +155,61 @@ export const resolveQurlOutputSchema = z.object({
     .object({
       expires_in: z
         .number()
-        .describe("Seconds the firewall will permit access from `src_ip` before re-resolution is required"),
+        .describe(
+          "Seconds the network grant permits access from `src_ip` before re-resolution is required",
+        ),
       granted_at: z.string(),
       src_ip: z.string().describe("Caller IP that the access grant is bound to"),
     })
-    .describe("Time-bound, IP-bound access grant — required for the qURL firewall to permit the next request"),
+    .describe("Time-bound, IP-bound network access grant"),
 });
 
 /** Mint response: a fresh `qurl_link` for an existing resource. One-shot, like create_qurl. */
 export const mintLinkOutputSchema = z.object({
-  qurl_link: z.string().describe("Newly minted single-use access link (one-shot, like create_qurl)"),
+  qurl_id: z.string().describe("Display-friendly qURL ID (q_ prefix) for the minted token"),
+  qurl_link: z
+    .string()
+    .describe("Newly minted access link with one-shot display semantics, like create_qurl"),
+  branded_domain: z
+    .string()
+    .optional()
+    .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
   expires_at: z.string(),
+  type: z.string().optional().describe("Resource type echoed from the underlying resource"),
+});
+
+export const updateQurlTokenOutputSchema = accessTokenOutputSchema;
+
+export const revokeQurlTokenOutputSchema = z.object({
+  resource_id: z.string(),
+  qurl_id: z.string(),
+  revoked: z.literal(true),
+  message: z.string(),
+});
+
+export const listQurlSessionsOutputSchema = z.object({
+  data: z.array(
+    z.object({
+      session_id: z.string(),
+      qurl_id: z.string().optional(),
+      src_ip: z.string().optional(),
+      user_agent: z.string().optional(),
+      created_at: z.string().optional(),
+      last_seen_at: z.string().optional(),
+    }),
+  ),
+  meta: z
+    .object({
+      request_id: z.string().optional(),
+    })
+    .optional(),
+});
+
+export const terminateQurlSessionsOutputSchema = z.object({
+  resource_id: z.string(),
+  session_id: z.string().optional(),
+  terminated: z.number(),
+  message: z.string(),
 });
 
 // Discriminated on `success` so the schema enforces the API's
@@ -157,7 +220,11 @@ const batchItemSuccessSchema = z.object({
   index: z.number().describe("Index of the corresponding item in the input `items` array"),
   success: z.literal(true),
   resource_id: z.string(),
-  qurl_link: z.string().describe("One-shot access link — shown ONCE on creation"),
+  qurl_link: z.string().describe("One-shot display access link — shown ONCE on creation"),
+  branded_domain: z
+    .string()
+    .optional()
+    .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
   qurl_site: z.string(),
   expires_at: z.string(),
 });

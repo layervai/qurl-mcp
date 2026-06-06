@@ -8,14 +8,18 @@ import type {
   MintLinkOutput,
   QURL,
   ResolveOutput,
+  SessionListOutput,
 } from "../client.js";
 import {
+  accessTokenOutputSchema,
   batchCreateOutputSchema,
   createQurlOutputSchema,
+  listQurlSessionsOutputSchema,
   listQurlsOutputSchema,
   mintLinkOutputSchema,
   qurlSchema,
   resolveQurlOutputSchema,
+  updateQurlTokenOutputSchema,
 } from "../tools/output-schemas.js";
 import { sampleAccessToken, sampleQURL } from "./helpers.js";
 
@@ -48,6 +52,18 @@ describe("output schema <-> client type alignment", () => {
     expectTypeOf<z.infer<typeof mintLinkOutputSchema>>().toEqualTypeOf<MintLinkOutput>();
   });
 
+  it("accessTokenOutputSchema matches AccessToken", () => {
+    expectTypeOf<z.infer<typeof accessTokenOutputSchema>>().toEqualTypeOf<AccessToken>();
+  });
+
+  it("updateQurlTokenOutputSchema matches AccessToken", () => {
+    expectTypeOf<z.infer<typeof updateQurlTokenOutputSchema>>().toEqualTypeOf<AccessToken>();
+  });
+
+  it("listQurlSessionsOutputSchema matches SessionListOutput", () => {
+    expectTypeOf<z.infer<typeof listQurlSessionsOutputSchema>>().toEqualTypeOf<SessionListOutput>();
+  });
+
   it("batchCreateOutputSchema matches the flattened BatchCreateOutput.data + request_id", () => {
     // Schema flattens the `{ data, meta }` envelope; assert against the
     // flattened shape so a new field on `BatchCreateOutput.data` is a
@@ -63,6 +79,13 @@ describe("output schema <-> client type alignment", () => {
 // Lock the behavior in so a future "fix" that removes the .catch trips
 // these tests instead of silently breaking hosts.
 describe("qurlSchema.status drift tolerance", () => {
+  it("accepts connector-owned rows that omit target_url", () => {
+    const withoutTargetURL: Record<string, unknown> = { ...sampleQURL() };
+    delete withoutTargetURL.target_url;
+    const parsed = qurlSchema.parse(withoutTargetURL);
+    expect(parsed.target_url).toBeUndefined();
+  });
+
   it("accepts 'active', 'revoked', and 'expired' as-is", () => {
     // "expired" round-trips because api-spec/qurls.yaml's
     // `QurlData.properties.status` description documents it as a real
@@ -120,9 +143,12 @@ describe("qurlSchema.status drift tolerance", () => {
     // `satisfies` gives drift insurance: removing one of these from
     // AccessToken["status"] (e.g. dropping "consumed") fails compilation
     // here instead of letting the test silently miss a documented value.
-    const documented = ["active", "consumed", "expired", "revoked"] as const satisfies ReadonlyArray<
-      AccessToken["status"]
-    >;
+    const documented = [
+      "active",
+      "consumed",
+      "expired",
+      "revoked",
+    ] as const satisfies ReadonlyArray<AccessToken["status"]>;
     for (const s of documented) {
       const parsed = qurlSchema.parse({
         ...sampleQURL(),

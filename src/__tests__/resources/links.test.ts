@@ -45,9 +45,7 @@ describe("linksResource", () => {
 
   describe("handler", () => {
     it("calls client.listQURLs with limit 50", async () => {
-      const mockList = vi
-        .fn()
-        .mockResolvedValue({ data: sampleQURLs, meta: { has_more: false } });
+      const mockList = vi.fn().mockResolvedValue({ data: sampleQURLs, meta: { has_more: false } });
       const client = makeMockClient({ listQURLs: mockList });
       const resource = linksResource(client);
 
@@ -57,9 +55,7 @@ describe("linksResource", () => {
     });
 
     it("returns contents array with URI and mimeType", async () => {
-      const mockList = vi
-        .fn()
-        .mockResolvedValue({ data: sampleQURLs, meta: { has_more: false } });
+      const mockList = vi.fn().mockResolvedValue({ data: sampleQURLs, meta: { has_more: false } });
       const client = makeMockClient({ listQURLs: mockList });
       const resource = linksResource(client);
 
@@ -71,9 +67,7 @@ describe("linksResource", () => {
     });
 
     it("returns the data array as JSON text", async () => {
-      const mockList = vi
-        .fn()
-        .mockResolvedValue({ data: sampleQURLs, meta: { has_more: false } });
+      const mockList = vi.fn().mockResolvedValue({ data: sampleQURLs, meta: { has_more: false } });
       const client = makeMockClient({ listQURLs: mockList });
       const resource = linksResource(client);
 

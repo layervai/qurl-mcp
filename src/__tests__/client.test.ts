@@ -50,10 +50,7 @@ describe("QURLClient", () => {
 
       await customClient.getQuota();
 
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.example.com/v1/quota",
-        expect.any(Object),
-      );
+      expect(mock).toHaveBeenCalledWith("https://api.example.com/v1/quota", expect.any(Object));
     });
   });
 
@@ -65,7 +62,7 @@ describe("QURLClient", () => {
     //
     // Parameterized over both empty and whitespace-only keys so the
     // constructor's `.trim()` (the sole gate against the whitespace case)
-    // is exercised against the entire 10-method client surface, not just
+    // is exercised against the entire client surface, not just
     // a single representative method.
     const missingKeyCases: Array<[string, string]> = [
       ["empty", ""],
@@ -92,6 +89,11 @@ describe("QURLClient", () => {
           () => noKeyClient.getQuota(),
           () => noKeyClient.mintLink("r_x"),
           () => noKeyClient.batchCreate({ items: [{ target_url: "https://example.com" }] }),
+          () => noKeyClient.revokeQurlToken("r_x", "q_x"),
+          () => noKeyClient.updateQurlToken("r_x", "q_x", { extend_by: "1h" }),
+          () => noKeyClient.listResourceSessions("r_x"),
+          () => noKeyClient.terminateResourceSession("r_x", "sess_x"),
+          () => noKeyClient.terminateAllResourceSessions("r_x"),
         ];
 
         for (const call of calls) {
@@ -171,7 +173,7 @@ describe("QURLClient", () => {
         404,
       );
 
-      const err = await client.getQURL("r_nonexistent").catch((e: unknown) => e) as QURLAPIError;
+      const err = (await client.getQURL("r_nonexistent").catch((e: unknown) => e)) as QURLAPIError;
       expect(err).toBeInstanceOf(QURLAPIError);
       expect(err.statusCode).toBe(404);
       expect(err.code).toBe("not_found");
@@ -179,6 +181,38 @@ describe("QURLClient", () => {
       expect(err.type).toBe("https://api.qurl.link/problems/not_found");
       expect(err.instance).toBe("/v1/qurls/r_nonexistent");
       expect(err.requestId).toBe("req_abc123");
+    });
+
+    it("preserves tombstone metadata from 410 Gone responses", async () => {
+      stubFetch(
+        {
+          error: {
+            type: "https://api.qurl.link/problems/gone",
+            title: "Resource Gone",
+            status: 410,
+            detail: "Resource lifecycle closed",
+            instance: "/v1/resources/r_abc123def45",
+            code: "gone",
+          },
+          meta: {
+            request_id: "req_gone",
+            tombstone: {
+              tombstoned_at: "2026-06-01T00:00:00Z",
+              final_access_count: 42,
+            },
+          },
+        },
+        410,
+      );
+
+      const err = (await client.getQURL("r_abc123def45").catch((e: unknown) => e)) as QURLAPIError;
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err.statusCode).toBe(410);
+      expect(err.requestId).toBe("req_gone");
+      expect(err.tombstone).toEqual({
+        tombstoned_at: "2026-06-01T00:00:00Z",
+        final_access_count: 42,
+      });
     });
 
     it("throws QURLAPIError on 5xx response", async () => {
@@ -195,7 +229,7 @@ describe("QURLClient", () => {
         500,
       );
 
-      const err = await client.getQuota().catch((e: unknown) => e) as QURLAPIError;
+      const err = (await client.getQuota().catch((e: unknown) => e)) as QURLAPIError;
       expect(err).toBeInstanceOf(QURLAPIError);
       expect(err.statusCode).toBe(500);
       expect(err.code).toBe("internal_error");
@@ -203,12 +237,9 @@ describe("QURLClient", () => {
     });
 
     it("falls back to error.message for legacy error format", async () => {
-      stubFetch(
-        { error: { code: "not_found", message: "Resource not found" } },
-        404,
-      );
+      stubFetch({ error: { code: "not_found", message: "Resource not found" } }, 404);
 
-      const err = await client.getQURL("r_nonexistent").catch((e: unknown) => e) as QURLAPIError;
+      const err = (await client.getQURL("r_nonexistent").catch((e: unknown) => e)) as QURLAPIError;
       expect(err).toBeInstanceOf(QURLAPIError);
       expect(err.statusCode).toBe(404);
       expect(err.code).toBe("not_found");
@@ -232,7 +263,7 @@ describe("QURLClient", () => {
         403,
       );
 
-      const err = await client.getQuota().catch((e: unknown) => e) as QURLAPIError;
+      const err = (await client.getQuota().catch((e: unknown) => e)) as QURLAPIError;
       expect(err).toBeInstanceOf(QURLAPIError);
       expect(err.message).toBe("Forbidden");
       expect(err.type).toBe("https://api.qurl.link/problems/forbidden");
@@ -251,11 +282,14 @@ describe("QURLClient", () => {
     });
 
     it("throws QURLAPIError on non-JSON response", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve("not json at all"),
-      }));
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve("not json at all"),
+        }),
+      );
 
       const err = await client.getQuota().catch((e: unknown) => e);
       expect(err).toBeInstanceOf(QURLAPIError);
@@ -267,34 +301,43 @@ describe("QURLClient", () => {
 
     it("truncates long non-JSON response in error message", async () => {
       const longText = "x".repeat(300);
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve(longText),
-      }));
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve(longText),
+        }),
+      );
 
-      const err = await client.getQuota().catch((e: unknown) => e) as QURLAPIError;
+      const err = (await client.getQuota().catch((e: unknown) => e)) as QURLAPIError;
       expect(err).toBeInstanceOf(QURLAPIError);
       expect(err.message).toBe("Failed to parse response: " + "x".repeat(200));
     });
 
     it("handles empty 2xx response body (204 No Content)", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-        ok: true,
-        status: 204,
-        text: () => Promise.resolve(""),
-      }));
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 204,
+          text: () => Promise.resolve(""),
+        }),
+      );
 
       const result = await client.deleteQURL("r_abc");
       expect(result).toBeUndefined();
     });
 
     it("throws on empty non-2xx response body", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-        ok: false,
-        status: 502,
-        text: () => Promise.resolve(""),
-      }));
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 502,
+          text: () => Promise.resolve(""),
+        }),
+      );
 
       const err = await client.getQuota().catch((e: unknown) => e);
       expect(err).toBeInstanceOf(QURLAPIError);
@@ -477,10 +520,7 @@ describe("QURLClient", () => {
 
       await client.listQURLs({});
 
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls",
-        expect.any(Object),
-      );
+      expect(mock).toHaveBeenCalledWith("https://api.test.com/v1/qurls", expect.any(Object));
     });
 
     it("sends filter query params", async () => {
@@ -661,7 +701,7 @@ describe("QURLClient", () => {
       expect(result).toEqual(mockData);
     });
 
-    it("sends no body when no input provided", async () => {
+    it("sends an empty JSON body when no input provided", async () => {
       const mock = stubFetch({ data: { qurl_link: "https://qurl.link/at_x" } });
 
       await client.mintLink("r_abc123");
@@ -669,12 +709,11 @@ describe("QURLClient", () => {
       expect(mock).toHaveBeenCalledWith(
         "https://api.test.com/v1/qurls/r_abc123/mint_link",
         expect.objectContaining({
-          body: undefined,
+          body: JSON.stringify({}),
         }),
       );
-      // Content-Type should be omitted when there's no body.
       const headers = (mock.mock.calls[0][1] as { headers: Record<string, string> }).headers;
-      expect(headers).not.toHaveProperty("Content-Type");
+      expect(headers).toHaveProperty("Content-Type", "application/json");
     });
 
     it("URL-encodes the resource ID", async () => {
@@ -729,7 +768,11 @@ describe("QURLClient", () => {
           failed: 1,
           results: [
             { index: 0, success: true, resource_id: "r_abc", qurl_link: "https://qurl.link/at_1" },
-            { index: 1, success: false, error: { code: "invalid_target_url", message: "Invalid URL" } },
+            {
+              index: 1,
+              success: false,
+              error: { code: "invalid_target_url", message: "Invalid URL" },
+            },
           ],
         },
         meta: { request_id: "req_batch2" },
@@ -737,10 +780,7 @@ describe("QURLClient", () => {
       stubFetch(mockData, 207);
 
       const result = await client.batchCreate({
-        items: [
-          { target_url: "https://valid.example.com" },
-          { target_url: "not-a-url" },
-        ],
+        items: [{ target_url: "https://valid.example.com" }, { target_url: "not-a-url" }],
       });
 
       expect(result.data.succeeded).toBe(1);
@@ -803,6 +843,113 @@ describe("QURLClient", () => {
       await expect(
         client.batchCreate({ items: [{ target_url: "https://example.com" }] }),
       ).rejects.toThrow(QURLAPIError);
+    });
+  });
+
+  describe("resource qURL tokens", () => {
+    it("sends DELETE to /v1/resources/:id/qurls/:qurl_id", async () => {
+      const mock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 204,
+        text: () => Promise.resolve(""),
+      });
+      vi.stubGlobal("fetch", mock);
+
+      const result = await client.revokeQurlToken("r_abc123def45", "q_abc123def45");
+
+      expect(result).toBeUndefined();
+      expect(mock).toHaveBeenCalledWith(
+        "https://api.test.com/v1/resources/r_abc123def45/qurls/q_abc123def45",
+        expect.objectContaining({ method: "DELETE", body: undefined }),
+      );
+    });
+
+    it("sends PATCH to /v1/resources/:id/qurls/:qurl_id", async () => {
+      const mockData = {
+        data: {
+          qurl_id: "q_abc123def45",
+          status: "active",
+          one_time_use: false,
+          max_sessions: 5,
+          session_duration: 3600,
+          use_count: 0,
+          created_at: "2026-06-01T00:00:00Z",
+          expires_at: "2026-06-02T00:00:00Z",
+        },
+      };
+      const mock = stubFetch(mockData);
+
+      const result = await client.updateQurlToken("r_abc123def45", "q_abc123def45", {
+        max_sessions: 5,
+      });
+
+      expect(mock).toHaveBeenCalledWith(
+        "https://api.test.com/v1/resources/r_abc123def45/qurls/q_abc123def45",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ max_sessions: 5 }),
+        }),
+      );
+      expect(result).toEqual(mockData);
+    });
+
+    it("URL-encodes resource and qURL IDs", async () => {
+      const mock = stubFetch({ data: {} });
+
+      await client.updateQurlToken("r_abc/def", "q_abc/def", { label: "Alice" });
+
+      expect(mock).toHaveBeenCalledWith(
+        "https://api.test.com/v1/resources/r_abc%2Fdef/qurls/q_abc%2Fdef",
+        expect.any(Object),
+      );
+    });
+  });
+
+  describe("resource sessions", () => {
+    it("sends GET to /v1/resources/:id/sessions", async () => {
+      const mockData = {
+        data: [{ session_id: "sess_1", qurl_id: "q_abc123def45" }],
+        meta: { request_id: "req_sessions" },
+      };
+      const mock = stubFetch(mockData);
+
+      const result = await client.listResourceSessions("r_abc123def45");
+
+      expect(mock).toHaveBeenCalledWith(
+        "https://api.test.com/v1/resources/r_abc123def45/sessions",
+        expect.objectContaining({ method: "GET", body: undefined }),
+      );
+      expect(result).toEqual(mockData);
+    });
+
+    it("sends DELETE to /v1/resources/:id/sessions/:session_id", async () => {
+      const mock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 204,
+        text: () => Promise.resolve(""),
+      });
+      vi.stubGlobal("fetch", mock);
+
+      const result = await client.terminateResourceSession("r_abc123def45", "sess_1");
+
+      expect(result).toBeUndefined();
+      expect(mock).toHaveBeenCalledWith(
+        "https://api.test.com/v1/resources/r_abc123def45/sessions/sess_1",
+        expect.objectContaining({ method: "DELETE", body: undefined }),
+      );
+    });
+
+    it("sends DELETE to /v1/resources/:id/sessions for all sessions", async () => {
+      const mockData = { data: { terminated: 3 }, meta: { request_id: "req_term" } };
+      const mock = stubFetch(mockData);
+
+      const result = await client.terminateAllResourceSessions("r_abc123def45");
+
+      expect(mock).toHaveBeenCalledWith(
+        "https://api.test.com/v1/resources/r_abc123def45/sessions",
+        expect.objectContaining({ method: "DELETE", body: undefined }),
+      );
+      expect(result).toEqual(mockData);
     });
   });
 });

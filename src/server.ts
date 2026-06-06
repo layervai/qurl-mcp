@@ -10,6 +10,10 @@ import { extendQurlTool } from "./tools/extend-qurl.js";
 import { updateQurlTool } from "./tools/update-qurl.js";
 import { mintLinkTool } from "./tools/mint-link.js";
 import { batchCreateTool } from "./tools/batch-create.js";
+import { revokeQurlTokenTool } from "./tools/revoke-qurl-token.js";
+import { updateQurlTokenTool } from "./tools/update-qurl-token.js";
+import { listQurlSessionsTool } from "./tools/list-qurl-sessions.js";
+import { terminateQurlSessionsTool } from "./tools/terminate-qurl-sessions.js";
 import type { ToolAnnotations } from "./tools/_shared.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
@@ -48,6 +52,10 @@ export const toolFactories = [
   updateQurlTool,
   mintLinkTool,
   batchCreateTool,
+  revokeQurlTokenTool,
+  updateQurlTokenTool,
+  listQurlSessionsTool,
+  terminateQurlSessionsTool,
 ] satisfies ToolFactory[];
 
 export function createServer(client: IQURLClient, version: string): McpServer {

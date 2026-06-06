@@ -11,10 +11,10 @@ describe("resolveQurlTool", () => {
       expect(tool.name).toBe("resolve_qurl");
     });
 
-    it("has a description mentioning resolve and firewall", () => {
+    it("has a description mentioning resolve and network access", () => {
       const tool = resolveQurlTool(makeMockClient());
       expect(tool.description.toLowerCase()).toContain("resolve");
-      expect(tool.description).toContain("firewall");
+      expect(tool.description).toContain("network access");
     });
   });
 
@@ -79,9 +79,7 @@ describe("resolveQurlTool", () => {
       const client = makeMockClient({ resolveQURL: mockResolve });
       const tool = resolveQurlTool(client);
 
-      await expect(tool.handler({ access_token: "at_expired" })).rejects.toThrow(
-        "Token expired",
-      );
+      await expect(tool.handler({ access_token: "at_expired" })).rejects.toThrow("Token expired");
     });
   });
 });
