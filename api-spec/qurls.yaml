@@ -94,8 +94,6 @@ info:
 servers:
   - url: https://api.layerv.ai
     description: Production
-  - url: https://api.layerv.xyz
-    description: Sandbox
 
 security:
   - bearerAuth: []
@@ -248,8 +246,6 @@ paths:
       servers:
         - url: https://bootstrap.layerv.ai
           description: Production bootstrap endpoint
-        - url: https://bootstrap.layerv.xyz
-          description: Sandbox bootstrap endpoint
       requestBody:
         required: true
         content:
