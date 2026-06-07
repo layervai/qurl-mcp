@@ -128,7 +128,7 @@ npm run format
 | Tool | Scope Required | Description |
 |------|---------------|-------------|
 | `create_qurl` | `qurl:write` | Create a protected link |
-| `resolve_qurl` | `qurl:resolve` | Resolve token + open firewall |
+| `resolve_qurl` | `qurl:resolve` | Resolve token + grant network access |
 | `list_qurls` | `qurl:read` | List qURLs with filtering |
 | `get_qurl` | `qurl:read` | Get qURL details |
 | `delete_qurl` | `qurl:write` | Revoke a qURL |
