@@ -432,7 +432,10 @@ export class QURLClient implements IQURLClient {
     // stray `QURL_API_KEY=" "`) takes the typed `missing_api_key` path
     // instead of being sent over the wire as a server-side 401.
     this.apiKey = (config.apiKey ?? "").trim();
-    this.baseURL = config.baseURL.replace(/\/$/, "");
+    // `?? ""` mirrors the apiKey guard above: a JS caller passing `undefined`
+    // for baseURL (the TS type forbids it; index.ts always supplies a default)
+    // gets the default-empty path rather than a raw TypeError from `.replace`.
+    this.baseURL = (config.baseURL ?? "").replace(/\/$/, "");
   }
 
   /**

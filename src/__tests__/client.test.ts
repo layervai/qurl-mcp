@@ -207,6 +207,50 @@ describe("QURLClient adapter", () => {
       expect(out.data.terminated).toBe(3);
       expect(out.meta).toEqual({ request_id: "req_3" });
     });
+
+    // The remaining methods are single-`as` passthrough wrappers; one assertion
+    // each locks the delegation + `{ data }` wrapping at the adapter layer.
+
+    it("resolveQURL passes the token through and wraps in { data }", async () => {
+      sdk.resolve.mockResolvedValue({
+        target_url: "https://example.com",
+        resource_id: "r_x",
+        access_grant: { expires_in: 300, granted_at: "t", src_ip: "1.2.3.4" },
+      });
+      const out = await newClient().resolveQURL({ access_token: "at_x" });
+
+      expect(sdk.resolve).toHaveBeenCalledWith({ access_token: "at_x" });
+      expect(out.data.target_url).toBe("https://example.com");
+    });
+
+    it("getQuota wraps the SDK quota in { data }", async () => {
+      sdk.getQuota.mockResolvedValue({ plan: "growth", period_start: "a", period_end: "b" });
+      const out = await newClient().getQuota();
+
+      expect(out.data.plan).toBe("growth");
+    });
+
+    it("mintLink passes the input through and wraps in { data }", async () => {
+      sdk.mintLink.mockResolvedValue({ qurl_id: "q_x", qurl_link: "L", expires_at: "t" });
+      const out = await newClient().mintLink("r_x", { label: "for Alice" });
+
+      expect(sdk.mintLink).toHaveBeenCalledWith("r_x", { label: "for Alice" });
+      expect(out.data.qurl_id).toBe("q_x");
+    });
+
+    it("updateResource maps the resource result (access_tokens → qurls)", async () => {
+      sdk.updateResource.mockResolvedValue({
+        resource_id: "r_x",
+        status: "active",
+        created_at: "t",
+        expires_at: "t",
+        access_tokens: [],
+      });
+      const out = await newClient().updateResource("r_x", { description: "d" });
+
+      expect(sdk.updateResource).toHaveBeenCalledWith("r_x", { description: "d" });
+      expect(out.data.qurls).toEqual([]);
+    });
   });
 
   describe("method renames", () => {
