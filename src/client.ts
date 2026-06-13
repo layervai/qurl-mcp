@@ -401,7 +401,11 @@ function translateError(err: unknown): unknown {
  */
 function mapResource(raw: SDKQURL | SDKResource): QURL {
   const { access_tokens, ...rest } = raw as SDKQURL;
-  const mapped = access_tokens === undefined ? rest : { ...rest, qurls: access_tokens };
+  // Drop the key for both `undefined` and a defensive `null`.
+  const mapped =
+    access_tokens === undefined || access_tokens === null
+      ? rest
+      : { ...rest, qurls: access_tokens };
   return mapped as unknown as QURL;
 }
 
