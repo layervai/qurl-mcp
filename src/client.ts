@@ -351,7 +351,8 @@ export class QURLAPIError extends Error {
 
 /**
  * Shared message for the missing-API-key condition. Emitted both at boot
- * (stderr warning in `index.ts`) and on every API call from `request()`.
+ * (stderr warning in `index.ts`) and on every API call (the lazy `sdk` getter
+ * throws it when no key is configured).
  * Keeping a single string means a user grepping logs/transcripts hits the
  * same phrase from both sites, and the CI introspection probe has a stable
  * substring to assert against.

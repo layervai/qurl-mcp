@@ -238,6 +238,12 @@ describe("QURLClient adapter", () => {
       expect(out.data.qurl_id).toBe("q_x");
     });
 
+    it("mintLink with no input passes undefined through to the SDK", async () => {
+      sdk.mintLink.mockResolvedValue({ qurl_id: "q_x", qurl_link: "L", expires_at: "t" });
+      await newClient().mintLink("r_x");
+      expect(sdk.mintLink).toHaveBeenCalledWith("r_x", undefined);
+    });
+
     it("updateResource maps the resource result (access_tokens → qurls)", async () => {
       sdk.updateResource.mockResolvedValue({
         resource_id: "r_x",
