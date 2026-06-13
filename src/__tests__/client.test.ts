@@ -1,977 +1,227 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { QURLClient, QURLAPIError } from "../client.js";
 
-function stubFetch(body: unknown, status = 200) {
-  const mock = vi.fn().mockResolvedValue({
-    ok: status >= 200 && status < 300,
-    status,
-    text: () => Promise.resolve(JSON.stringify(body)),
+// `client.ts` is now a thin adapter over the `@layervai/qurl` SDK. These tests
+// mock the SDK so we can assert the adapter's translation layer in isolation:
+// lazy/keyless construction, `{ data }` re-wrapping, the `access_tokens` →
+// `qurls` rename, the list/batch/session envelope reshaping, the method
+// renames, and the `QURLError` → `QURLAPIError` mapping. The HTTP/retry/parse
+// behavior the old hand-rolled client used to be tested for now lives in (and
+// is tested by) the SDK itself.
+
+const { sdk, SDKClientMock } = vi.hoisted(() => {
+  const sdk = {
+    create: vi.fn(),
+    get: vi.fn(),
+    list: vi.fn(),
+    delete: vi.fn(),
+    update: vi.fn(),
+    updateResource: vi.fn(),
+    extend: vi.fn(),
+    resolve: vi.fn(),
+    getQuota: vi.fn(),
+    mintLink: vi.fn(),
+    batchCreate: vi.fn(),
+    revokeResourceQurl: vi.fn(),
+    updateResourceQurl: vi.fn(),
+    listResourceSessions: vi.fn(),
+    terminateResourceSession: vi.fn(),
+    terminateAllResourceSessions: vi.fn(),
+  };
+  // The SDK constructor returns our shared stub instance. Must be a regular
+  // function (not an arrow) so the adapter's `new SDKQURLClient(...)` works —
+  // a constructor that returns an object makes `new` yield that object.
+  const SDKClientMock = vi.fn(function () {
+    return sdk;
   });
-  vi.stubGlobal("fetch", mock);
-  return mock;
-}
+  return { sdk, SDKClientMock };
+});
 
-describe("QURLClient", () => {
-  let client: QURLClient;
+vi.mock("@layervai/qurl", async (importOriginal) => {
+  // Keep the real error classes (so NotFoundError etc. behave like the SDK),
+  // swap only the client constructor for our stub.
+  const actual = await importOriginal<typeof import("@layervai/qurl")>();
+  return { ...actual, QURLClient: SDKClientMock };
+});
 
-  beforeEach(() => {
-    client = new QURLClient({
-      apiKey: "test-key",
-      baseURL: "https://api.test.com",
-    });
-  });
+import { QURLClient, QURLAPIError, MISSING_API_KEY_MESSAGE } from "../client.js";
+import { NotFoundError, AuthorizationError } from "@layervai/qurl";
 
-  describe("constructor", () => {
-    it("stores apiKey and baseURL", async () => {
-      const customClient = new QURLClient({
-        apiKey: "custom-key",
-        baseURL: "https://api.example.com",
-      });
-      const mock = stubFetch({ data: {} });
+const newClient = (apiKey = "lv_live_key", baseURL = "https://api.test.layerv.ai") =>
+  new QURLClient({ apiKey, baseURL });
 
-      await customClient.getQuota();
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.example.com/v1/quota",
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: "Bearer custom-key",
-          }),
-        }),
-      );
+describe("QURLClient adapter", () => {
+  describe("keyless boot", () => {
+    it("does not construct the SDK when no key is configured", () => {
+      expect(() => newClient("")).not.toThrow();
+      expect(SDKClientMock).not.toHaveBeenCalled();
     });
 
-    it("strips trailing slash from baseURL", async () => {
-      const customClient = new QURLClient({
-        apiKey: "test-key",
-        baseURL: "https://api.example.com/",
-      });
-      const mock = stubFetch({ data: {} });
+    it("defers the missing-key error to the first API call (status 0, code missing_api_key)", async () => {
+      // Whitespace-only keys take the same path as truly unset.
+      const client = newClient("   ");
+      const err = (await client.getQURL("r_x").catch((e: unknown) => e)) as QURLAPIError;
 
-      await customClient.getQuota();
-
-      expect(mock).toHaveBeenCalledWith("https://api.example.com/v1/quota", expect.any(Object));
-    });
-  });
-
-  describe("missing apiKey guard", () => {
-    // Locks in the contract: when QURL_API_KEY is unset (introspection-only
-    // mode), every API call must throw a typed missing_api_key error before
-    // any network request is issued. Removing this guard would silently fall
-    // through to a 401 from the server, masking the configuration problem.
-    //
-    // Parameterized over both empty and whitespace-only keys so the
-    // constructor's `.trim()` (the sole gate against the whitespace case)
-    // is exercised against the entire client surface, not just
-    // a single representative method.
-    const missingKeyCases: Array<[string, string]> = [
-      ["empty", ""],
-      ["whitespace-only", "   \t\n  "],
-    ];
-
-    for (const [label, apiKey] of missingKeyCases) {
-      it(`throws missing_api_key for every API method when apiKey is ${label}, without issuing a network request`, async () => {
-        const noKeyClient = new QURLClient({
-          apiKey,
-          baseURL: "https://api.test.com",
-        });
-        const mock = vi.fn();
-        vi.stubGlobal("fetch", mock);
-
-        const calls: Array<() => Promise<unknown>> = [
-          () => noKeyClient.createQURL({ target_url: "https://example.com" }),
-          () => noKeyClient.getQURL("r_x"),
-          () => noKeyClient.listQURLs(),
-          () => noKeyClient.deleteQURL("r_x"),
-          () => noKeyClient.updateQURL("r_x", { extend_by: "1h" }),
-          () => noKeyClient.updateResource("r_x", { custom_domain: "app.example.com" }),
-          () => noKeyClient.extendQURL("r_x", { extend_by: "1h" }),
-          () => noKeyClient.resolveQURL({ access_token: "at_x" }),
-          () => noKeyClient.getQuota(),
-          () => noKeyClient.mintLink("r_x"),
-          () => noKeyClient.batchCreate({ items: [{ target_url: "https://example.com" }] }),
-          () => noKeyClient.revokeQurlToken("r_x", "q_x"),
-          () => noKeyClient.updateQurlToken("r_x", "q_x", { extend_by: "1h" }),
-          () => noKeyClient.listResourceSessions("r_x"),
-          () => noKeyClient.terminateResourceSession("r_x", "sess_x"),
-          () => noKeyClient.terminateAllResourceSessions("r_x"),
-        ];
-
-        for (const call of calls) {
-          // toMatchObject rather than toBeInstanceOf catches a regression
-          // where a method routes around `request()` and throws a different
-          // QURLAPIError for an unrelated reason — e.g. extendQURL already
-          // delegates to updateQURL today; a sibling that doesn't would slip
-          // a looser instanceof check.
-          await expect(call()).rejects.toMatchObject({
-            name: "QURLAPIError",
-            code: "missing_api_key",
-            statusCode: 0,
-          });
-        }
-        // Intent of this guard is "no network until the key is set" — assert
-        // it directly rather than just trusting that any QURLAPIError suffices.
-        expect(mock).not.toHaveBeenCalled();
-      });
-    }
-  });
-
-  describe("request headers", () => {
-    it("sends Authorization bearer header on all requests", async () => {
-      const mock = stubFetch({ data: {} });
-
-      await client.getQuota();
-
-      expect(mock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: "Bearer test-key",
-          }),
-        }),
-      );
-    });
-
-    it("sends Content-Type only when request has a body", async () => {
-      const mock = stubFetch({ data: {} });
-
-      await client.createQURL({ target_url: "https://example.com" });
-
-      expect(mock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            "Content-Type": "application/json",
-          }),
-        }),
-      );
-    });
-
-    it("omits Content-Type on GET requests", async () => {
-      const mock = stubFetch({ data: {} });
-
-      await client.getQuota();
-
-      const headers = (mock.mock.calls[0][1] as { headers: Record<string, string> }).headers;
-      expect(headers).not.toHaveProperty("Content-Type");
-    });
-  });
-
-  describe("error handling", () => {
-    it("throws QURLAPIError on 4xx response with RFC 7807 format", async () => {
-      stubFetch(
-        {
-          error: {
-            type: "https://api.qurl.link/problems/not_found",
-            title: "Resource Not Found",
-            status: 404,
-            detail: "QURL not found",
-            instance: "/v1/qurls/r_nonexistent",
-            code: "not_found",
-          },
-          meta: { request_id: "req_abc123" },
-        },
-        404,
-      );
-
-      const err = (await client.getQURL("r_nonexistent").catch((e: unknown) => e)) as QURLAPIError;
       expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err.statusCode).toBe(404);
-      expect(err.code).toBe("not_found");
-      expect(err.message).toBe("QURL not found");
-      expect(err.type).toBe("https://api.qurl.link/problems/not_found");
-      expect(err.instance).toBe("/v1/qurls/r_nonexistent");
-      expect(err.requestId).toBe("req_abc123");
+      expect(err.code).toBe("missing_api_key");
+      expect(err.statusCode).toBe(0);
+      expect(err.message).toBe(MISSING_API_KEY_MESSAGE);
+      // The SDK (which throws on an empty key) is never constructed.
+      expect(SDKClientMock).not.toHaveBeenCalled();
     });
+  });
 
-    it("preserves tombstone metadata from 410 Gone responses", async () => {
-      stubFetch(
-        {
-          error: {
-            type: "https://api.qurl.link/problems/gone",
-            title: "Resource Gone",
-            status: 410,
-            detail: "Resource lifecycle closed",
-            instance: "/v1/resources/r_abc123def45",
-            code: "gone",
-          },
-          meta: {
-            request_id: "req_gone",
-            tombstone: {
-              tombstoned_at: "2026-06-01T00:00:00Z",
-              final_access_count: 42,
-            },
-          },
-        },
-        410,
-      );
+  describe("lazy SDK construction", () => {
+    it("constructs the SDK once, mapping baseURL → baseUrl and trimming the trailing slash", async () => {
+      sdk.get.mockResolvedValue({ resource_id: "r_x" });
+      const client = newClient("lv_live_key", "https://api.test.layerv.ai/");
 
-      const err = (await client.getQURL("r_abc123def45").catch((e: unknown) => e)) as QURLAPIError;
-      expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err.statusCode).toBe(410);
-      expect(err.requestId).toBe("req_gone");
-      expect(err.tombstone).toEqual({
-        tombstoned_at: "2026-06-01T00:00:00Z",
-        final_access_count: 42,
+      await client.getQURL("r_x");
+      await client.getQURL("r_y");
+
+      expect(SDKClientMock).toHaveBeenCalledTimes(1);
+      expect(SDKClientMock).toHaveBeenCalledWith({
+        apiKey: "lv_live_key",
+        baseUrl: "https://api.test.layerv.ai",
       });
     });
-
-    it("throws QURLAPIError on 5xx response", async () => {
-      stubFetch(
-        {
-          error: {
-            type: "https://api.qurl.link/problems/internal_error",
-            title: "Internal Error",
-            status: 500,
-            detail: "Server error",
-            code: "internal_error",
-          },
-        },
-        500,
-      );
-
-      const err = (await client.getQuota().catch((e: unknown) => e)) as QURLAPIError;
-      expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err.statusCode).toBe(500);
-      expect(err.code).toBe("internal_error");
-      expect(err.message).toBe("Server error");
-    });
-
-    it("falls back to error.message for legacy error format", async () => {
-      stubFetch({ error: { code: "not_found", message: "Resource not found" } }, 404);
-
-      const err = (await client.getQURL("r_nonexistent").catch((e: unknown) => e)) as QURLAPIError;
-      expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err.statusCode).toBe(404);
-      expect(err.code).toBe("not_found");
-      expect(err.message).toBe("Resource not found");
-      // RFC 7807 fields are not present in legacy format
-      expect(err.type).toBeUndefined();
-      expect(err.instance).toBeUndefined();
-      expect(err.requestId).toBeUndefined();
-    });
-
-    it("falls back to error.title when detail is missing", async () => {
-      stubFetch(
-        {
-          error: {
-            type: "https://api.qurl.link/problems/forbidden",
-            title: "Forbidden",
-            status: 403,
-            code: "forbidden",
-          },
-        },
-        403,
-      );
-
-      const err = (await client.getQuota().catch((e: unknown) => e)) as QURLAPIError;
-      expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err.message).toBe("Forbidden");
-      expect(err.type).toBe("https://api.qurl.link/problems/forbidden");
-    });
-
-    it("throws QURLAPIError with defaults when error body has no error field", async () => {
-      stubFetch({ some: "data" }, 403);
-
-      const err = await client.getQuota().catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err).toMatchObject({
-        statusCode: 403,
-        code: "unknown",
-        message: "HTTP 403",
-      });
-    });
-
-    it("throws QURLAPIError on non-JSON response", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 200,
-          text: () => Promise.resolve("not json at all"),
-        }),
-      );
-
-      const err = await client.getQuota().catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err).toMatchObject({
-        statusCode: 200,
-        code: "parse_error",
-      });
-    });
-
-    it("truncates long non-JSON response in error message", async () => {
-      const longText = "x".repeat(300);
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 200,
-          text: () => Promise.resolve(longText),
-        }),
-      );
-
-      const err = (await client.getQuota().catch((e: unknown) => e)) as QURLAPIError;
-      expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err.message).toBe("Failed to parse response: " + "x".repeat(200));
-    });
-
-    it("handles empty 2xx response body (204 No Content)", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 204,
-          text: () => Promise.resolve(""),
-        }),
-      );
-
-      const result = await client.deleteQURL("r_abc");
-      expect(result).toBeUndefined();
-    });
-
-    it("throws on empty non-2xx response body", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockResolvedValue({
-          ok: false,
-          status: 502,
-          text: () => Promise.resolve(""),
-        }),
-      );
-
-      const err = await client.getQuota().catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(QURLAPIError);
-      expect(err).toMatchObject({
-        statusCode: 502,
-        code: "parse_error",
-      });
-    });
-
-    it("propagates network-level fetch failures", async () => {
-      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
-
-      await expect(client.listQURLs()).rejects.toThrow("fetch failed");
-    });
-
-    it("QURLAPIError has correct name property", () => {
-      const err = new QURLAPIError(400, "bad_request", "Bad request");
-      expect(err.name).toBe("QURLAPIError");
-      expect(err).toBeInstanceOf(Error);
-    });
-
-    it("QURLAPIError stores optional RFC 7807 fields", () => {
-      const err = new QURLAPIError(
-        400,
-        "invalid_request",
-        "Bad request",
-        "https://api.qurl.link/problems/invalid_request",
-        "/v1/qurls",
-        "req_123",
-      );
-      expect(err.type).toBe("https://api.qurl.link/problems/invalid_request");
-      expect(err.instance).toBe("/v1/qurls");
-      expect(err.requestId).toBe("req_123");
-    });
   });
 
-  describe("createQURL", () => {
-    it("sends POST to /v1/qurls with body", async () => {
-      const mockData = {
-        data: {
-          qurl_id: "q_3a7f2c8e91b",
-          resource_id: "r_abc123",
-          qurl_link: "https://qurl.link/at_token",
-          qurl_site: "https://q_3a7f2c8e91b.qurl.site",
-          expires_at: "2026-04-01T00:00:00Z",
-        },
-      };
-      const mock = stubFetch(mockData);
+  describe("shape translation", () => {
+    it("createQURL passes the input through and wraps the result in { data }", async () => {
+      sdk.create.mockResolvedValue({
+        qurl_id: "q_x",
+        resource_id: "r_x",
+        qurl_link: "https://qurl.link/#at_x",
+        qurl_site: "https://r_x.qurl.site",
+      });
+      const out = await newClient().createQURL({ target_url: "https://example.com" });
 
-      const input = {
-        target_url: "https://example.com",
-        label: "Test link",
-        expires_in: "24h",
-        one_time_use: false,
-        max_sessions: 3,
-      };
-      const result = await client.createQURL(input);
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify(input),
-        }),
-      );
-      expect(result).toEqual(mockData);
+      expect(sdk.create).toHaveBeenCalledWith({ target_url: "https://example.com" });
+      expect(out.data.qurl_id).toBe("q_x");
+      expect(out.data.resource_id).toBe("r_x");
     });
 
-    it("sends POST without optional fields", async () => {
-      const mock = stubFetch({ data: { qurl_id: "q_abc", resource_id: "r_abc" } });
-
-      await client.createQURL({ target_url: "https://example.com" });
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({ target_url: "https://example.com" }),
-        }),
-      );
-    });
-
-    it("sends access_policy in body", async () => {
-      const mock = stubFetch({ data: { qurl_id: "q_abc", resource_id: "r_abc" } });
-
-      const input = {
-        target_url: "https://example.com",
-        access_policy: {
-          ip_allowlist: ["192.168.1.0/24"],
-          geo_allowlist: ["US"],
-          ai_agent_policy: { deny_categories: ["gptbot"] },
-        },
-      };
-      await client.createQURL(input);
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls",
-        expect.objectContaining({
-          body: JSON.stringify(input),
-        }),
-      );
-    });
-  });
-
-  describe("getQURL", () => {
-    it("sends GET to /v1/qurls/:id", async () => {
-      const mockData = { data: { resource_id: "r_abc123", status: "active" } };
-      const mock = stubFetch(mockData);
-
-      const result = await client.getQURL("r_abc123");
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc123",
-        expect.objectContaining({ method: "GET", body: undefined }),
-      );
-      expect(result).toEqual(mockData);
-    });
-
-    it("URL-encodes the resource ID", async () => {
-      const mock = stubFetch({ data: {} });
-
-      await client.getQURL("r_abc/def");
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc%2Fdef",
-        expect.any(Object),
-      );
-    });
-  });
-
-  describe("listQURLs", () => {
-    it("sends GET to /v1/qurls with no query params by default", async () => {
-      const mockData = { data: [], meta: { has_more: false } };
-      const mock = stubFetch(mockData);
-
-      const result = await client.listQURLs();
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls",
-        expect.objectContaining({ method: "GET" }),
-      );
-      expect(result).toEqual(mockData);
-    });
-
-    it("sends limit and cursor as query params", async () => {
-      const mock = stubFetch({ data: [], meta: { has_more: false } });
-
-      await client.listQURLs({ limit: 10, cursor: "cur_xyz" });
-
-      const calledUrl = mock.mock.calls[0][0] as string;
-      expect(calledUrl).toContain("/v1/qurls?");
-      expect(calledUrl).toContain("limit=10");
-      expect(calledUrl).toContain("cursor=cur_xyz");
-    });
-
-    it("sends limit=0 as query param", async () => {
-      // The MCP tool schema rejects limit < 1 at the validation layer.
-      // This test covers the client method in isolation — an embedder that
-      // uses QURLClient directly (not via the MCP tool) gets the 0 through.
-      const mock = stubFetch({ data: [], meta: { has_more: false } });
-
-      await client.listQURLs({ limit: 0 });
-
-      const calledUrl = mock.mock.calls[0][0] as string;
-      expect(calledUrl).toContain("limit=0");
-    });
-
-    it("sends only limit when cursor is not provided", async () => {
-      const mock = stubFetch({ data: [], meta: { has_more: false } });
-
-      await client.listQURLs({ limit: 5 });
-
-      const calledUrl = mock.mock.calls[0][0] as string;
-      expect(calledUrl).toContain("limit=5");
-      expect(calledUrl).not.toContain("cursor");
-    });
-
-    it("sends no query params when input is empty object", async () => {
-      const mock = stubFetch({ data: [], meta: { has_more: false } });
-
-      await client.listQURLs({});
-
-      expect(mock).toHaveBeenCalledWith("https://api.test.com/v1/qurls", expect.any(Object));
-    });
-
-    it("sends filter query params", async () => {
-      const mock = stubFetch({ data: [], meta: { has_more: false } });
-
-      await client.listQURLs({
+    it("getQURL renames access_tokens → qurls and wraps in { data }", async () => {
+      sdk.get.mockResolvedValue({
+        resource_id: "r_x",
         status: "active",
-        created_after: "2026-01-01T00:00:00Z",
-        created_before: "2026-12-31T23:59:59Z",
-        expires_before: "2026-06-01T00:00:00Z",
-        expires_after: "2026-03-01T00:00:00Z",
-        sort: "created_at:desc",
-        q: "dashboard",
+        created_at: "t",
+        expires_at: "t",
+        access_tokens: [{ qurl_id: "q_a", status: "active" }],
       });
+      const out = await newClient().getQURL("r_x");
 
-      const calledUrl = mock.mock.calls[0][0] as string;
-      expect(calledUrl).toContain("status=active");
-      expect(calledUrl).toContain("created_after=2026-01-01T00%3A00%3A00Z");
-      expect(calledUrl).toContain("created_before=2026-12-31T23%3A59%3A59Z");
-      expect(calledUrl).toContain("expires_before=2026-06-01T00%3A00%3A00Z");
-      expect(calledUrl).toContain("expires_after=2026-03-01T00%3A00%3A00Z");
-      expect(calledUrl).toContain("sort=created_at%3Adesc");
-      expect(calledUrl).toContain("q=dashboard");
-    });
-  });
-
-  describe("deleteQURL", () => {
-    it("sends DELETE to /v1/qurls/:id", async () => {
-      const mock = stubFetch({});
-
-      await client.deleteQURL("r_abc123");
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc123",
-        expect.objectContaining({ method: "DELETE", body: undefined }),
-      );
+      expect(out.data.qurls).toEqual([{ qurl_id: "q_a", status: "active" }]);
+      expect((out.data as { access_tokens?: unknown }).access_tokens).toBeUndefined();
     });
 
-    it("returns void on success", async () => {
-      stubFetch({});
-
-      const result = await client.deleteQURL("r_abc123");
-      expect(result).toBeUndefined();
-    });
-  });
-
-  describe("updateQURL", () => {
-    it("sends PATCH to /v1/qurls/:id with extend_by body", async () => {
-      const mockData = { data: { resource_id: "r_abc", expires_at: "2026-04-01T00:00:00Z" } };
-      const mock = stubFetch(mockData);
-
-      const result = await client.updateQURL("r_abc", { extend_by: "48h" });
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc",
-        expect.objectContaining({
-          method: "PATCH",
-          body: JSON.stringify({ extend_by: "48h" }),
-        }),
-      );
-      expect(result).toEqual(mockData);
-    });
-
-    it("sends PATCH with expires_at", async () => {
-      const mockData = { data: { resource_id: "r_abc", expires_at: "2026-04-01T00:00:00Z" } };
-      const mock = stubFetch(mockData);
-
-      await client.updateQURL("r_abc", { expires_at: "2026-04-01T00:00:00Z" });
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc",
-        expect.objectContaining({
-          body: JSON.stringify({ expires_at: "2026-04-01T00:00:00Z" }),
-        }),
-      );
-    });
-
-    it("sends PATCH with tags and description", async () => {
-      const mock = stubFetch({ data: { resource_id: "r_abc" } });
-
-      await client.updateQURL("r_abc", {
-        tags: ["prod", "api"],
-        description: "Updated description",
+    it("listQURLs reshapes the SDK envelope into { data, meta } and maps each item", async () => {
+      sdk.list.mockResolvedValue({
+        qurls: [{ resource_id: "r_x", access_tokens: [] }],
+        next_cursor: "c2",
+        has_more: true,
       });
+      const out = await newClient().listQURLs({ limit: 10 });
 
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc",
-        expect.objectContaining({
-          body: JSON.stringify({ tags: ["prod", "api"], description: "Updated description" }),
-        }),
-      );
+      expect(sdk.list).toHaveBeenCalledWith({ limit: 10 });
+      expect(out.data[0].qurls).toEqual([]);
+      expect((out.data[0] as { access_tokens?: unknown }).access_tokens).toBeUndefined();
+      expect(out.meta).toEqual({ next_cursor: "c2", has_more: true });
     });
-  });
 
-  describe("updateResource", () => {
-    it("sends PATCH to /v1/resources/:id with resource metadata body", async () => {
-      const mockData = { data: { resource_id: "r_abc", custom_domain: "app.example.com" } };
-      const mock = stubFetch(mockData);
-
-      const result = await client.updateResource("r_abc", {
-        custom_domain: "app.example.com",
-        preserve_host: true,
+    it("batchCreate flattens the SDK output into { data, meta }", async () => {
+      sdk.batchCreate.mockResolvedValue({
+        succeeded: 1,
+        failed: 0,
+        results: [{ index: 0, success: true, resource_id: "r_x", qurl_link: "L", qurl_site: "S" }],
+        request_id: "req_1",
       });
+      const out = await newClient().batchCreate({ items: [{ target_url: "https://example.com" }] });
 
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/resources/r_abc",
-        expect.objectContaining({
-          method: "PATCH",
-          body: JSON.stringify({ custom_domain: "app.example.com", preserve_host: true }),
-        }),
-      );
-      expect(result).toEqual(mockData);
-    });
-  });
-
-  describe("resolveQURL", () => {
-    it("sends POST to /v1/resolve with access_token", async () => {
-      const mockData = {
-        data: {
-          target_url: "https://example.com",
-          resource_id: "r_abc",
-          access_grant: {
-            expires_in: 300,
-            granted_at: "2026-03-09T00:00:00Z",
-            src_ip: "1.2.3.4",
-          },
-        },
-      };
-      const mock = stubFetch(mockData);
-
-      const result = await client.resolveQURL({ access_token: "at_token123" });
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/resolve",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({ access_token: "at_token123" }),
-        }),
-      );
-      expect(result).toEqual(mockData);
-    });
-  });
-
-  describe("getQuota", () => {
-    it("sends GET to /v1/quota", async () => {
-      const mockData = {
-        data: {
-          plan: "growth",
-          period_start: "2026-03-01T00:00:00Z",
-          period_end: "2026-04-01T00:00:00Z",
-          rate_limits: {
-            create_per_minute: 200,
-            create_per_hour: 10000,
-            list_per_minute: 120,
-            resolve_per_minute: 300,
-            max_active_qurls: 1000,
-            max_tokens_per_qurl: 50,
-            max_expiry_seconds: 2592000,
-          },
-          usage: {
-            qurls_created: 150,
-            active_qurls: 45,
-            active_qurls_percent: 0.45,
-            total_accesses: 1250,
-          },
-        },
-      };
-      const mock = stubFetch(mockData);
-
-      const result = await client.getQuota();
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/quota",
-        expect.objectContaining({ method: "GET" }),
-      );
-      expect(result).toEqual(mockData);
-    });
-  });
-
-  describe("mintLink", () => {
-    it("sends POST to /v1/qurls/:id/mint_link", async () => {
-      const mockData = {
-        data: {
-          qurl_link: "https://qurl.link/at_newtoken",
-          expires_at: "2026-04-01T00:00:00Z",
-        },
-      };
-      const mock = stubFetch(mockData);
-
-      const result = await client.mintLink("r_abc123", { label: "Alice" });
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc123/mint_link",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify({ label: "Alice" }),
-        }),
-      );
-      expect(result).toEqual(mockData);
+      expect(out.data.succeeded).toBe(1);
+      expect(out.data.failed).toBe(0);
+      expect(out.data.results).toHaveLength(1);
+      expect(out.meta.request_id).toBe("req_1");
     });
 
-    it("sends an empty JSON body when no input provided", async () => {
-      const mock = stubFetch({ data: { qurl_link: "https://qurl.link/at_x" } });
-
-      await client.mintLink("r_abc123");
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc123/mint_link",
-        expect.objectContaining({
-          body: JSON.stringify({}),
-        }),
-      );
-      const headers = (mock.mock.calls[0][1] as { headers: Record<string, string> }).headers;
-      expect(headers).toHaveProperty("Content-Type", "application/json");
-    });
-
-    it("URL-encodes the resource ID", async () => {
-      const mock = stubFetch({ data: {} });
-
-      await client.mintLink("r_abc/def");
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/r_abc%2Fdef/mint_link",
-        expect.any(Object),
-      );
-    });
-  });
-
-  describe("batchCreate", () => {
-    it("sends POST to /v1/qurls/batch with items", async () => {
-      const mockData = {
-        data: {
-          succeeded: 2,
-          failed: 0,
-          results: [
-            { index: 0, success: true, resource_id: "r_abc", qurl_link: "https://qurl.link/at_1" },
-            { index: 1, success: true, resource_id: "r_def", qurl_link: "https://qurl.link/at_2" },
-          ],
-        },
-        meta: { request_id: "req_batch1" },
-      };
-      const mock = stubFetch(mockData);
-
-      const input = {
-        items: [
-          { target_url: "https://app1.example.com", expires_in: "7d" },
-          { target_url: "https://app2.example.com", expires_in: "24h" },
-        ],
-      };
-      const result = await client.batchCreate(input);
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/qurls/batch",
-        expect.objectContaining({
-          method: "POST",
-          body: JSON.stringify(input),
-        }),
-      );
-      expect(result).toEqual(mockData);
-    });
-
-    it("returns partial success results", async () => {
-      const mockData = {
-        data: {
-          succeeded: 1,
-          failed: 1,
-          results: [
-            { index: 0, success: true, resource_id: "r_abc", qurl_link: "https://qurl.link/at_1" },
-            {
-              index: 1,
-              success: false,
-              error: { code: "invalid_target_url", message: "Invalid URL" },
-            },
-          ],
-        },
-        meta: { request_id: "req_batch2" },
-      };
-      stubFetch(mockData, 207);
-
-      const result = await client.batchCreate({
-        items: [{ target_url: "https://valid.example.com" }, { target_url: "not-a-url" }],
+    it("listResourceSessions maps sessions → data", async () => {
+      sdk.listResourceSessions.mockResolvedValue({
+        sessions: [{ session_id: "s1", qurl_id: "q_a" }],
+        request_id: "req_2",
       });
+      const out = await newClient().listResourceSessions("r_x");
 
-      expect(result.data.succeeded).toBe(1);
-      expect(result.data.failed).toBe(1);
-      expect(result.data.results[1].error?.code).toBe("invalid_target_url");
+      expect(out.data).toEqual([{ session_id: "s1", qurl_id: "q_a" }]);
+      expect(out.meta).toEqual({ request_id: "req_2" });
     });
 
-    it("passes through the structured body on HTTP 400 (all items failed)", async () => {
-      // When every batch item fails validation the API returns 400 with a
-      // BatchCreateResponse body, not an error envelope. The client must
-      // surface the per-item errors instead of throwing a generic "HTTP 400".
-      const mockData = {
-        data: {
-          succeeded: 0,
-          failed: 2,
-          results: [
-            {
-              index: 0,
-              success: false,
-              error: { code: "invalid_input", message: "items[0]: target_url must be HTTPS" },
-            },
-            {
-              index: 1,
-              success: false,
-              error: { code: "invalid_input", message: "items[1]: target_url must be HTTPS" },
-            },
-          ],
-        },
-        meta: { request_id: "req_batch_fail" },
-      };
-      stubFetch(mockData, 400);
+    it("terminateAllResourceSessions wraps the count in { data }", async () => {
+      sdk.terminateAllResourceSessions.mockResolvedValue({ terminated: 3, request_id: "req_3" });
+      const out = await newClient().terminateAllResourceSessions("r_x");
 
-      const result = await client.batchCreate({
-        items: [
-          { target_url: "http://insecure1.example.com" },
-          { target_url: "http://insecure2.example.com" },
-        ],
-      });
-
-      expect(result.data.failed).toBe(2);
-      expect(result.data.succeeded).toBe(0);
-      expect(result.data.results[0].error?.message).toContain("target_url must be HTTPS");
-      expect(result.data.results[1].error?.message).toContain("target_url must be HTTPS");
-      expect(result.meta.request_id).toBe("req_batch_fail");
-    });
-
-    it("still throws on non-400 batch errors (e.g., 401, 429, 5xx)", async () => {
-      stubFetch(
-        {
-          error: {
-            type: "https://api.qurl.link/problems/unauthorized",
-            title: "Unauthorized",
-            status: 401,
-            code: "unauthorized",
-          },
-        },
-        401,
-      );
-
-      await expect(
-        client.batchCreate({ items: [{ target_url: "https://example.com" }] }),
-      ).rejects.toThrow(QURLAPIError);
+      expect(out.data.terminated).toBe(3);
+      expect(out.meta).toEqual({ request_id: "req_3" });
     });
   });
 
-  describe("resource qURL tokens", () => {
-    it("sends DELETE to /v1/resources/:id/qurls/:qurl_id", async () => {
-      const mock = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 204,
-        text: () => Promise.resolve(""),
-      });
-      vi.stubGlobal("fetch", mock);
-
-      const result = await client.revokeQurlToken("r_abc123def45", "q_abc123def45");
-
-      expect(result).toBeUndefined();
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/resources/r_abc123def45/qurls/q_abc123def45",
-        expect.objectContaining({ method: "DELETE", body: undefined }),
-      );
+  describe("method renames", () => {
+    it("revokeQurlToken delegates to sdk.revokeResourceQurl", async () => {
+      sdk.revokeResourceQurl.mockResolvedValue(undefined);
+      await newClient().revokeQurlToken("r_x", "q_y");
+      expect(sdk.revokeResourceQurl).toHaveBeenCalledWith("r_x", "q_y");
     });
 
-    it("sends PATCH to /v1/resources/:id/qurls/:qurl_id", async () => {
-      const mockData = {
-        data: {
-          qurl_id: "q_abc123def45",
-          status: "active",
-          one_time_use: false,
-          max_sessions: 5,
-          session_duration: 3600,
-          use_count: 0,
-          created_at: "2026-06-01T00:00:00Z",
-          expires_at: "2026-06-02T00:00:00Z",
-        },
-      };
-      const mock = stubFetch(mockData);
+    it("updateQurlToken delegates to sdk.updateResourceQurl and wraps in { data }", async () => {
+      sdk.updateResourceQurl.mockResolvedValue({ qurl_id: "q_y", status: "active" });
+      const out = await newClient().updateQurlToken("r_x", "q_y", { label: "renamed" });
 
-      const result = await client.updateQurlToken("r_abc123def45", "q_abc123def45", {
-        max_sessions: 5,
-      });
+      expect(sdk.updateResourceQurl).toHaveBeenCalledWith("r_x", "q_y", { label: "renamed" });
+      expect(out.data.qurl_id).toBe("q_y");
+    });
+  });
 
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/resources/r_abc123def45/qurls/q_abc123def45",
-        expect.objectContaining({
-          method: "PATCH",
-          body: JSON.stringify({ max_sessions: 5 }),
+  describe("error translation", () => {
+    it("maps an SDK NotFoundError to QURLAPIError with statusCode 404 (delete-qurl branch)", async () => {
+      sdk.delete.mockRejectedValue(
+        new NotFoundError({
+          status: 404,
+          code: "resource_not_found",
+          title: "Not Found",
+          detail: "gone",
         }),
       );
-      expect(result).toEqual(mockData);
+      const err = (await newClient()
+        .deleteQURL("r_x")
+        .catch((e: unknown) => e)) as QURLAPIError;
+
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err.statusCode).toBe(404);
+      expect(err.code).toBe("resource_not_found");
+      expect(err.message).toBe("gone");
     });
 
-    it("URL-encodes resource and qURL IDs", async () => {
-      const mock = stubFetch({ data: {} });
-
-      await client.updateQurlToken("r_abc/def", "q_abc/def", { label: "Alice" });
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/resources/r_abc%2Fdef/qurls/q_abc%2Fdef",
-        expect.any(Object),
+    it("preserves code and requestId when translating a 403", async () => {
+      sdk.create.mockRejectedValue(
+        new AuthorizationError({
+          status: 403,
+          code: "insufficient_scope",
+          title: "Forbidden",
+          detail: "missing qurl:write",
+          request_id: "req_9",
+        }),
       );
-    });
-  });
+      const err = (await newClient()
+        .createQURL({ target_url: "https://example.com" })
+        .catch((e: unknown) => e)) as QURLAPIError;
 
-  describe("resource sessions", () => {
-    it("sends GET to /v1/resources/:id/sessions", async () => {
-      const mockData = {
-        data: [{ session_id: "sess_1", qurl_id: "q_abc123def45" }],
-        meta: { request_id: "req_sessions" },
-      };
-      const mock = stubFetch(mockData);
-
-      const result = await client.listResourceSessions("r_abc123def45");
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/resources/r_abc123def45/sessions",
-        expect.objectContaining({ method: "GET", body: undefined }),
-      );
-      expect(result).toEqual(mockData);
-    });
-
-    it("sends DELETE to /v1/resources/:id/sessions/:session_id", async () => {
-      const mock = vi.fn().mockResolvedValue({
-        ok: true,
-        status: 204,
-        text: () => Promise.resolve(""),
-      });
-      vi.stubGlobal("fetch", mock);
-
-      const result = await client.terminateResourceSession("r_abc123def45", "sess_1");
-
-      expect(result).toBeUndefined();
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/resources/r_abc123def45/sessions/sess_1",
-        expect.objectContaining({ method: "DELETE", body: undefined }),
-      );
-    });
-
-    it("sends DELETE to /v1/resources/:id/sessions for all sessions", async () => {
-      const mockData = { data: { terminated: 3 }, meta: { request_id: "req_term" } };
-      const mock = stubFetch(mockData);
-
-      const result = await client.terminateAllResourceSessions("r_abc123def45");
-
-      expect(mock).toHaveBeenCalledWith(
-        "https://api.test.com/v1/resources/r_abc123def45/sessions",
-        expect.objectContaining({ method: "DELETE", body: undefined }),
-      );
-      expect(result).toEqual(mockData);
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err.statusCode).toBe(403);
+      expect(err.code).toBe("insufficient_scope");
+      expect(err.requestId).toBe("req_9");
     });
   });
 });

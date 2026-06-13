@@ -56,7 +56,7 @@ qurl-mcp/
 ├── src/
 │   ├── index.ts           # Entry point, env validation, stdio transport
 │   ├── server.ts          # MCP server factory, tool/resource/prompt registration
-│   ├── client.ts          # TypeScript qURL API client
+│   ├── client.ts          # Adapter over the @layervai/qurl SDK (IQURLClient + QURLAPIError)
 │   ├── tools/
 │   │   ├── _shared.ts       # resourceIdSchema, zodErrorToToolResult
 │   │   ├── create-qurl.ts
