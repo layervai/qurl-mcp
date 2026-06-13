@@ -119,6 +119,23 @@ describe("QURLClient adapter", () => {
       expect((out.data as { access_tokens?: unknown }).access_tokens).toBeUndefined();
     });
 
+    it("extendQURL delegates to sdk.extend and maps the resource result", async () => {
+      // extend changed code paths (old client delegated to updateQURL); confirm
+      // it hits sdk.extend and the resource is mapped (access_tokens → qurls).
+      sdk.extend.mockResolvedValue({
+        resource_id: "r_x",
+        status: "active",
+        created_at: "t",
+        expires_at: "t2",
+        access_tokens: [{ qurl_id: "q_a", status: "active" }],
+      });
+      const out = await newClient().extendQURL("r_x", { extend_by: "24h" });
+
+      expect(sdk.extend).toHaveBeenCalledWith("r_x", { extend_by: "24h" });
+      expect(out.data.qurls).toEqual([{ qurl_id: "q_a", status: "active" }]);
+      expect((out.data as { access_tokens?: unknown }).access_tokens).toBeUndefined();
+    });
+
     it("listQURLs reshapes the SDK envelope into { data, meta } and maps each item", async () => {
       sdk.list.mockResolvedValue({
         qurls: [{ resource_id: "r_x", access_tokens: [] }],
@@ -146,6 +163,30 @@ describe("QURLClient adapter", () => {
       expect(out.data.failed).toBe(0);
       expect(out.data.results).toHaveLength(1);
       expect(out.meta.request_id).toBe("req_1");
+    });
+
+    it("batchCreate surfaces the all-failed (HTTP 400 passthrough) case as failed > 0", async () => {
+      // The SDK passes through HTTP 400 (every item failed) as a populated
+      // BatchCreateOutput instead of throwing; the adapter must reshape it,
+      // not let it surface as a thrown JSON-RPC error.
+      sdk.batchCreate.mockResolvedValue({
+        succeeded: 0,
+        failed: 2,
+        results: [
+          { index: 0, success: false, error: { code: "invalid_input", message: "non-https" } },
+          { index: 1, success: false, error: { code: "invalid_input", message: "non-https" } },
+        ],
+        request_id: "req_fail",
+      });
+      const out = await newClient().batchCreate({
+        items: [{ target_url: "ftp://a" }, { target_url: "ftp://b" }],
+      });
+
+      expect(out.data.succeeded).toBe(0);
+      expect(out.data.failed).toBe(2);
+      expect(out.data.results).toHaveLength(2);
+      expect(out.data.results[0].success).toBe(false);
+      expect(out.meta.request_id).toBe("req_fail");
     });
 
     it("listResourceSessions maps sessions → data", async () => {

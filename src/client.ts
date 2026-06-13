@@ -11,15 +11,8 @@
 
 import { QURLClient as SDKQURLClient, QURLError } from "@layervai/qurl";
 import type {
-  BatchCreateInput as SDKBatchCreateInput,
-  CreateInput as SDKCreateInput,
-  ExtendInput as SDKExtendInput,
-  ListInput as SDKListInput,
-  MintInput as SDKMintInput,
   QURL as SDKQURL,
   Resource as SDKResource,
-  UpdateInput as SDKUpdateInput,
-  UpdateResourceInput as SDKUpdateResourceInput,
   UpdateResourceQurlInput as SDKUpdateResourceQurlInput,
 } from "@layervai/qurl";
 
@@ -382,12 +375,16 @@ function translateError(err: unknown): unknown {
     return new QURLAPIError(
       err.status,
       err.code,
-      err.detail || err.message,
+      // `QURLError.detail` is non-optional and always populated (the SDK falls
+      // back to `title` when the API omits detail), so it carries the same
+      // human-readable text the old client's detail/title/message chain did.
+      err.detail,
       err.type,
       err.instance,
       err.requestId,
-      // The SDK surfaces tombstone metadata (410 path) on the error when the
-      // API returns it; absent on the SDK's error type, this is simply undefined.
+      // 410 tombstone metadata: the SDK's QURLError does not currently surface
+      // it, so this is always undefined. Kept for forward-compat and because
+      // QURLAPIError carries the field; no MCP tool reads it today.
       (err as { tombstone?: TombstoneInfo }).tombstone,
     );
   }
@@ -398,10 +395,13 @@ function translateError(err: unknown): unknown {
  * Map an SDK resource read (`QURL`/`Resource`) onto the MCP's `QURL` shape.
  * The only structural difference is the field name for the nested tokens:
  * the SDK exposes `access_tokens`, the MCP's output schemas validate `qurls`.
+ * When the SDK omits `access_tokens`, the key is dropped entirely rather than
+ * surfaced as `qurls: undefined`.
  */
 function mapResource(raw: SDKQURL | SDKResource): QURL {
   const { access_tokens, ...rest } = raw as SDKQURL;
-  return { ...rest, qurls: access_tokens } as unknown as QURL;
+  const mapped = access_tokens === undefined ? rest : { ...rest, qurls: access_tokens };
+  return mapped as unknown as QURL;
 }
 
 // --- Client implementation ---
@@ -460,10 +460,17 @@ export class QURLClient implements IQURLClient {
     }
   }
 
+  // Casts at the SDK boundary are kept as tight as the compiler allows:
+  // inputs pass through unannotated where the MCP type is structurally
+  // assignable to the SDK type (a genuine drift then fails to compile), and
+  // outputs use a single `as` (not `as unknown as`) so a grossly incompatible
+  // SDK return is still rejected. `mapResource`'s `QURL`/`Resource` → MCP
+  // `QURL` conversion is the one place a double cast is genuinely required.
+  // The tools additionally validate every `structuredContent` against their
+  // zod `outputSchema`, so any residual response drift surfaces at runtime.
+
   async createQURL(input: CreateQURLInput): Promise<{ data: CreateQURLData }> {
-    return this.call(async (sdk) => ({
-      data: (await sdk.create(input as unknown as SDKCreateInput)) as unknown as CreateQURLData,
-    }));
+    return this.call(async (sdk) => ({ data: (await sdk.create(input)) as CreateQURLData }));
   }
 
   async getQURL(id: string): Promise<{ data: QURL }> {
@@ -472,7 +479,10 @@ export class QURLClient implements IQURLClient {
 
   async listQURLs(input?: ListQURLsInput): Promise<ListQURLsOutput> {
     return this.call(async (sdk) => {
-      const out = await sdk.list(input as unknown as SDKListInput);
+      const out = await sdk.list(input);
+      // The SDK's list envelope is `{ qurls, next_cursor, has_more }` and does
+      // not surface `meta.page_size` / `meta.request_id` (both optional in the
+      // output schema), so they are intentionally absent here.
       return {
         data: out.qurls.map(mapResource),
         meta: { next_cursor: out.next_cursor, has_more: out.has_more },
@@ -485,47 +495,41 @@ export class QURLClient implements IQURLClient {
   }
 
   async updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }> {
-    return this.call(async (sdk) => ({
-      data: mapResource(await sdk.update(id, input as unknown as SDKUpdateInput)),
-    }));
+    return this.call(async (sdk) => ({ data: mapResource(await sdk.update(id, input)) }));
   }
 
   async updateResource(id: string, input: UpdateResourceInput): Promise<{ data: QURL }> {
-    return this.call(async (sdk) => ({
-      data: mapResource(await sdk.updateResource(id, input as unknown as SDKUpdateResourceInput)),
-    }));
+    return this.call(async (sdk) => ({ data: mapResource(await sdk.updateResource(id, input)) }));
   }
 
   async extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }> {
-    return this.call(async (sdk) => ({
-      data: mapResource(await sdk.extend(id, input as unknown as SDKExtendInput)),
-    }));
+    return this.call(async (sdk) => ({ data: mapResource(await sdk.extend(id, input)) }));
   }
 
   async resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }> {
-    return this.call(async (sdk) => ({
-      data: (await sdk.resolve(input)) as unknown as ResolveOutput,
-    }));
+    return this.call(async (sdk) => ({ data: (await sdk.resolve(input)) as ResolveOutput }));
   }
 
   async getQuota(): Promise<{ data: QuotaOutput }> {
-    return this.call(async (sdk) => ({ data: (await sdk.getQuota()) as unknown as QuotaOutput }));
+    return this.call(async (sdk) => ({ data: (await sdk.getQuota()) as QuotaOutput }));
   }
 
   async mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }> {
-    return this.call(async (sdk) => ({
-      data: (await sdk.mintLink(id, input as unknown as SDKMintInput)) as unknown as MintLinkOutput,
-    }));
+    return this.call(async (sdk) => ({ data: (await sdk.mintLink(id, input)) as MintLinkOutput }));
   }
 
   async batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput> {
     return this.call(async (sdk) => {
-      const out = await sdk.batchCreate(input as unknown as SDKBatchCreateInput);
+      // The SDK passes through HTTP 400 (all items failed) as a populated
+      // BatchCreateOutput rather than throwing, so the all-failed case still
+      // reaches here with `failed > 0` — matching the old passthrough behavior
+      // that batch-create.ts depends on.
+      const out = await sdk.batchCreate(input);
       return {
         data: {
           succeeded: out.succeeded,
           failed: out.failed,
-          results: out.results as unknown as BatchItemResult[],
+          results: out.results as BatchItemResult[],
         },
         meta: { request_id: out.request_id },
       };
@@ -542,11 +546,14 @@ export class QURLClient implements IQURLClient {
     input: UpdateQurlTokenInput,
   ): Promise<{ data: AccessToken }> {
     return this.call(async (sdk) => ({
+      // The SDK types this input as an extend_by-XOR-expires_at discriminated
+      // union; the MCP's UpdateQurlTokenInput allows both fields and enforces
+      // the XOR via a zod refinement in update-qurl-token.ts, so bridge here.
       data: (await sdk.updateResourceQurl(
         resourceId,
         qurlId,
         input as unknown as SDKUpdateResourceQurlInput,
-      )) as unknown as AccessToken,
+      )) as AccessToken,
     }));
   }
 
@@ -554,7 +561,7 @@ export class QURLClient implements IQURLClient {
     return this.call(async (sdk) => {
       const out = await sdk.listResourceSessions(resourceId);
       return {
-        data: out.sessions as unknown as SessionData[],
+        data: out.sessions as SessionData[],
         meta: { request_id: out.request_id },
       };
     });
