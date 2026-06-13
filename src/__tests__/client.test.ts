@@ -44,7 +44,7 @@ vi.mock("@layervai/qurl", async (importOriginal) => {
 });
 
 import { QURLClient, QURLAPIError, MISSING_API_KEY_MESSAGE } from "../client.js";
-import { NotFoundError, AuthorizationError } from "@layervai/qurl";
+import { NotFoundError, AuthorizationError, NetworkError } from "@layervai/qurl";
 
 const newClient = (apiKey = "lv_live_key", baseURL = "https://api.test.layerv.ai") =>
   new QURLClient({ apiKey, baseURL });
@@ -307,6 +307,20 @@ describe("QURLClient adapter", () => {
       expect(err.statusCode).toBe(403);
       expect(err.code).toBe("insufficient_scope");
       expect(err.requestId).toBe("req_9");
+    });
+
+    it("translates a transport-level SDK error (NetworkError) to QURLAPIError", async () => {
+      // All SDK error subclasses — including transport/timeout failures —
+      // extend QURLError, so translateError catches them too (status 0). This
+      // matters for delete-qurl, which only swallows QURLAPIError instances.
+      sdk.get.mockRejectedValue(new NetworkError("connection refused"));
+      const err = (await newClient()
+        .getQURL("r_x")
+        .catch((e: unknown) => e)) as QURLAPIError;
+
+      expect(err).toBeInstanceOf(QURLAPIError);
+      expect(err.statusCode).toBe(0);
+      expect(err.code).toBe("network_error");
     });
   });
 });
