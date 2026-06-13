@@ -21,11 +21,16 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        version="v1.7.2"
+        # mcp-publisher >= v1.7.6 is REQUIRED: the registry binds the GitHub
+        # OIDC token exchange to a per-deployment audience
+        # (https://registry.modelcontextprotocol.io). Older publishers request
+        # the legacy `mcp-registry` audience and fail `login github-oidc` with
+        # a 401 "invalid audience". Do not downgrade below v1.7.6.
+        version="v1.7.9"
         tarball="mcp-publisher_linux_amd64.tar.gz"
-        # Pinned sha256 from upstream registry_1.7.2_checksums.txt — bump
+        # Pinned sha256 from upstream registry_1.7.9_checksums.txt — bump
         # alongside the `version` above when upgrading the publisher.
-        expected_sha="9a324bab0bc69bf957599d7975b663d7c4169eba2cdc00baf0f589b847e03898"
+        expected_sha="ab128162b0616090b47cf245afe0a23f3ef08936fdce19074f5ba0a4469281ac"
         url="https://github.com/modelcontextprotocol/registry/releases/download/${version}/${tarball}"
         curl -fsSL --retry 3 --retry-delay 5 "$url" -o /tmp/mcp-publisher.tar.gz
         echo "${expected_sha}  /tmp/mcp-publisher.tar.gz" | sha256sum -c -
