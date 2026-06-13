@@ -197,6 +197,13 @@ The repository includes an API spec drift detection system:
 - **Action:** When an issue is opened, review the diff, update `api-spec/qurls.yaml`, update client types/tools as needed, and verify with `npm run build && npm run lint && npm test`.
 - **Spec URL:** Configurable via the `QURL_API_SPEC_URL` repository variable. Defaults to `https://api.layerv.ai/v1/openapi.yaml`.
 
+## npm Publishing (Trusted Publishing / OIDC)
+
+- The `publish` job in `.github/workflows/release-please.yml` publishes to npm via **OIDC trusted publishing — there is no `NODE_AUTH_TOKEN`/`NPM_TOKEN`.** Do **not** re-add a token when debugging a publish failure; npm authenticates via the trusted publisher using the job's `id-token: write`.
+- **npmjs.com prerequisite:** a trusted publisher must be configured for `@layervai/qurl-mcp` (provider GitHub Actions, repo `layervai/qurl-mcp`, workflow `release-please.yml`, environment `npm-publish`). A mismatch (or a missing config) surfaces only at publish time on a tagged release, as `E404`/`ENEEDAUTH` — there is no token fallback.
+- The job pins `npm@11.10.0` before publishing because trusted publishing needs npm ≥ 11.5.1 and Node 22 bundles npm 10.x. Keep this in sync with the `@layervai/qurl` SDK's pinned npm.
+- This mirrors the SDK repo (`layervai/qurl-typescript`), which uses the same trusted-publishing setup.
+
 ## MCP Registry
 
 - **Manifest:** `server.json` (validated against the registry's JSON Schema). Both `$.version` and `$.packages[0].version` are kept in sync with `package.json` automatically by release-please's `extra-files` config.
