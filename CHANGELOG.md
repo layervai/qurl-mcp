@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.4.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.4.0...qurl-mcp-v0.4.1) (2026-06-13)
+
+
+### Features
+
+* **client:** use the @layervai/qurl SDK instead of the hand-rolled client ([#157](https://github.com/layervai/qurl-mcp/issues/157)) ([63faacd](https://github.com/layervai/qurl-mcp/commit/63faacd691c3effe38a5d78b3df903cea75877cc))
+* sync qurl-service API contract ([#148](https://github.com/layervai/qurl-mcp/issues/148)) ([9076313](https://github.com/layervai/qurl-mcp/commit/907631344f3a9323a777d9c590afef7a3f03ee70))
+
+
+### Bug Fixes
+
+* **deps:** replace removed z.AnyZodObject with z.ZodObject for zod v4 ([#133](https://github.com/layervai/qurl-mcp/issues/133)) ([c367ef8](https://github.com/layervai/qurl-mcp/commit/c367ef8b6ed4a42304eb1b76b6dd77789fe63188))
+* **tools:** close items 1 and 3 from issue [#83](https://github.com/layervai/qurl-mcp/issues/83) follow-ups ([#100](https://github.com/layervai/qurl-mcp/issues/100)) ([48b55e5](https://github.com/layervai/qurl-mcp/commit/48b55e57179d572df494b9cc4245bb26c83e8bb0))
+
 ## [0.4.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.3.4...qurl-mcp-v0.4.0) (2026-04-29)
 
 
