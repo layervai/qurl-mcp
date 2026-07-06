@@ -6,7 +6,13 @@ on:
 
 jobs:
   review:
-    if: github.actor != 'dependabot[bot]'
+    # Fork PRs get neither secrets nor OIDC (ANTHROPIC_API_KEY is empty and
+    # the id-token permission is never granted), so the action cannot run
+    # there. Do NOT "fix" by switching to pull_request_target — that would
+    # expose secrets to untrusted fork code.
+    if: |
+      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
