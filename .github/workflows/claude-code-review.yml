@@ -3,16 +3,30 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize]
+  # Maintainer-triggered review for fork PRs, which the pull_request
+  # trigger skips (no secrets/OIDC there). This mode never checks out the
+  # PR's code — Claude reads the diff via `gh pr diff` — so it is safe to
+  # run against untrusted forks. It also sidesteps
+  # anthropics/claude-code-action#1423, which breaks @claude tag-mode on
+  # fork PRs whose head branch is named "main".
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to review"
+        required: true
+        type: string
 
 jobs:
   review:
     # Fork PRs get neither secrets nor OIDC (ANTHROPIC_API_KEY is empty and
     # the id-token permission is never granted), so the action cannot run
     # there. Do NOT "fix" by switching to pull_request_target — that would
-    # expose secrets to untrusted fork code.
+    # expose secrets to untrusted fork code. To review a fork PR, use the
+    # workflow_dispatch trigger above.
     if: |
-      github.actor != 'dependabot[bot]' &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event_name == 'workflow_dispatch' ||
+      (github.actor != 'dependabot[bot]' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -33,7 +47,7 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
             REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
 
             Review this PR following the guidance in CLAUDE.md.
             Focus on:
