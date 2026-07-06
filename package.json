@@ -33,7 +33,7 @@
     "url": "https://github.com/layervai/qurl-mcp"
   },
   "dependencies": {
-    "@layervai/qurl": "^0.2.0",
+    "@layervai/qurl": "^0.3.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "zod": "^4.4.3"
   },
