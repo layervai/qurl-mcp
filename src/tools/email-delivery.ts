@@ -19,7 +19,9 @@ export const emailDeliveryInputSchema = z.object({
     .max(200)
     .refine((subject) => !/[\r\n]/.test(subject), "Subject must be a single line.")
     .optional()
-    .describe("Optional email subject. Defaults to a tool-specific subject when omitted."),
+    .describe(
+      "Optional single-line email subject. Defaults to a tool-specific subject when omitted.",
+    ),
   message: z
     .string()
     .max(5000)

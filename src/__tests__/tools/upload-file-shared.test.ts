@@ -130,9 +130,11 @@ describe("file name validation", () => {
 
   it("requires JPEG files to end at an image end marker", () => {
     const valid = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]);
+    const overlappingMarkers = Buffer.from([0xff, 0xd8, 0xff, 0xff, 0xd9]);
     const trailingPolyglot = Buffer.concat([valid, Buffer.from("trailing")]);
 
     expect(() => validateFileSignature(valid, "image/jpeg")).not.toThrow();
+    expect(() => validateFileSignature(overlappingMarkers, "image/jpeg")).toThrow("does not match");
     expect(() => validateFileSignature(trailingPolyglot, "image/jpeg")).toThrow("does not match");
   });
 

@@ -33,6 +33,13 @@ describe("createTextPdfTempFile", () => {
     await result.cleanup();
   });
 
+  it("normalizes chained source extensions to one PDF extension", async () => {
+    const result = await createTextPdfTempFile({ content: "safe", fileName: "archive.tar.gz" });
+
+    expect(result.fileName).toBe("archive.pdf");
+    await result.cleanup();
+  });
+
   it("enforces the renderer content bound at the service boundary", async () => {
     await expect(createTextPdfTempFile({ content: "x".repeat(100_001) })).rejects.toThrow(
       "must not exceed 100,000 characters",

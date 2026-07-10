@@ -258,8 +258,9 @@ SMTP delivery. Configure `allowedRecipients` or `allowedRecipientDomains`
 before enabling SMTP on an Internet-facing HTTP deployment; empty allowlists
 permit delivery to any syntactically valid address subject to the quotas.
 The SMTP transport uses bounded connection/socket timeouts and is closed after
-each delivery batch. Failed SMTP attempts still consume quota so repeated
-failures cannot bypass the abuse limit.
+each delivery batch. Failed SMTP attempts still consume quota—including when a
+transient outage results in zero delivered messages—so repeated failures cannot
+bypass the abuse limit.
 Transport encryption is mandatory: `smtp.secure: true` uses implicit TLS,
 while `smtp.secure: false` requires a successful STARTTLS upgrade.
 Hourly quota state is maintained per server process: it resets on restart and

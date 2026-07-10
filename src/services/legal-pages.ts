@@ -252,6 +252,9 @@ function renderLegalShell(document: LegalDocument, baseUrl: string): string {
   const canonicalUrl = new URL(document.path, baseUrl).toString();
   const body = renderMarkdownToHtml(document.markdown);
 
+  // `body` is trusted HTML only because renderMarkdownToHtml escapes every
+  // source text node before adding its small, fixed tag vocabulary. Keep that
+  // invariant if legal copy ever becomes request- or operator-supplied.
   return `<!DOCTYPE html>
 <html lang="en">
   <head>

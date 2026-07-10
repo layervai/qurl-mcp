@@ -31,8 +31,9 @@ function ensurePdfFileName(input: string | undefined): string {
   const baseName = basename(sanitizePdfText(input ?? "content", "content")) || "content";
   const withoutExt = baseName.toLowerCase().endsWith(".pdf")
     ? baseName.slice(0, -4)
-    : baseName.replace(/\.[^.]+$/, "");
-  const safeStem = withoutExt && !/^\.+$/.test(withoutExt) ? withoutExt : "content";
+    : baseName.replace(/\..*$/, "");
+  const normalizedStem = withoutExt.replace(/\.+$/, "");
+  const safeStem = normalizedStem || "content";
   return `${safeStem}.pdf`;
 }
 

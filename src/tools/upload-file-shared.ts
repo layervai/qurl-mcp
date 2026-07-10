@@ -154,7 +154,7 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
       bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) &&
       bytes.subarray(-PNG_IEND_CHUNK.length).equals(PNG_IEND_CHUNK)) ||
     (contentType === "image/jpeg" &&
-      bytes.length >= 5 &&
+      bytes.length >= 6 &&
       bytes[0] === 0xff &&
       bytes[1] === 0xd8 &&
       bytes[2] === 0xff &&
