@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { BatchCreateOutput, IQURLClient } from "../client.js";
 import { createQurlSchema } from "./create-qurl.js";
-import { toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
 import { batchCreateOutputSchema } from "./output-schemas.js";
 
 function isBatchPayload(value: unknown): value is BatchCreateOutput["data"] {
@@ -20,7 +24,10 @@ export const batchCreateSchema = z.object({
     .describe("Array of qURL creation requests (1-100 items)"),
 });
 
-export function batchCreateTool(client: IQURLClient) {
+export function batchCreateTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "batch_create_qurls",
     title: "Batch Create qURLs",

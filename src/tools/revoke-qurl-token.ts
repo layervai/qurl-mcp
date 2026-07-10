@@ -5,6 +5,7 @@ import {
   resourceOnlyIdSchema,
   toStructuredContent,
   withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
 } from "./_shared.js";
 import { revokeQurlTokenOutputSchema } from "./output-schemas.js";
 
@@ -13,7 +14,10 @@ export const revokeQurlTokenSchema = z.object({
   qurl_id: qurlDisplayIdSchema("revoke"),
 });
 
-export function revokeQurlTokenTool(client: IQURLClient) {
+export function revokeQurlTokenTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "revoke_qurl_token",
     title: "Revoke qURL Token",

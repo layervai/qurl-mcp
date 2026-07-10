@@ -1,13 +1,18 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { resourceIdSchema, toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  resourceIdSchema,
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
 import { getQurlOutputSchema } from "./output-schemas.js";
 
 export const getQurlSchema = z.object({
   resource_id: resourceIdSchema("fetch"),
 });
 
-export function getQurlTool(client: IQURLClient) {
+export function getQurlTool(client: IQURLClient, _runtime: ToolRuntimeOptions = { mode: "stdio" }) {
   return {
     name: "get_qurl",
     title: "Get qURL",

@@ -5,6 +5,7 @@ import {
   toStructuredContent,
   withMissingApiKeyHandler,
   zodErrorToToolResult,
+  type ToolRuntimeOptions,
 } from "./_shared.js";
 import { updateQurlOutputSchema } from "./output-schemas.js";
 
@@ -89,7 +90,10 @@ export const updateQurlSchema = updateQurlBaseSchema
     },
   );
 
-export function updateQurlTool(client: IQURLClient) {
+export function updateQurlTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "update_qurl",
     title: "Update qURL",

@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
 import { listQurlsOutputSchema } from "./output-schemas.js";
 
 export const listQurlsSchema = z.object({
@@ -56,7 +60,10 @@ export const listQurlsSchema = z.object({
   q: z.string().min(1).optional().describe("Search query (searches description and target_url)"),
 });
 
-export function listQurlsTool(client: IQURLClient) {
+export function listQurlsTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "list_qurls",
     title: "List qURLs",

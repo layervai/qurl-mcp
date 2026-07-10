@@ -1,13 +1,21 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { resourceOnlyIdSchema, toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  resourceOnlyIdSchema,
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
 import { listQurlSessionsOutputSchema } from "./output-schemas.js";
 
 export const listQurlSessionsSchema = z.object({
   resource_id: resourceOnlyIdSchema("list active sessions for"),
 });
 
-export function listQurlSessionsTool(client: IQURLClient) {
+export function listQurlSessionsTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "list_qurl_sessions",
     title: "List qURL Sessions",

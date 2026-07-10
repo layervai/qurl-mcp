@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type IQURLClient, QURLAPIError } from "../client.js";
-import { withMissingApiKeyHandler } from "./_shared.js";
+import { withMissingApiKeyHandler, type ToolRuntimeOptions } from "./_shared.js";
 import { deleteQurlOutputSchema } from "./output-schemas.js";
 
 export const deleteQurlSchema = z.object({
@@ -17,7 +17,10 @@ export const deleteQurlSchema = z.object({
     .describe("The resource ID (r_ prefix). delete_qurl does not accept q_ (qURL display) IDs."),
 });
 
-export function deleteQurlTool(client: IQURLClient) {
+export function deleteQurlTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "delete_qurl",
     title: "Delete qURL",

@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { type IQURLClient, QURLAPIError } from "../client.js";
-import { resourceOnlyIdSchema, toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  resourceOnlyIdSchema,
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
 import { terminateQurlSessionsOutputSchema } from "./output-schemas.js";
 
 export const terminateQurlSessionsSchema = z.object({
@@ -14,7 +19,10 @@ export const terminateQurlSessionsSchema = z.object({
     ),
 });
 
-export function terminateQurlSessionsTool(client: IQURLClient) {
+export function terminateQurlSessionsTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "terminate_qurl_sessions",
     title: "Terminate qURL Sessions",
