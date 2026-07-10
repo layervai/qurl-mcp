@@ -45,6 +45,8 @@ export function resolveFontPath(candidatePath = bundledFontPath): string | undef
   return undefined;
 }
 
+const resolvedBundledFontPath = resolveFontPath();
+
 export async function createTextPdfTempFile(input: {
   content: string;
   fileName?: string;
@@ -63,7 +65,7 @@ export async function createTextPdfTempFile(input: {
   const tempDir = await mkdtemp(join(tmpdir(), "qurl-text-pdf-"));
   const fileName = ensurePdfFileName(input.fileName);
   const filePath = join(tempDir, fileName);
-  const fontPath = resolveFontPath();
+  const fontPath = resolvedBundledFontPath;
 
   try {
     await new Promise<void>((resolve, reject) => {
