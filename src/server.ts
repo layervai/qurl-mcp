@@ -89,6 +89,7 @@ export function createServer(
   client: IQURLClient,
   version: string,
   mode: ServerMode = "stdio",
+  maxUploadFileDataBytes?: number,
 ): McpServer {
   const server = new McpServer({
     name: "qurl",
@@ -96,7 +97,7 @@ export function createServer(
   });
 
   for (const factory of getToolFactoriesForMode(mode)) {
-    const tool = factory(client, { mode });
+    const tool = factory(client, { mode, maxUploadFileDataBytes });
     // registerTool wires outputSchema + annotations into tools/list; pass
     // .shape (ZodRawShape), not the ZodObject itself.
     server.registerTool(

@@ -127,9 +127,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     identifier: "credential",
     keyGenerator: (req) => {
       const token = getAuthenticatedBearerToken(req);
-      // Bearer middleware runs first, so "missing" is a fail-closed fallback
-      // for unexpected middleware composition rather than a normal route.
-      return token ? digestBearerToken(token).toString("hex") : "missing";
+      if (!token) throw new Error("Credential rate limiter reached without authenticated bearer");
+      return digestBearerToken(token).toString("hex");
     },
     standardHeaders: "draft-8",
     legacyHeaders: false,
@@ -155,7 +154,18 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     verifier: createPassthroughBearerVerifier(),
     requiredScopes: ["mcp:tools"],
   });
-  const authenticatedMcpMiddleware = [bearerAuthMiddleware, credentialRateLimiter];
+  const requireRateLimitCredential: express.RequestHandler = (req, res, next) => {
+    if (!getAuthenticatedBearerToken(req)) {
+      rejectJsonRpc(res, 401, "Bearer authentication required.");
+      return;
+    }
+    next();
+  };
+  const authenticatedMcpMiddleware = [
+    bearerAuthMiddleware,
+    requireRateLimitCredential,
+    credentialRateLimiter,
+  ];
 
   if (config.allowedHosts?.length) {
     app.use(hostHeaderValidation(config.allowedHosts));
@@ -201,6 +211,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   });
 
   const sessions = new Map<string, SessionContext>();
+  const closingSessions = new Map<string, Promise<void>>();
   let pendingInitializations = 0;
   const pendingInitializationsByCredential = new Map<string, number>();
 
@@ -232,17 +243,32 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   }
 
   async function closeSession(sessionId: string): Promise<void> {
+    const existingClose = closingSessions.get(sessionId);
+    if (existingClose) {
+      await existingClose;
+      return;
+    }
     const session = sessions.get(sessionId);
     if (!session) return;
     sessions.delete(sessionId);
-    await withRequestAuth(session.sessionId, session.bearerTokenForRedaction, async () => {
-      try {
-        await session.server.close();
-      } catch (error) {
-        // Format while the credential-scoped redaction context is still active.
-        console.error(`[mcp-http] session close failed (${formatErrorForLog(error)})`);
-      }
-    });
+    const closePromise = withRequestAuth(
+      session.sessionId,
+      session.bearerTokenForRedaction,
+      async () => {
+        try {
+          await session.server.close();
+        } catch (error) {
+          // Format while the credential-scoped redaction context is still active.
+          console.error(`[mcp-http] session close failed (${formatErrorForLog(error)})`);
+        }
+      },
+    );
+    closingSessions.set(sessionId, closePromise);
+    try {
+      await closePromise;
+    } finally {
+      closingSessions.delete(sessionId);
+    }
   }
 
   async function sweepExpiredSessions(now = Date.now()): Promise<number> {
@@ -279,6 +305,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
   async function closeAllSessions(): Promise<void> {
     await Promise.all([...sessions.keys()].map((sessionId) => closeSession(sessionId)));
+    // A concurrent DELETE/sweep may have removed its registry entry while its
+    // asynchronous server.close() is still settling. Shutdown callers wait for
+    // that ownership cleanup too rather than observing an empty registry early.
+    await Promise.all([...closingSessions.values()]);
   }
 
   async function trackSessionActivity<T>(
@@ -582,6 +612,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
               createQurlClientFromBearerToken(bearerToken, { qurlApiUrl: defaultQurlApiUrl }),
             version,
             "http",
+            config.maxUploadFileDataBytes,
           );
           const transport =
             options.transportFactory?.() ??

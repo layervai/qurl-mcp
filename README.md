@@ -70,6 +70,10 @@ HTTP upload attempts remain bounded by the per-IP and per-credential MCP rate
 limits; stdio operators should separately constrain autonomous retry loops.
 Upload validation binds the declared media type to the filename plus format
 start/end markers; it is not a malware scanner or full PDF/image decoder.
+For polyglot resistance, a PDF's final `%%EOF` marker must be followed only by
+ASCII whitespace; producer output with other trailing bytes is rejected even
+if a permissive PDF reader would accept it. JPEG validation checks framing and
+terminal markers rather than decoding image segments.
 Connectors must preserve the declared safe media type and serve downloads with
 `X-Content-Type-Options: nosniff` rather than inferring an executable type.
 There is intentionally no application-level path allowlist: symlinks and
@@ -419,6 +423,14 @@ Consequently, any caller with a non-empty bearer can enumerate the public
 tool/resource/prompt catalog and briefly hold bounded pending-session state. On
 hostile networks, place non-loopback deployments behind an identity-aware proxy
 that preserves the caller's qURL bearer credential for `/mcp` authorization.
+Initialization and catalog listing return server-owned static metadata only;
+they do not invoke tool/resource/prompt handlers, read host files, contact the
+qURL API or connector, or send email. Handler calls rely on the configured qURL
+API to authenticate the forwarded bearer before returning data or applying an
+operation. The configured connector is a second credential authority: it must
+authenticate the forwarded qURL bearer before accepting or storing upload bytes.
+Deploying an unauthenticated connector is unsupported because it would allow an
+unvalidated MCP caller to create connector-side state.
 
 Session caps, request rate limits, and email recipient quotas are in-memory and
 apply independently to each server process. A horizontally scaled deployment

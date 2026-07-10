@@ -7,6 +7,7 @@ import { isEmailAddress, normalizeEmailDomain, uniqueRecipients } from "../email
 import { EmailDeliverySetupError } from "../email-types.js";
 import type { EmailDeliveryRecipientResult, EmailDeliveryResult } from "../email-types.js";
 import { formatErrorForLog } from "../logging.js";
+import { flattenControlCharacters } from "../text.js";
 
 // Nodemailer v9 does not publish bundled declarations. @types/nodemailer v8
 // is the current DefinitelyTyped line for TypeScript 6 and covers the
@@ -109,7 +110,8 @@ export async function sendEmailMessage(
   if (recipients.some((recipient) => recipient.length > 254 || !isEmailAddress(recipient))) {
     throw new EmailDeliverySetupError("input", "Email recipients must be valid addresses.");
   }
-  if (!input.subject.trim() || input.subject.length > 200 || /[\r\n]/.test(input.subject)) {
+  const subject = input.subject.trim();
+  if (!subject || subject.length > 200 || flattenControlCharacters(subject) !== subject) {
     throw new EmailDeliverySetupError("input", "Email subject must be a non-empty single line.");
   }
   // Defense at the exported service boundary; tool assembly also checks this
@@ -302,7 +304,7 @@ export async function sendEmailMessage(
         const sent = await transporter.sendMail({
           from,
           to: recipient,
-          subject: input.subject,
+          subject,
           text: input.text,
         });
         results.push({

@@ -4,7 +4,7 @@ import { EmailDeliverySetupError } from "../email-types.js";
 import type { EmailDeliveryResult } from "../email-types.js";
 import { formatErrorForLog } from "../logging.js";
 import { sendEmailMessage } from "../services/email.js";
-import { isControlCodePoint } from "../text.js";
+import { flattenControlCharacters } from "../text.js";
 import { toStructuredContent } from "./_shared.js";
 
 export const emailDeliveryInputSchema = z.object({
@@ -53,9 +53,7 @@ export interface UploadEmailDetails {
 }
 
 function singleLineEmailDetail(value: string): string {
-  return [...value]
-    .map((character) => (isControlCodePoint(character.codePointAt(0) ?? 0) ? " " : character))
-    .join("");
+  return flattenControlCharacters(value);
 }
 
 export function uploadEmailDetailLines(details: UploadEmailDetails): string[] {
@@ -120,7 +118,9 @@ export async function maybeDeliverToolEmail(
 ): Promise<EmailDeliveryResult | undefined> {
   if (!input.delivery) return undefined;
 
-  const subject = input.delivery.subject?.trim() || input.defaultSubject;
+  const subject = flattenControlCharacters(
+    input.delivery.subject?.trim() || input.defaultSubject.trim(),
+  );
   // Preserve formatting in the caller-authored message because it is sent only
   // as the plain-text body. Generated detail fields are flattened separately
   // so an untrusted value cannot visually create another structured detail row.

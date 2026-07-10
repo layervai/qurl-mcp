@@ -8,6 +8,8 @@ export const RESOURCE_ID_PATTERN = /^r_[a-z0-9_-]{11}$/;
 
 export type ToolRuntimeOptions = {
   mode: "stdio" | "http";
+  /** Decoded attachment limit used to build transport-visible upload schemas. */
+  maxUploadFileDataBytes?: number;
 };
 
 export function allowsServerApiKeyFallback(runtime: ToolRuntimeOptions): boolean {

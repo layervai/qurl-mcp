@@ -9,3 +9,10 @@ export function isControlCodePoint(codePoint: number): boolean {
     codePoint === 0x2029
   );
 }
+
+/** Replace header/metadata control characters with spaces without changing printable text. */
+export function flattenControlCharacters(value: string): string {
+  return [...value]
+    .map((character) => (isControlCodePoint(character.codePointAt(0) ?? 0) ? " " : character))
+    .join("");
+}

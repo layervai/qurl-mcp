@@ -152,6 +152,13 @@ describe("sendEmailMessage", () => {
         text: "World",
       }),
     ).rejects.toThrow("single line");
+    await expect(
+      sendEmailMessage({
+        to: ["alice@example.com"],
+        subject: "Hello\u0085Bcc: attacker@example.com",
+        text: "World",
+      }),
+    ).rejects.toThrow("single line");
     expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
   });
 

@@ -211,6 +211,48 @@ describe("HTTP MCP server", () => {
     );
   });
 
+  it("keeps pre-validation MCP catalog requests static and side-effect free", async () => {
+    const client = makeMockClient();
+    const catalogRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      clientFactory: () => client,
+    });
+    const baseUrl = await start(catalogRuntime.app);
+    const token = "unvalidated-catalog-token";
+
+    try {
+      const sessionId = await initialize(baseUrl, token);
+      const headers = { ...bearerHeaders(token), "mcp-session-id": sessionId };
+      expect(
+        (
+          await fetch(`${baseUrl}/mcp`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "notifications/initialized",
+              params: {},
+            }),
+          })
+        ).status,
+      ).toBe(202);
+
+      for (const [index, method] of ["tools/list", "prompts/list", "resources/list"].entries()) {
+        const response = await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ jsonrpc: "2.0", id: index + 2, method, params: {} }),
+        });
+        expect(response.status).toBe(200);
+      }
+
+      for (const method of Object.values(client)) expect(method).not.toHaveBeenCalled();
+      expect(catalogRuntime.getActiveSessionCount()).toBe(1);
+    } finally {
+      await catalogRuntime.closeAllSessions();
+    }
+  });
+
   it("handles non-string methods and array params as bounded unknown-session requests", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/mcp`, {
@@ -1128,6 +1170,83 @@ describe("HTTP MCP server", () => {
     }
   });
 
+  it("closes exactly once when absolute TTL expires during an active tool request", async () => {
+    let releaseCall!: () => void;
+    const callReleased = new Promise<void>((resolve) => {
+      releaseCall = resolve;
+    });
+    let markCallStarted!: () => void;
+    const callStarted = new Promise<void>((resolve) => {
+      markCallStarted = resolve;
+    });
+    const absoluteRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      clientFactory: () =>
+        makeMockClient({
+          createQURL: vi.fn(async () => {
+            markRequestCredentialValidated();
+            markCallStarted();
+            await callReleased;
+            return { data: sampleCreateQURLData() };
+          }),
+        }),
+    });
+    const baseUrl = await start(absoluteRuntime.app);
+    const token = "lv_live_absolute_active_tool";
+    let close: ReturnType<typeof vi.spyOn> | undefined;
+    let transportClose: ReturnType<typeof vi.spyOn> | undefined;
+
+    try {
+      const sessionId = await initialize(baseUrl, token);
+      const headers = { ...bearerHeaders(token), "mcp-session-id": sessionId };
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+        }),
+      });
+      const toolRequest = fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "create_qurl",
+            arguments: { target_url: "https://example.com" },
+          },
+        }),
+      });
+      await callStarted;
+      close = vi.spyOn(McpServer.prototype, "close");
+      transportClose = vi.spyOn(StreamableHTTPServerTransport.prototype, "close");
+
+      const sweep = absoluteRuntime.sweepExpiredSessions(
+        Date.now() + testConfig.sessionAbsoluteTtlMs + 1,
+      );
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+      releaseCall();
+
+      expect(await sweep).toBe(1);
+      expect(absoluteRuntime.getActiveSessionCount()).toBe(0);
+      expect((await Promise.allSettled([toolRequest]))[0].status).toBe("fulfilled");
+      expect(close).toHaveBeenCalledOnce();
+      expect(transportClose).toHaveBeenCalledOnce();
+      await absoluteRuntime.closeAllSessions();
+      expect(close).toHaveBeenCalledOnce();
+      expect(transportClose).toHaveBeenCalledOnce();
+    } finally {
+      releaseCall();
+      close?.mockRestore();
+      transportClose?.mockRestore();
+      await absoluteRuntime.closeAllSessions();
+    }
+  });
+
   it("returns a bounded non-oracular error when a session closes during transport handling", async () => {
     let expiringRuntime!: ReturnType<typeof createHttpRuntime>;
     let requestCount = 0;
@@ -1498,6 +1617,8 @@ describe("HTTP MCP server", () => {
     });
     const baseUrl = await start(deleteRuntime.app);
     const token = "lv_live_concurrent_delete";
+    let close: ReturnType<typeof vi.spyOn> | undefined;
+    let transportClose: ReturnType<typeof vi.spyOn> | undefined;
 
     try {
       const sessionId = await initialize(baseUrl, token);
@@ -1524,6 +1645,8 @@ describe("HTTP MCP server", () => {
         }),
       });
       await callStarted;
+      close = vi.spyOn(McpServer.prototype, "close");
+      transportClose = vi.spyOn(StreamableHTTPServerTransport.prototype, "close");
       const deleteRequest = fetch(`${baseUrl}/mcp`, {
         method: "DELETE",
         headers: {
@@ -1540,8 +1663,18 @@ describe("HTTP MCP server", () => {
       expect(deleteOutcome.status).toBe("fulfilled");
       if (deleteOutcome.status === "fulfilled") expect(deleteOutcome.value.status).toBe(200);
       expect(deleteRuntime.getActiveSessionCount()).toBe(0);
+      expect(close).toHaveBeenCalledOnce();
+      // The SDK's DELETE handler closes its inner web transport and clears the
+      // Protocol transport reference before our ownership cleanup runs, so the
+      // outer transport is not closed a second time.
+      expect(transportClose).not.toHaveBeenCalled();
+      await deleteRuntime.closeAllSessions();
+      expect(close).toHaveBeenCalledOnce();
+      expect(transportClose).not.toHaveBeenCalled();
     } finally {
       releaseCall();
+      close?.mockRestore();
+      transportClose?.mockRestore();
       await deleteRuntime.closeAllSessions();
     }
   });

@@ -7,6 +7,7 @@ import { clearRuntimeConfigCache } from "../../config.js";
 import { makeMockClient } from "../helpers.js";
 import {
   createUploadFileDataQurlSchema,
+  maxBase64CharactersForBytes,
   uploadFileDataQurlSchema,
   uploadFileDataQurlTool as uploadFileDataQurlToolFactory,
 } from "../../tools/upload-file-data-qurl.js";
@@ -84,6 +85,26 @@ describe("uploadFileDataQurlTool", () => {
       });
 
       expect(result.success).toBe(false);
+    });
+
+    it("registers the schema ceiling from the runtime decoded-byte limit", () => {
+      const configuredBytes = 768;
+      const tool = uploadFileDataQurlTool(makeMockClient(), {
+        mode: "http",
+        maxUploadFileDataBytes: configuredBytes,
+      });
+      const ceiling = maxBase64CharactersForBytes(configuredBytes);
+      const input = {
+        file_name: "sample.pdf",
+        content_type: "application/pdf" as const,
+      };
+
+      expect(
+        tool.inputSchema.safeParse({ ...input, file_base64: "A".repeat(ceiling) }).success,
+      ).toBe(true);
+      expect(
+        tool.inputSchema.safeParse({ ...input, file_base64: "A".repeat(ceiling + 1) }).success,
+      ).toBe(false);
     });
   });
 

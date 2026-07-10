@@ -79,6 +79,37 @@ describe("maybeDeliverToolEmail", () => {
     );
   });
 
+  it("flattens controls in caller and default subjects before the service boundary", async () => {
+    vi.mocked(sendEmailMessage).mockResolvedValue({
+      attempted: true,
+      enabled: true,
+      recipients: ["alice@example.com"],
+      sent: 1,
+      failed: 0,
+      results: [{ email: "alice@example.com", success: true, skipped: false }],
+    });
+
+    await maybeDeliverToolEmail({
+      allowServerApiKeyFallback: true,
+      delivery: { to: ["alice@example.com"], subject: "Ready\u0085now" },
+      defaultSubject: "unused",
+      detailLines: ["Secure Link: https://qurl.link/example"],
+    });
+    await maybeDeliverToolEmail({
+      allowServerApiKeyFallback: true,
+      delivery: { to: ["alice@example.com"] },
+      defaultSubject: "Ready\u2028now",
+      detailLines: ["Secure Link: https://qurl.link/example"],
+    });
+
+    expect(
+      vi
+        .mocked(sendEmailMessage)
+        .mock.calls.slice(-2)
+        .map(([message]) => message.subject),
+    ).toEqual(["Ready now", "Ready now"]);
+  });
+
   it("reports an actionable skip before SMTP when the assembled body is oversized", async () => {
     const result = await maybeDeliverToolEmail({
       allowServerApiKeyFallback: true,

@@ -26,15 +26,20 @@ import {
 import { uploadFileQurlOutputSchema } from "./output-schemas.js";
 import { uploadMintOptionsShape } from "./upload-mint-options.js";
 
-// Uploads pass three deliberate bounds: this protocol-wide raw-string ceiling,
-// the HTTP JSON-body limit before tool dispatch, and getMaxUploadFileBytes on
-// the normalized decoded payload. The operator's runtime limit is usually the
-// smallest; keeping this first ceiling fixed preserves schema stability. HTTP
-// only opens a parser ceiling above the 10 MB default for a session already
-// validated by a successful downstream qURL API call (see createHttpRuntime).
+// Uploads pass three deliberate bounds: a runtime-derived raw-string schema
+// ceiling, the HTTP JSON-body limit before tool dispatch, and
+// getMaxUploadFileBytes on the normalized decoded payload. The exported schema
+// uses the protocol-wide 100 MB hard maximum for direct consumers; registered
+// tools advertise the operator's configured decoded-byte limit. HTTP only opens
+// a parser ceiling above the 10 MB default for a session already validated by a
+// successful downstream qURL API call (see createHttpRuntime).
 export const MAX_UPLOAD_FILE_BASE64_CHARACTERS =
   Math.ceil((MAX_UPLOAD_FILE_DATA_BYTES * 4) / 3) + 1024;
 const MAX_DATA_URL_PREFIX_CHARACTERS = 1024;
+
+export function maxBase64CharactersForBytes(maxBytes: number): number {
+  return Math.ceil((maxBytes * 4) / 3) + MAX_DATA_URL_PREFIX_CHARACTERS;
+}
 
 export function createUploadFileDataQurlSchema(
   maxBase64Characters = MAX_UPLOAD_FILE_BASE64_CHARACTERS,
@@ -191,6 +196,11 @@ function decodeBase64File(input: string, maxBytes: number, contentType: string):
 }
 
 export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
+  const inputSchema = createUploadFileDataQurlSchema(
+    runtime.maxUploadFileDataBytes === undefined
+      ? MAX_UPLOAD_FILE_BASE64_CHARACTERS
+      : maxBase64CharactersForBytes(runtime.maxUploadFileDataBytes),
+  );
   return {
     name: "upload_file_data_qurl",
     title: "Upload File Data qURL",
@@ -206,7 +216,7 @@ export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntime
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +
       "Requires `QURL_CONNECTOR_URL`; stdio reads `QURL_API_KEY` from server config, while HTTP uses the caller's bearer credential. " +
       "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
-    inputSchema: uploadFileDataQurlSchema,
+    inputSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {
       title: "Upload File Data qURL",
@@ -215,7 +225,7 @@ export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntime
       idempotentHint: false,
       openWorldHint: true,
     },
-    handler: withMissingApiKeyHandler(async (input: z.infer<typeof uploadFileDataQurlSchema>) => {
+    handler: withMissingApiKeyHandler(async (input: z.infer<typeof inputSchema>) => {
       const allowServerApiKeyFallback = allowsServerApiKeyFallback(runtime);
       // Preflight connector config before decoding payloads so auth/config errors fail fast.
       const connectorConfig = getConnectorConfig(allowServerApiKeyFallback);
