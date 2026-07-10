@@ -137,8 +137,9 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
   // bit and would let non-ASCII bytes impersonate an ASCII magic header.
   // These are bounded type-confusion guards rather than full decoders. Start
   // and end framing rejects bytes appended after a terminal marker, but JPEG
-  // and GIF internals are not parsed; downstream connector validation and
-  // nosniff delivery remain the authoritative content boundary.
+  // and GIF internals and PNG chunk integrity are not parsed; downstream
+  // connector validation and nosniff delivery remain the authoritative content
+  // boundary.
   const ascii = (start: number, end: number) => bytes.subarray(start, end).toString("latin1");
   const pdfEofIndex = bytes.lastIndexOf(PDF_EOF_MARKER);
   const hasPdfTrailer =

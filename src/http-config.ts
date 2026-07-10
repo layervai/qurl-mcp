@@ -145,7 +145,12 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
   const hostValue = process.env.MCP_HOST ?? fileConfig.host ?? DEFAULT_HOST;
   const host = normalizeBindHost(hostValue);
   const configuredBaseUrl = process.env.MCP_BASE_URL ?? fileConfig.baseUrl;
-  const baseUrl = normalizeBaseUrl(configuredBaseUrl ?? `http://127.0.0.1:${port}`);
+  const defaultBaseHost = isLoopbackHostname(host)
+    ? isIP(host) === 6
+      ? `[${host}]`
+      : host
+    : DEFAULT_HOST;
+  const baseUrl = normalizeBaseUrl(configuredBaseUrl ?? `http://${defaultBaseHost}:${port}`);
   const allowedHosts = normalizeAllowedHosts(
     process.env.MCP_ALLOWED_HOSTS ?? fileConfig.allowedHosts,
   );

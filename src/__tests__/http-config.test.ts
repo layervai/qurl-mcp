@@ -74,6 +74,9 @@ describe("HTTP listener config", () => {
         allowedHosts: undefined,
       }),
     );
+
+    writeFileSync(configPath, JSON.stringify({ host: "::1" }));
+    expect(loadHttpServerConfig(configPath).baseUrl).toBe("http://[::1]:3000");
   });
 
   it("accepts a bracketed IPv6 literal in the Host allowlist", () => {
