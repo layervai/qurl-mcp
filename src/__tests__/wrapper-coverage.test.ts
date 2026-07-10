@@ -19,6 +19,7 @@ import { updateQurlTokenTool } from "../tools/update-qurl-token.js";
 import { uploadFileDataQurlTool } from "../tools/upload-file-data-qurl.js";
 import { uploadFileQurlTool } from "../tools/upload-file-qurl.js";
 import { uploadTextQurlTool } from "../tools/upload-text-qurl.js";
+import type { ToolRuntimeOptions } from "../tools/_shared.js";
 import { linksResource } from "../resources/links.js";
 import { usageResource } from "../resources/usage.js";
 import { makeMockClient } from "./helpers.js";
@@ -39,7 +40,10 @@ const missingKeyError = () => new QURLAPIError(0, "missing_api_key", MISSING_API
 
 type ToolCase = {
   name: string;
-  build: (client: IQURLClient) => { handler: (input: never) => Promise<unknown> };
+  build: (
+    client: IQURLClient,
+    runtime: ToolRuntimeOptions,
+  ) => { handler: (input: never) => Promise<unknown> };
   // Mock methods on the client to throw missing_api_key. Keyed so each
   // tool only stubs the method it actually invokes (defensive against
   // future delegation changes — extendQURL currently delegates to

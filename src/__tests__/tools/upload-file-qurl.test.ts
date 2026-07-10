@@ -3,7 +3,6 @@ import { open } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { QURLAPIError } from "../../client.js";
 import { clearRuntimeConfigCache } from "../../config.js";
 import { makeMockClient } from "../helpers.js";
 import {
@@ -296,7 +295,7 @@ describe("uploadFileQurlTool", () => {
 
       const tool = uploadFileQurlTool(makeMockClient());
 
-      await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject<QURLAPIError>({
+      await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject({
         statusCode: 400,
         code: "connector_upload_failed",
         message: `upload rejected${"x".repeat(1_009)}`,
@@ -312,7 +311,7 @@ describe("uploadFileQurlTool", () => {
       );
       const tool = uploadFileQurlTool(makeMockClient());
 
-      await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject<QURLAPIError>({
+      await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject({
         statusCode: 0,
         code: "unexpected_response",
         message: "Connector upload succeeded with a non-JSON response.",
@@ -328,7 +327,7 @@ describe("uploadFileQurlTool", () => {
       );
       const tool = uploadFileQurlTool(makeMockClient());
 
-      await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject<QURLAPIError>({
+      await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject({
         code: "invalid_resource_id",
         message: "Connector upload returned a resource_id with an invalid format.",
       });

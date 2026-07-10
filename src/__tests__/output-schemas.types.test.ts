@@ -1,5 +1,6 @@
 import { describe, it, expect, expectTypeOf } from "vitest";
 import type { z } from "zod";
+import type { EmailDeliveryResult } from "../email-types.js";
 import type {
   AccessToken,
   BatchCreateOutput,
@@ -38,7 +39,13 @@ describe("output schema <-> client type alignment", () => {
   });
 
   it("createQurlOutputSchema matches CreateQURLData", () => {
-    expectTypeOf<z.infer<typeof createQurlOutputSchema>>().toEqualTypeOf<CreateQURLData>();
+    type CreateToolOutput = Omit<CreateQURLData, "qurl_site" | "expires_at"> &
+      Partial<Pick<CreateQURLData, "qurl_site" | "expires_at">> & {
+        email_delivery?: EmailDeliveryResult;
+      };
+    type SchemaOutput = z.infer<typeof createQurlOutputSchema>;
+    expectTypeOf<SchemaOutput>().toMatchTypeOf<CreateToolOutput>();
+    expectTypeOf<CreateToolOutput>().toMatchTypeOf<SchemaOutput>();
   });
 
   it("listQurlsOutputSchema matches ListQURLsOutput", () => {
@@ -50,7 +57,13 @@ describe("output schema <-> client type alignment", () => {
   });
 
   it("mintLinkOutputSchema matches MintLinkOutput", () => {
-    expectTypeOf<z.infer<typeof mintLinkOutputSchema>>().toEqualTypeOf<MintLinkOutput>();
+    type MintLinkToolOutput = Omit<MintLinkOutput, "expires_at"> &
+      Partial<Pick<MintLinkOutput, "expires_at">> & {
+        email_delivery?: EmailDeliveryResult;
+      };
+    type SchemaOutput = z.infer<typeof mintLinkOutputSchema>;
+    expectTypeOf<SchemaOutput>().toMatchTypeOf<MintLinkToolOutput>();
+    expectTypeOf<MintLinkToolOutput>().toMatchTypeOf<SchemaOutput>();
   });
 
   it("allows upload mint responses to omit expires_at like mint_link", () => {
@@ -89,7 +102,9 @@ describe("output schema <-> client type alignment", () => {
     // flattened shape so a new field on `BatchCreateOutput.data` is a
     // compile error here.
     type FlatBatchPayload = BatchCreateOutput["data"] & { request_id?: string };
-    expectTypeOf<z.infer<typeof batchCreateOutputSchema>>().toEqualTypeOf<FlatBatchPayload>();
+    type SchemaPayload = z.infer<typeof batchCreateOutputSchema>;
+    expectTypeOf<SchemaPayload>().toMatchTypeOf<FlatBatchPayload>();
+    expectTypeOf<FlatBatchPayload>().toMatchTypeOf<SchemaPayload>();
   });
 });
 
@@ -123,11 +138,9 @@ describe("qurlSchema.status drift tolerance", () => {
     // future-added enum value. @ts-expect-error documents the violation
     // at the source and would itself fail if QURL.status ever widens to
     // accept "pending" (at which point this test should be revisited).
-    const parsed = qurlSchema.parse({
-      ...sampleQURL(),
-      // @ts-expect-error simulating an out-of-spec API value
-      status: "pending",
-    });
+    // @ts-expect-error simulating an out-of-spec API value
+    const status: QURL["status"] = "pending";
+    const parsed = qurlSchema.parse({ ...sampleQURL(), status });
     expect(parsed.status).toBe("unknown");
   });
 
@@ -138,20 +151,12 @@ describe("qurlSchema.status drift tolerance", () => {
     // only coerces strings) trips this test rather than silently hard-
     // failing structuredContent for null/wrong-type values an upstream
     // bug might emit.
-    expect(
-      qurlSchema.parse({
-        ...sampleQURL(),
-        // @ts-expect-error simulating null on a string-enum field
-        status: null,
-      }).status,
-    ).toBe("unknown");
-    expect(
-      qurlSchema.parse({
-        ...sampleQURL(),
-        // @ts-expect-error simulating a non-string value
-        status: 42,
-      }).status,
-    ).toBe("unknown");
+    // @ts-expect-error simulating null on a string-enum field
+    const nullStatus: QURL["status"] = null;
+    expect(qurlSchema.parse({ ...sampleQURL(), status: nullStatus }).status).toBe("unknown");
+    // @ts-expect-error simulating a non-string value
+    const numericStatus: QURL["status"] = 42;
+    expect(qurlSchema.parse({ ...sampleQURL(), status: numericStatus }).status).toBe("unknown");
     const withoutStatus: Record<string, unknown> = { ...sampleQURL() };
     delete withoutStatus.status;
     expect(qurlSchema.parse(withoutStatus).status).toBe("unknown");
@@ -184,10 +189,11 @@ describe("qurlSchema.status drift tolerance", () => {
     // revoked); a future-added value would otherwise hard-fail nested
     // `qurls` parse. Lock the behavior in symmetrically so a refactor
     // that strips .catch from accessTokenSchema also fails this test.
+    // @ts-expect-error simulating an out-of-spec API value on the nested token
+    const status: AccessToken["status"] = "future-state";
     const parsed = qurlSchema.parse({
       ...sampleQURL(),
-      // @ts-expect-error simulating an out-of-spec API value on the nested token
-      qurls: [sampleAccessToken({ status: "future-state" })],
+      qurls: [sampleAccessToken({ status })],
     });
     expect(parsed.qurls).toHaveLength(1);
     expect(parsed.qurls?.[0].status).toBe("unknown");
@@ -198,12 +204,13 @@ describe("qurlSchema.status drift tolerance", () => {
     // .catch() should propagate through composition. Guard against a
     // future refactor that inlines or re-shapes the field at the list
     // boundary.
+    // @ts-expect-error simulating an out-of-spec API value through the list envelope
+    const status: QURL["status"] = "pending";
     const parsed = listQurlsOutputSchema.parse({
       data: [
         {
           ...sampleQURL(),
-          // @ts-expect-error simulating an out-of-spec API value through the list envelope
-          status: "pending",
+          status,
         },
       ],
       meta: { has_more: false },

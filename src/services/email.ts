@@ -3,7 +3,7 @@ import { hkdf, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { getRequestQurlApiKey } from "../auth/request-context.js";
 import { loadRuntimeConfig, type RuntimeConfig, type SmtpConfig } from "../config.js";
-import { isEmailAddress, uniqueRecipients } from "../email-addresses.js";
+import { isEmailAddress, normalizeEmailDomain, uniqueRecipients } from "../email-addresses.js";
 import { EmailDeliverySetupError } from "../email-types.js";
 import type { EmailDeliveryRecipientResult, EmailDeliveryResult } from "../email-types.js";
 import { formatErrorForLog } from "../logging.js";
@@ -177,14 +177,14 @@ export async function sendEmailMessage(
   }
 
   const exactAllowlist = new Set(smtp.allowedRecipients ?? []);
-  const domainAllowlist = new Set(smtp.allowedRecipientDomains ?? []);
+  const domainAllowlist = new Set((smtp.allowedRecipientDomains ?? []).map(normalizeEmailDomain));
   const hasRecipientRestrictions = exactAllowlist.size > 0 || domainAllowlist.size > 0;
   const allowedRecipients: string[] = [];
   const blockedRecipients: string[] = [];
   for (const recipient of recipients) {
-    // Recipient normalization and config parsing lowercase both sides before
-    // this exact-address/domain comparison.
-    const domain = recipient.slice(recipient.lastIndexOf("@") + 1);
+    // Normalize at the enforcement boundary instead of relying on both the
+    // delivery and config call paths to preserve a hidden shared invariant.
+    const domain = normalizeEmailDomain(recipient.slice(recipient.lastIndexOf("@") + 1));
     const isAllowed =
       !hasRecipientRestrictions || exactAllowlist.has(recipient) || domainAllowlist.has(domain);
     (isAllowed ? allowedRecipients : blockedRecipients).push(recipient);

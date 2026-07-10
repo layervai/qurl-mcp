@@ -46,7 +46,7 @@ export type ConnectorConfig = {
   uploadUrl: string;
 };
 
-export function getConnectorConfig(allowServerApiKeyFallback = true): ConnectorConfig {
+export function getConnectorConfig(allowServerApiKeyFallback = false): ConnectorConfig {
   let runtimeConfig: ReturnType<typeof loadRuntimeConfig> | undefined;
   const getRuntimeConfig = () => (runtimeConfig ??= loadRuntimeConfig());
   const serverApiKey = allowServerApiKeyFallback
@@ -90,6 +90,15 @@ export function getConnectorUploadUrl(connectorURL: string): string {
   }
 
   const basePath = connectorBaseUrl.pathname.replace(/\/$/, "");
+  const containsAmbiguousUploadRoute =
+    /(?:^|\/)(?:api\/)?upload(?:\/|$)/.test(basePath) && !basePath.endsWith("/api/upload");
+  if (containsAmbiguousUploadRoute) {
+    throw new QURLAPIError(
+      0,
+      "invalid_connector_url",
+      "QURL_CONNECTOR_URL must be a connector service base URL or end exactly with /api/upload.",
+    );
+  }
   connectorBaseUrl.pathname = basePath.endsWith("/api/upload")
     ? basePath
     : `${basePath}/api/upload`;

@@ -49,7 +49,7 @@ describe("maybeDeliverToolEmail", () => {
       recipients: ["alice@example.com"],
       sent: 1,
       failed: 0,
-      results: [{ email: "alice@example.com", success: true }],
+      results: [{ email: "alice@example.com", success: true, skipped: false }],
     });
 
     await maybeDeliverToolEmail({

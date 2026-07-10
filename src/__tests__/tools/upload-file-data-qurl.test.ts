@@ -3,7 +3,6 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { QURLAPIError } from "../../client.js";
 import { clearRuntimeConfigCache } from "../../config.js";
 import { makeMockClient } from "../helpers.js";
 import {
@@ -119,7 +118,7 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toMatchObject<QURLAPIError>({ statusCode: 302 });
+      ).rejects.toMatchObject({ statusCode: 302 });
       expect(globalThis.fetch).toHaveBeenCalledWith(
         "https://connector.test/api/upload",
         expect.objectContaining({ redirect: "error" }),
@@ -518,7 +517,7 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toMatchObject<QURLAPIError>({ code: "connector_response_too_large" });
+      ).rejects.toMatchObject({ code: "connector_response_too_large" });
     });
 
     it.each([
@@ -542,7 +541,7 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toMatchObject<QURLAPIError>({ code, statusCode: 0 });
+      ).rejects.toMatchObject({ code, statusCode: 0 });
     });
 
     it("maps a timeout while reading connector response bytes", async () => {
@@ -565,7 +564,7 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toMatchObject<QURLAPIError>({ code: "connector_timeout", statusCode: 0 });
+      ).rejects.toMatchObject({ code: "connector_timeout", statusCode: 0 });
     });
 
     it("throws a typed error when the connector upload fails", async () => {
@@ -586,7 +585,7 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toMatchObject<QURLAPIError>({
+      ).rejects.toMatchObject({
         statusCode: 400,
         code: "connector_upload_failed",
         message: "upload rejected",
@@ -605,7 +604,7 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toMatchObject<QURLAPIError>({
+      ).rejects.toMatchObject({
         statusCode: 502,
         code: "connector_upload_failed",
         message: "Connector upload failed with HTTP 502",

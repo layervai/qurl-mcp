@@ -18,6 +18,7 @@
     "start:http": "node dist/http.js",
     "lint": "eslint src/",
     "test": "vitest run",
+    "typecheck:tests": "tsc --project tsconfig.test.json",
     "format": "prettier --write 'src/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts'",
     "prepublishOnly": "npm run build"

@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { describe, expect, it } from "vitest";
 import {
+  getConnectorConfig,
   getConnectorUploadUrl,
   normalizeFileName,
   validateFileSignature,
@@ -8,6 +9,26 @@ import {
 } from "../../tools/upload-file-shared.js";
 
 describe("getConnectorUploadUrl", () => {
+  it("requires callers to opt into the server API-key fallback", () => {
+    const originalApiKey = process.env.QURL_API_KEY;
+    const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
+    process.env.QURL_API_KEY = "lv_live_server_fallback";
+    process.env.QURL_CONNECTOR_URL = "https://connector.example.com";
+
+    try {
+      expect(() => getConnectorConfig()).toThrow("QURL_API_KEY is not set");
+      expect(getConnectorConfig(true)).toEqual({
+        apiKey: "lv_live_server_fallback",
+        uploadUrl: "https://connector.example.com/api/upload",
+      });
+    } finally {
+      if (originalApiKey === undefined) delete process.env.QURL_API_KEY;
+      else process.env.QURL_API_KEY = originalApiKey;
+      if (originalConnectorUrl === undefined) delete process.env.QURL_CONNECTOR_URL;
+      else process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
+    }
+  });
+
   it("builds the fixed connector upload endpoint for HTTPS origins", () => {
     expect(getConnectorUploadUrl("https://connector.example.com")).toBe(
       "https://connector.example.com/api/upload",
@@ -61,6 +82,11 @@ describe("getConnectorUploadUrl", () => {
     expect(getConnectorUploadUrl("https://connector.example.com/api/uploads")).toBe(
       "https://connector.example.com/api/uploads/api/upload",
     );
+    for (const path of ["/upload", "/api/upload/v2"]) {
+      expect(() => getConnectorUploadUrl(`https://connector.example.com${path}`)).toThrow(
+        "service base URL or end exactly with /api/upload",
+      );
+    }
     expect(() => getConnectorUploadUrl("https://connector.example.com?target=other")).toThrow(
       "must not contain a query",
     );

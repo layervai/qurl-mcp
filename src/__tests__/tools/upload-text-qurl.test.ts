@@ -2,7 +2,6 @@ import { copyFileSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { QURLAPIError } from "../../client.js";
 import { makeMockClient } from "../helpers.js";
 import {
   uploadTextQurlSchema,
@@ -354,7 +353,7 @@ describe("uploadTextQurlTool", () => {
           type: "markdown",
           content: "hello world",
         }),
-      ).rejects.toMatchObject<QURLAPIError>({
+      ).rejects.toMatchObject({
         statusCode: 400,
         code: "connector_upload_failed",
         message: "upload rejected",

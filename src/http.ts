@@ -470,22 +470,25 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     console.warn("[mcp-http] session missing; client must re-initialize");
   }
 
-  function resolveAuthorizedSession(req: express.Request): AuthorizedSession | undefined {
+  function findAuthorizedSession(req: express.Request): AuthorizedSession | undefined {
     const sessionId = getSessionId(req);
     const bearerToken = getAuthenticatedBearerToken(req);
     const session = sessions.get(sessionId ?? "");
-    if (!session) {
-      logMissingSession();
-      return undefined;
-    }
+    if (!session) return undefined;
     if (!bearerToken || !bearerTokenMatches(bearerToken, session.bearerTokenDigest)) {
-      // Use the same 404 response as an unknown ID so callers cannot use the
-      // endpoint or operator logs as a session-existence oracle across bearer
-      // credentials.
-      logMissingSession();
       return undefined;
     }
     return { session, bearerToken };
+  }
+
+  function resolveAuthorizedSession(req: express.Request): AuthorizedSession | undefined {
+    const authorizedSession = findAuthorizedSession(req);
+    if (!authorizedSession) {
+      // Use the same 404 response and operator log for an unknown ID and a
+      // credential mismatch, so neither surface becomes a session oracle.
+      logMissingSession();
+    }
+    return authorizedSession;
   }
 
   function withRequestAuth<T>(
@@ -673,7 +676,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       console.error(`Error handling MCP POST request (${formatErrorForLog(error)})`);
       if (!res.headersSent) {
         const requestedSessionId = getSessionId(req);
-        if (requestedSessionId && !sessions.has(requestedSessionId)) {
+        if (requestedSessionId && !findAuthorizedSession(req)) {
           rejectJsonRpc(res, 409, "Session closed during request. Please re-initialize.");
         } else {
           rejectJsonRpc(res, 500, "Internal server error.");

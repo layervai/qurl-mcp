@@ -222,7 +222,8 @@ Connector destinations are trusted operator configuration rather than caller
 input; private addresses and DNS resolution are therefore permitted. Pin the
 connector hostname in deployment DNS and do not point it at metadata services.
 Configure the connector service base URL, not an upload route: qurl-mcp appends
-`/api/upload` unless the configured path ends exactly with `/api/upload`.
+`/api/upload` to ordinary base paths, accepts that exact endpoint suffix, and
+rejects ambiguous upload-like paths such as `/upload` or `/api/upload/v2`.
 The MCP server performs bounded file-framing checks, not full media parsing;
 the connector must independently revalidate uploaded content before storage or
 serving, and delivery must retain `nosniff` behavior as the authoritative type
@@ -367,7 +368,9 @@ key from bypassing the request allowance by rotating source IPs, while
 Each distinct bearer value retains one credential-bucket entry for the current
 one-minute window. The IP limiter runs first, so token rotation from one source
 cannot create entries faster than `mcpRateLimitPerMinute`; hostile distributed
-traffic still requires the documented shared edge limit.
+traffic still requires the documented shared edge limit. The IP bucket is the
+primary in-process control against arbitrary bearer rotation because distinct
+unvalidated bearer strings necessarily occupy distinct credential buckets.
 Budget pending-session parser memory as `maxUnvalidatedSessions` times roughly
 1.5 times the smaller of `maxUploadFileDataBytes` and 10 MB (plus about 64 KiB
 per request). At the defaults, the theoretical concurrent ceiling is about

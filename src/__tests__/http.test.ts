@@ -1163,6 +1163,56 @@ describe("HTTP MCP server", () => {
     }
   });
 
+  it("does not reveal a registered session from the POST error path", async () => {
+    let requestCount = 0;
+    const guardedRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      transportFactory: () => {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => "error-path-oracle-session",
+        });
+        const handleRequest = transport.handleRequest.bind(transport);
+        transport.handleRequest = async (req, ...rest) => {
+          requestCount += 1;
+          if (requestCount === 3) {
+            const authenticatedRequest = req as typeof req & { auth?: { token?: string } };
+            if (authenticatedRequest.auth) authenticatedRequest.auth.token = "wrong-credential";
+            throw new Error("transport failed after authentication state changed");
+          }
+          await handleRequest(req, ...rest);
+        };
+        return transport;
+      },
+    });
+    const baseUrl = await start(guardedRuntime.app);
+    const token = "lv_live_error_path_owner";
+
+    try {
+      const sessionId = await initialize(baseUrl, token);
+      const headers = { ...bearerHeaders(token), "mcp-session-id": sessionId };
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+        }),
+      });
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.text()).toContain("Session closed during request");
+      expect(guardedRuntime.getActiveSessionCount()).toBe(1);
+    } finally {
+      await guardedRuntime.closeAllSessions();
+    }
+  });
+
   it("runs the scheduled session sweep at the bounded interval", async () => {
     vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
     const sweepRuntime = createHttpRuntime(

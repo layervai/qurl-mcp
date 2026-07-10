@@ -546,7 +546,9 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       const cleanup = setup?.();
 
       try {
-        const result = await tool.handler(input);
+        // `toolFactories` is intentionally heterogeneous; the case table is
+        // the runtime pairing between each named factory and its valid input.
+        const result = await tool.handler(input as never);
 
         expect(result.structuredContent).toBeDefined();
         if (textIsJson) {

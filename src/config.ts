@@ -114,6 +114,10 @@ const runtimeConfigCache = new Map<
   }
 >();
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
+
 function getRuntimeConfigEnvironmentFingerprint(): string {
   const hash = createHash("sha256");
   for (const key of RUNTIME_CONFIG_ENV_KEYS) {
@@ -131,7 +135,7 @@ function getConfigFileFingerprint(configPath: string): string {
     const stats = statSync(configPath, { bigint: true });
     return [stats.dev, stats.ino, stats.size, stats.mtimeNs, stats.ctimeNs].join(":");
   } catch (error) {
-    if ((error as { code?: string }).code === "ENOENT") return "missing";
+    if (hasErrorCode(error, "ENOENT")) return "missing";
     throw error;
   }
 }
@@ -269,6 +273,11 @@ export function trimString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function canonicalizeIpv6Hostname(hostname: string): string {
+  if (isIP(hostname) !== 6) throw new Error("Expected a validated IPv6 hostname.");
+  return new URL(`http://[${hostname}]`).hostname.replace(/^\[(.*)\]$/, "$1");
+}
+
 export function isLoopbackHostname(hostname: string): boolean {
   let normalized = hostname
     .trim()
@@ -277,8 +286,10 @@ export function isLoopbackHostname(hostname: string): boolean {
   if (normalized === "localhost") return true;
   if (isIP(normalized) === 6) {
     // WHATWG URL parsing canonicalizes expanded IPv6 spellings, including
-    // IPv4-mapped addresses, without performing DNS resolution.
-    normalized = new URL("http://[" + normalized + "]").hostname.replace(/^\[(.*)\]$/, "$1");
+    // IPv4-mapped addresses, without performing DNS resolution. The helper
+    // repeats the IPv6 assertion so later callers cannot feed unchecked host
+    // text into the bracketed URL constructor.
+    normalized = canonicalizeIpv6Hostname(normalized);
   }
   if (normalized === "::1") return true;
   const mappedIpv4 = /^::ffff:([0-9a-f]{1,4}):[0-9a-f]{1,4}$/.exec(normalized);
@@ -642,7 +653,7 @@ function inspectSmtpFileConfig(
         );
       }
     } catch (error) {
-      if ((error as { code?: string }).code !== "ENOENT") throw error;
+      if (!hasErrorCode(error, "ENOENT")) throw error;
     }
   }
 
