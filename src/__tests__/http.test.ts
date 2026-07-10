@@ -275,6 +275,24 @@ describe("HTTP MCP server", () => {
     expect(differentTrustedPosition.status).toBe(401);
   });
 
+  it("also rate-limits one bearer credential across source IPs", async () => {
+    const limitedRuntime = createHttpRuntime(
+      { ...testConfig, trustProxyHops: 1, mcpRateLimitPerMinute: 1 },
+      { version: "0.0.0-test" },
+    );
+    const baseUrl = await start(limitedRuntime.app);
+    const postFrom = (token: string, forwardedFor: string) =>
+      fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "x-forwarded-for": forwardedFor },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+      });
+
+    expect((await postFrom("lv_live_rotating", "198.51.100.1")).status).toBe(404);
+    expect((await postFrom("lv_live_rotating", "203.0.113.9")).status).toBe(429);
+    expect((await postFrom("lv_live_distinct", "192.0.2.44")).status).toBe(404);
+  });
+
   it("rate-limits every runtime-wired public route", async () => {
     const fixturePath = fileURLToPath(new URL("./fixtures/sample.pdf", import.meta.url));
     for (const route of ["/legal/privacy", "/media/video", "/media/video/file", "/healthz"]) {
@@ -407,6 +425,60 @@ describe("HTTP MCP server", () => {
     }
   });
 
+  it("logs batched tool calls without depending on a top-level params object", async () => {
+    const batchedRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      clientFactory: () =>
+        makeMockClient({
+          createQURL: vi.fn(async () => {
+            markRequestCredentialValidated();
+            return { data: sampleCreateQURLData() };
+          }),
+        }),
+    });
+    const baseUrl = await start(batchedRuntime.app);
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+    try {
+      const token = "lv_live_batched_logging";
+      const sessionId = await initialize(baseUrl, token);
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "mcp-session-id": sessionId },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+        }),
+      });
+      write.mockClear();
+
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "mcp-session-id": sessionId },
+        body: JSON.stringify([
+          {
+            jsonrpc: "2.0",
+            id: 2,
+            method: "tools/call",
+            params: {
+              name: "create_qurl",
+              arguments: { target_url: "https://example.com" },
+            },
+          },
+        ]),
+      });
+
+      expect(response.status).toBe(200);
+      const output = write.mock.calls.flat().join("");
+      expect(output).toContain("[mcp-http] tool call started");
+      expect(output).toContain("[mcp-http] tool call finished");
+    } finally {
+      write.mockRestore();
+      await batchedRuntime.closeAllSessions();
+    }
+  });
+
   it("rejects an unknown session id without creating state", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/mcp`, {
@@ -420,6 +492,30 @@ describe("HTTP MCP server", () => {
 
     expect(response.status).toBe(404);
     expect(getActiveSessionCount()).toBe(0);
+  });
+
+  it("uses the same operator log for unknown and wrong-credential sessions", async () => {
+    const baseUrl = await start();
+    const sessionId = await initialize(baseUrl, "lv_live_log_owner");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const post = (token: string, requestedSessionId: string) =>
+        fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: { ...bearerHeaders(token), "mcp-session-id": requestedSessionId },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+        });
+
+      expect((await post("lv_live_log_other", sessionId)).status).toBe(404);
+      expect((await post("lv_live_log_other", "missing-session")).status).toBe(404);
+      expect(warn.mock.calls).toEqual([
+        ["[mcp-http] session missing; client must re-initialize"],
+        ["[mcp-http] session missing; client must re-initialize"],
+      ]);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("evicts abandoned sessions after the configured idle window", async () => {
@@ -970,6 +1066,7 @@ describe("public video range streaming", () => {
       "bytes=5-2",
       `bytes=${fixtureSize}-`,
       "bytes=-",
+      "bytes=-0",
       "bytes=0-1,2-3",
       "items=0-1",
     ]) {

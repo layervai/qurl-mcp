@@ -12,6 +12,9 @@ describe("getConnectorUploadUrl", () => {
     expect(getConnectorUploadUrl("https://connector.example.com")).toBe(
       "https://connector.example.com/api/upload",
     );
+    expect(getConnectorUploadUrl("https://connector.example.com/api/upload")).toBe(
+      "https://connector.example.com/api/upload",
+    );
   });
 
   it("allows HTTP only for loopback development endpoints", () => {
@@ -51,16 +54,22 @@ describe("getConnectorUploadUrl", () => {
     );
   });
 
-  it("preserves an operator-configured base path and rejects query or fragment suffixes", () => {
+  it("preserves a safe base path and rejects ambiguous URL suffixes", () => {
     expect(getConnectorUploadUrl("https://connector.example.com/qurl")).toBe(
       "https://connector.example.com/qurl/api/upload",
     );
     expect(() => getConnectorUploadUrl("https://connector.example.com?target=other")).toThrow(
-      "must not contain a query string or fragment",
+      "must not contain a query string",
     );
     expect(() => getConnectorUploadUrl("https://connector.example.com/#other")).toThrow(
-      "must not contain a query string or fragment",
+      "must not contain a fragment",
     );
+    expect(() => getConnectorUploadUrl("https://connector.example.com/tenant/../admin")).toThrow(
+      "must not contain dot path segments",
+    );
+    expect(() =>
+      getConnectorUploadUrl("https://connector.example.com/tenant/%2e%2e/admin"),
+    ).toThrow("must not contain dot path segments");
   });
 });
 
@@ -77,6 +86,9 @@ describe("file name validation", () => {
     );
     expect(() => validateFileNameContentType("document.pdf", "image/png")).toThrow(
       "does not match",
+    );
+    expect(() => validateFileNameContentType("document", "application/pdf")).toThrow(
+      "supported PDF or raster image extension",
     );
   });
 
@@ -103,5 +115,13 @@ describe("file name validation", () => {
     expect(() => validateFileSignature(valid, "image/webp")).not.toThrow();
     expect(() => validateFileSignature(invalid, "image/webp")).toThrow("does not match");
     expect(() => validateFileSignature(trailingPolyglot, "image/webp")).toThrow("does not match");
+  });
+
+  it("requires JPEG files to end at an image end marker", () => {
+    const valid = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]);
+    const trailingPolyglot = Buffer.concat([valid, Buffer.from("trailing")]);
+
+    expect(() => validateFileSignature(valid, "image/jpeg")).not.toThrow();
+    expect(() => validateFileSignature(trailingPolyglot, "image/jpeg")).toThrow("does not match");
   });
 });

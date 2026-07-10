@@ -11,7 +11,7 @@ import {
   type IQURLClient,
   type MintLinkInput,
 } from "../client.js";
-import { isLoopbackHostname, loadRuntimeConfig } from "../config.js";
+import { hasDotPathSegment, isLoopbackHostname, loadRuntimeConfig } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN } from "./_shared.js";
@@ -73,6 +73,13 @@ export function getConnectorConfig(allowServerApiKeyFallback = true): ConnectorC
 }
 
 export function getConnectorUploadUrl(connectorURL: string): string {
+  if (hasDotPathSegment(connectorURL)) {
+    throw new QURLAPIError(
+      0,
+      "invalid_connector_url",
+      "QURL_CONNECTOR_URL must not contain dot path segments or malformed escapes.",
+    );
+  }
   let connectorBaseUrl: URL;
   try {
     connectorBaseUrl = new URL(connectorURL);
@@ -91,11 +98,18 @@ export function getConnectorUploadUrl(connectorURL: string): string {
       "QURL_CONNECTOR_URL must not contain embedded credentials.",
     );
   }
-  if (connectorBaseUrl.search || connectorBaseUrl.hash) {
+  if (connectorBaseUrl.search) {
     throw new QURLAPIError(
       0,
       "invalid_connector_url",
-      "QURL_CONNECTOR_URL must not contain a query string or fragment.",
+      "QURL_CONNECTOR_URL must not contain a query string.",
+    );
+  }
+  if (connectorBaseUrl.hash) {
+    throw new QURLAPIError(
+      0,
+      "invalid_connector_url",
+      "QURL_CONNECTOR_URL must not contain a fragment.",
     );
   }
   if (
@@ -111,7 +125,10 @@ export function getConnectorUploadUrl(connectorURL: string): string {
     );
   }
 
-  connectorBaseUrl.pathname = `${connectorBaseUrl.pathname.replace(/\/$/, "")}/api/upload`;
+  const basePath = connectorBaseUrl.pathname.replace(/\/$/, "");
+  connectorBaseUrl.pathname = basePath.endsWith("/api/upload")
+    ? basePath
+    : `${basePath}/api/upload`;
   return connectorBaseUrl.toString();
 }
 
@@ -141,9 +158,8 @@ export function getMaxUploadFileBytes(): number {
 }
 
 export function validateFileNameContentType(fileName: string, contentType: string): void {
-  const extension = extname(fileName).toLowerCase();
   const inferred = inferContentType(fileName);
-  if (extension && !inferred) {
+  if (!inferred) {
     throw new Error("file_name must use a supported PDF or raster image extension.");
   }
   if (inferred && inferred !== contentType) {
@@ -155,6 +171,9 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
   const bytes = Buffer.from(fileData.buffer, fileData.byteOffset, fileData.byteLength);
   // latin1 preserves byte values exactly; Node's ascii decoder masks the high
   // bit and would let non-ASCII bytes impersonate an ASCII magic header.
+  // These checks are bounded type-confusion guards, not complete file parsers;
+  // legal PDF, PNG, and GIF structures may include format-specific trailing
+  // content. JPEG and WebP use safe exact end/container markers here.
   const ascii = (start: number, end: number) => bytes.subarray(start, end).toString("latin1");
   const valid =
     (contentType === "application/pdf" && ascii(0, 5) === "%PDF-") ||
@@ -162,10 +181,12 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
       bytes.length >= 8 &&
       bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) ||
     (contentType === "image/jpeg" &&
-      bytes.length >= 3 &&
+      bytes.length >= 5 &&
       bytes[0] === 0xff &&
       bytes[1] === 0xd8 &&
-      bytes[2] === 0xff) ||
+      bytes[2] === 0xff &&
+      bytes[bytes.length - 2] === 0xff &&
+      bytes[bytes.length - 1] === 0xd9) ||
     (contentType === "image/gif" && ["GIF87a", "GIF89a"].includes(ascii(0, 6))) ||
     (contentType === "image/webp" &&
       bytes.length >= 16 &&

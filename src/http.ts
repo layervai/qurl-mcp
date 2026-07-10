@@ -95,6 +95,19 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const mcpRateLimiter = rateLimit({
     windowMs: 60_000,
     limit: config.mcpRateLimitPerMinute,
+    identifier: "ip",
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
+  });
+  const credentialRateLimiter = rateLimit({
+    windowMs: 60_000,
+    limit: config.mcpRateLimitPerMinute,
+    identifier: "credential",
+    keyGenerator: (req) => {
+      const token = getAuthenticatedBearerToken(req);
+      return token ? digestBearerToken(token).toString("hex") : "missing";
+    },
     standardHeaders: "draft-8",
     legacyHeaders: false,
     handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
@@ -115,6 +128,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     verifier: createPassthroughBearerVerifier(),
     requiredScopes: ["mcp:tools"],
   });
+  const authenticatedMcpMiddleware = [bearerAuthMiddleware, credentialRateLimiter] as const;
 
   if (config.allowedHosts?.length) {
     app.use(hostHeaderValidation(config.allowedHosts));
@@ -146,14 +160,31 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     res.status(403).send("Origin is not allowed.");
   });
 
-  const parseMcpJsonBody = express.json({
+  const parseConfiguredMcpJsonBody = express.json({
     limit: getJsonBodyLimitBytes(config.maxUploadFileDataBytes),
+    strict: true,
+  });
+  const parseUnvalidatedMcpJsonBody = express.json({
+    limit: getJsonBodyLimitBytes(
+      Math.min(config.maxUploadFileDataBytes, DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES),
+    ),
     strict: true,
   });
 
   const sessions = new Map<string, SessionContext>();
   let pendingInitializations = 0;
   const pendingInitializationsByCredential = new Map<string, number>();
+
+  const parseMcpJsonBody: express.RequestHandler = (req, res, next) => {
+    const bearerToken = getAuthenticatedBearerToken(req);
+    const session = sessions.get(getSessionId(req) ?? "");
+    const mayUseConfiguredLimit =
+      session?.credentialValidated === true &&
+      bearerToken !== undefined &&
+      bearerTokenMatches(bearerToken, session.bearerTokenDigest);
+    const parser = mayUseConfiguredLimit ? parseConfiguredMcpJsonBody : parseUnvalidatedMcpJsonBody;
+    parser(req, res, next);
+  };
 
   function markSessionDisconnected(sessionId: string | undefined): void {
     if (!sessionId) return;
@@ -264,13 +295,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       : isInitializeRequest(body);
   }
 
-  function getToolNameFromBody(body: unknown): string | undefined {
-    if (!body || typeof body !== "object") return undefined;
-    if (!("params" in body) || typeof body.params !== "object" || body.params === null)
-      return undefined;
-    return "name" in body.params && typeof body.params.name === "string"
-      ? body.params.name
-      : undefined;
+  function containsToolCall(body: unknown): boolean {
+    const messages = Array.isArray(body) ? body : [body];
+    return messages.some((message) => getJsonRpcMethod(message) === "tools/call");
   }
 
   function rejectJsonRpc(
@@ -317,6 +344,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
     const pipeFile = (start?: number, end?: number): void => {
       const stream = createReadStream(filePath, { start, end });
+      const destroyStream = () => stream.destroy();
+      res.once("close", destroyStream);
+      stream.once("close", () => res.off("close", destroyStream));
       stream.once("error", (error) => {
         console.error(`[public-video] stream failed (${formatErrorForLog(error)})`);
         res.destroy(error);
@@ -395,8 +425,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
     if (!bearerToken || !bearerTokenMatches(bearerToken, session.bearerTokenDigest)) {
       // Use the same 404 response as an unknown ID so callers cannot use the
-      // endpoint as a session-existence oracle across bearer credentials.
-      console.warn("[mcp-http] rejected request from a different bearer token");
+      // endpoint or operator logs as a session-existence oracle across bearer
+      // credentials.
+      logMissingSession();
       return undefined;
     }
     return { session, bearerToken };
@@ -424,11 +455,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     );
   }
 
-  app.post("/mcp", mcpRateLimiter, bearerAuthMiddleware, parseMcpJsonBody, async (req, res) => {
+  const handleMcpPost: express.RequestHandler = async (req, res) => {
     const bearerToken = getAuthenticatedBearerToken(req);
     const startedAt = Date.now();
-    const rpcMethod = getJsonRpcMethod(req.body);
-    const toolName = rpcMethod === "tools/call" ? getToolNameFromBody(req.body) : undefined;
+    const hasToolCall = containsToolCall(req.body);
 
     if (!bearerToken) {
       rejectJsonRpc(res, 401, "Bearer authentication required.");
@@ -558,15 +588,16 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       }
       const { session, bearerToken: sessionBearerToken } = authorizedSession;
 
-      if (toolName) logInfo("[mcp-http] tool call started");
+      if (hasToolCall) logInfo("[mcp-http] tool call started");
       await trackSessionActivity(session, () =>
         withRequestAuth(session.sessionId, sessionBearerToken, () =>
           session.transport.handleRequest(req, res, req.body),
         ),
       );
-      if (toolName) logInfo(`[mcp-http] tool call finished elapsed=${formatDurationMs(startedAt)}`);
+      if (hasToolCall)
+        logInfo(`[mcp-http] tool call finished elapsed=${formatDurationMs(startedAt)}`);
     } catch (error) {
-      if (toolName) {
+      if (hasToolCall) {
         console.error(`[mcp-http] tool call failed elapsed=${formatDurationMs(startedAt)}`);
       }
       console.error(`Error handling MCP POST request (${formatErrorForLog(error)})`);
@@ -574,9 +605,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         rejectJsonRpc(res, 500, "Internal server error.");
       }
     }
-  });
+  };
 
-  app.get("/mcp", mcpRateLimiter, bearerAuthMiddleware, async (req, res) => {
+  app.post("/mcp", mcpRateLimiter, ...authenticatedMcpMiddleware, parseMcpJsonBody, handleMcpPost);
+
+  app.get("/mcp", mcpRateLimiter, ...authenticatedMcpMiddleware, async (req, res) => {
     const authorizedSession = resolveAuthorizedSession(req);
     if (!authorizedSession) {
       res.status(404).send(REINITIALIZE_MESSAGE);
@@ -602,7 +635,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
   });
 
-  app.delete("/mcp", mcpRateLimiter, bearerAuthMiddleware, async (req, res) => {
+  app.delete("/mcp", mcpRateLimiter, ...authenticatedMcpMiddleware, async (req, res) => {
     const authorizedSession = resolveAuthorizedSession(req);
     if (!authorizedSession) {
       res.status(404).send(REINITIALIZE_MESSAGE);
@@ -622,6 +655,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         res.status(500).send("Internal server error.");
       }
     } finally {
+      // DELETE is an explicit teardown request. It intentionally closes the
+      // transport even if another request is still in flight rather than
+      // allowing a long-running tool call to block client-directed cleanup.
       // The SDK handles DELETE by closing the transport first; its Protocol
       // onclose hook then clears the server's transport reference. closeSession
       // removes our registry reference before calling server.close(), making
@@ -730,7 +766,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       logInfo("HTTP MCP auth mode: bearer token (qURL API key passthrough)");
       if (config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES) {
         console.warn(
-          "Warning: maxUploadFileDataBytes exceeds the default; any non-empty bearer can submit a correspondingly larger JSON request before downstream credential validation. Apply an authenticated edge request-size limit on hostile networks.",
+          "Warning: maxUploadFileDataBytes exceeds the default; requests above the default parser ceiling require an already-validated MCP session. Apply an authenticated edge request-size limit on hostile networks.",
         );
       }
       if (config.trustProxyHops === 0 && !isLoopbackHostname(host)) {

@@ -190,6 +190,18 @@ export async function sendEmailMessage(
   // credential principal is available and sharing one conservative quota is
   // safer than disabling quota enforcement.
   const principalKey = requestApiKey ?? runtimeConfig.qurlApiKey ?? "unscoped";
+  const quotaSkipResult = (skippedReason: string, allowedMessage: string): EmailDeliveryResult => ({
+    attempted: false,
+    enabled: true,
+    recipients,
+    sent: 0,
+    failed: recipients.length,
+    results: [
+      ...blockedRecipientResults(blockedRecipients),
+      ...skippedRecipientResults(allowedRecipients, allowedMessage),
+    ],
+    skipped_reason: skippedReason,
+  });
   const principal = await deriveEmailQuotaPrincipal(principalKey);
   const now = Date.now();
   for (const [key, quota] of emailQuotaByPrincipal) {
@@ -201,39 +213,17 @@ export async function sendEmailMessage(
     // Fail closed instead of evicting a live principal. LRU eviction would let
     // an attacker cycle keys until a prior key's quota state disappears, then
     // reuse that key to bypass the hourly recipient limit.
-    return {
-      attempted: false,
-      enabled: true,
-      recipients,
-      sent: 0,
-      failed: recipients.length,
-      results: [
-        ...blockedRecipientResults(blockedRecipients),
-        ...skippedRecipientResults(
-          allowedRecipients,
-          "Email delivery was skipped because quota tracking is at capacity.",
-        ),
-      ],
-      skipped_reason: "Email quota tracking capacity has been reached. Try again later.",
-    };
+    return quotaSkipResult(
+      "Email quota tracking capacity has been reached. Try again later.",
+      "Email delivery was skipped because quota tracking is at capacity.",
+    );
   }
   const quota = emailQuotaByPrincipal.get(principal) ?? { recipients: 0, windowStartedAt: now };
   if (quota.recipients + allowedRecipients.length > smtp.maxRecipientsPerHour) {
-    return {
-      attempted: false,
-      enabled: true,
-      recipients,
-      sent: 0,
-      failed: recipients.length,
-      results: [
-        ...blockedRecipientResults(blockedRecipients),
-        ...skippedRecipientResults(
-          allowedRecipients,
-          "Email delivery was skipped because the hourly quota was reached.",
-        ),
-      ],
-      skipped_reason: `Recipient quota exceeds the configured per-key hourly limit of ${smtp.maxRecipientsPerHour}.`,
-    };
+    return quotaSkipResult(
+      `Recipient quota exceeds the configured per-key hourly limit of ${smtp.maxRecipientsPerHour}.`,
+      "Email delivery was skipped because the hourly quota was reached.",
+    );
   }
   // Count attempted recipients, not only successful sends. Refunding failures
   // would let a failing or adversarial SMTP destination bypass the abuse cap

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import { resolve } from "node:path";
@@ -69,8 +69,8 @@ export const DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES = 10 * 1024 * 1024;
 export const MAX_UPLOAD_FILE_DATA_BYTES = 100 * 1024 * 1024;
 
 /**
- * Module-level cache for runtime config. Keyed by resolved config path.
- * Config is loaded once per path and reused for the lifetime of the process.
+ * Module-level cache for runtime config. Keyed by resolved config path and
+ * invalidated when the relevant environment or config-file metadata changes.
  * Call `clearRuntimeConfigCache()` to force a reload (useful for testing).
  */
 const RUNTIME_CONFIG_ENV_KEYS = [
@@ -96,7 +96,7 @@ const RUNTIME_CONFIG_ENV_KEYS = [
 
 const runtimeConfigCache = new Map<
   string,
-  { environmentFingerprint: string; config: RuntimeConfig }
+  { environmentFingerprint: string; fileFingerprint: string; config: RuntimeConfig }
 >();
 
 function getRuntimeConfigEnvironmentFingerprint(): string {
@@ -109,6 +109,16 @@ function getRuntimeConfigEnvironmentFingerprint(): string {
       .update("\0");
   }
   return hash.digest("hex");
+}
+
+function getConfigFileFingerprint(configPath: string): string {
+  try {
+    const stats = statSync(configPath, { bigint: true });
+    return [stats.dev, stats.ino, stats.size, stats.mtimeNs, stats.ctimeNs].join(":");
+  } catch (error) {
+    if ((error as { code?: string }).code === "ENOENT") return "missing";
+    throw error;
+  }
 }
 
 const SIZE_UNITS = new Map<string, number>([
@@ -217,6 +227,9 @@ function parseBoolean(value: unknown): boolean | undefined {
 
 function parsePositiveInteger(value: unknown, fieldName: string): number | undefined {
   if (value === undefined) return undefined;
+  if (typeof value === "string" && !/^\d+$/.test(value.trim())) {
+    throw new Error(`${fieldName} must be a positive integer.`);
+  }
   const parsed =
     typeof value === "number"
       ? value
@@ -262,15 +275,36 @@ export function isLoopbackHostname(hostname: string): boolean {
   return isIP(normalized) === 4 && Number(normalized.split(".", 1)[0]) === 127;
 }
 
+export function hasDotPathSegment(value: string): boolean {
+  const rawPath = /^[a-z][a-z\d+.-]*:\/\/[^/?#]*(\/[^?#]*)?/i.exec(value.trim())?.[1];
+  if (!rawPath) return false;
+  try {
+    return decodeURIComponent(rawPath)
+      .split("/")
+      .some((segment) => segment === "." || segment === "..");
+  } catch {
+    return true;
+  }
+}
+
 function normalizeServiceBaseUrl(value: string, fieldName: string, requireHttps: boolean): string {
+  if (hasDotPathSegment(value)) {
+    throw new Error(`${fieldName} must not contain dot path segments or malformed escapes.`);
+  }
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     throw new Error(`${fieldName} must be a valid absolute URL.`);
   }
-  if (url.username || url.password || url.search || url.hash) {
-    throw new Error(`${fieldName} must not contain credentials, a query, or a fragment.`);
+  if (url.username || url.password) {
+    throw new Error(`${fieldName} must not contain credentials.`);
+  }
+  if (url.search) {
+    throw new Error(`${fieldName} must not contain a query.`);
+  }
+  if (url.hash) {
+    throw new Error(`${fieldName} must not contain a fragment.`);
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error(`${fieldName} must use HTTP or HTTPS.`);
@@ -300,7 +334,11 @@ function parseCsvList(value: unknown): string[] | undefined {
   return unique.length > 0 ? unique : undefined;
 }
 
-export function normalizePublicPath(value: string | undefined, fallback: string): string {
+export function normalizePublicPath(
+  value: string | undefined,
+  fallback: string,
+  fieldName = "publicVideo.pagePath",
+): string {
   const trimmed = trimString(value);
   const path = !trimmed ? fallback : trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   const segments = path.split("/");
@@ -313,7 +351,7 @@ export function normalizePublicPath(value: string | undefined, fallback: string)
       (reserved) => path === reserved || path.startsWith(`${reserved}/`),
     )
   ) {
-    throw new Error("publicVideo.pagePath must be a non-reserved absolute URL path.");
+    throw new Error(`${fieldName} must be a non-reserved absolute URL path.`);
   }
   return path.replace(/\/+$/, "");
 }
@@ -425,8 +463,8 @@ function resolveSmtpFieldValues(fileConfig: Partial<SmtpConfig> | undefined) {
 
 /**
  * Load runtime configuration from file and environment variables.
- * Results are cached per config path and environment fingerprint to avoid
- * repeated file reads without silently ignoring embedding-time env changes.
+ * Results are cached per config path, environment fingerprint, and file
+ * metadata so edits are picked up without a process restart.
  *
  * @param configPath - Path to config file (defaults to getDefaultConfigPath())
  * @returns Resolved runtime configuration
@@ -434,12 +472,16 @@ function resolveSmtpFieldValues(fileConfig: Partial<SmtpConfig> | undefined) {
 export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeConfig {
   const resolvedPath = resolve(configPath);
   const environmentFingerprint = getRuntimeConfigEnvironmentFingerprint();
+  const fileFingerprint = getConfigFileFingerprint(resolvedPath);
   const cached = runtimeConfigCache.get(resolvedPath);
-  if (cached?.environmentFingerprint === environmentFingerprint) {
+  if (
+    cached?.environmentFingerprint === environmentFingerprint &&
+    cached.fileFingerprint === fileFingerprint
+  ) {
     return cached.config;
   }
 
-  const fileConfig = parseConfigFile(configPath);
+  const fileConfig = parseConfigFile(resolvedPath);
   const maxUploadFileDataBytes = parseSizeBytes(
     process.env.MCP_MAX_UPLOAD_FILE_DATA_BYTES ?? fileConfig.maxUploadFileDataBytes,
     DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES,
@@ -468,13 +510,13 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     publicVideo: resolvePublicVideoConfig(fileConfig.publicVideo),
   };
 
-  runtimeConfigCache.set(resolvedPath, { environmentFingerprint, config });
+  runtimeConfigCache.set(resolvedPath, { environmentFingerprint, fileFingerprint, config });
   return config;
 }
 
 /**
- * Clear the runtime config cache. Useful for testing or when config
- * files have been modified and need to be reloaded.
+ * Clear the runtime config cache. Useful for tests or for forcing a reload
+ * after an operator deliberately preserves a file's metadata while editing.
  */
 export function clearRuntimeConfigCache(): void {
   runtimeConfigCache.clear();

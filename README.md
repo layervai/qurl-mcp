@@ -70,6 +70,9 @@ There is intentionally no application-level path allowlist: symlinks and
 time-of-check/time-of-use races make a lexical prefix check a misleading
 security boundary. Use a dedicated OS account, container, or read-only mount
 whose readable files are already limited to the intended sharing directory.
+The final path component is opened with `O_NOFOLLOW`; intermediate directory
+symlinks retain normal filesystem behavior under this trusted-local-user
+boundary.
 
 ### MCP Resources
 
@@ -161,35 +164,38 @@ Their responsibilities are:
 
 Shared settings have these environment overrides. Environment values take
 precedence over the shared config file.
+The process caches resolved shared settings but automatically invalidates that
+cache when the file metadata or any relevant environment value changes.
 
-| Environment variable                        | Config field                              |
-| ------------------------------------------- | ----------------------------------------- |
-| `MCP_MAX_UPLOAD_FILE_DATA_BYTES`            | `maxUploadFileDataBytes`                  |
-| `QURL_API_URL`                              | `defaultQurlApiUrl`                       |
-| `QURL_CONNECTOR_URL`                        | `defaultQurlConnectorUrl`                 |
-| `QURL_SMTP_HOST`                            | `smtp.host`                               |
-| `QURL_SMTP_PORT`                            | `smtp.port`                               |
-| `QURL_SMTP_SECURE`                          | `smtp.secure`                             |
-| `QURL_SMTP_USERNAME`                        | `smtp.username`                           |
-| `QURL_SMTP_PASSWORD`                        | `smtp.password`                           |
-| `QURL_SMTP_FROM_EMAIL`                      | `smtp.fromEmail`                          |
-| `QURL_SMTP_FROM_NAME`                       | `smtp.fromName`                           |
-| `QURL_SMTP_ALLOWED_RECIPIENTS`              | `smtp.allowedRecipients`                  |
-| `QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS`       | `smtp.allowedRecipientDomains`            |
-| `QURL_SMTP_MAX_RECIPIENTS_PER_MESSAGE`      | `smtp.maxRecipientsPerMessage`            |
-| `QURL_SMTP_MAX_RECIPIENTS_PER_HOUR`         | `smtp.maxRecipientsPerHour`               |
-| `QURL_PUBLIC_VIDEO_FILE_PATH`               | `publicVideo.filePath`                    |
-| `QURL_PUBLIC_VIDEO_TITLE`                   | `publicVideo.title`                       |
-| `QURL_PUBLIC_VIDEO_PAGE_PATH`               | `publicVideo.pagePath`                    |
+| Environment variable                   | Config field                   |
+| -------------------------------------- | ------------------------------ |
+| `MCP_MAX_UPLOAD_FILE_DATA_BYTES`       | `maxUploadFileDataBytes`       |
+| `QURL_API_URL`                         | `defaultQurlApiUrl`            |
+| `QURL_CONNECTOR_URL`                   | `defaultQurlConnectorUrl`      |
+| `QURL_SMTP_HOST`                       | `smtp.host`                    |
+| `QURL_SMTP_PORT`                       | `smtp.port`                    |
+| `QURL_SMTP_SECURE`                     | `smtp.secure`                  |
+| `QURL_SMTP_USERNAME`                   | `smtp.username`                |
+| `QURL_SMTP_PASSWORD`                   | `smtp.password`                |
+| `QURL_SMTP_FROM_EMAIL`                 | `smtp.fromEmail`               |
+| `QURL_SMTP_FROM_NAME`                  | `smtp.fromName`                |
+| `QURL_SMTP_ALLOWED_RECIPIENTS`         | `smtp.allowedRecipients`       |
+| `QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS`  | `smtp.allowedRecipientDomains` |
+| `QURL_SMTP_MAX_RECIPIENTS_PER_MESSAGE` | `smtp.maxRecipientsPerMessage` |
+| `QURL_SMTP_MAX_RECIPIENTS_PER_HOUR`    | `smtp.maxRecipientsPerHour`    |
+| `QURL_PUBLIC_VIDEO_FILE_PATH`          | `publicVideo.filePath`         |
+| `QURL_PUBLIC_VIDEO_TITLE`              | `publicVideo.title`            |
+| `QURL_PUBLIC_VIDEO_PAGE_PATH`          | `publicVideo.pagePath`         |
 
 `QURL_API_KEY` is intentionally environment-only and has no config-file field.
 
 Raising `maxUploadFileDataBytes` also raises the HTTP JSON parser's per-request
 memory ceiling to roughly 1.5 times that value (up to about 150 MB at the
-100 MB maximum), before base64 decoding applies the exact byte cap. Size this
-setting and the reverse-proxy concurrency limit together; bearer middleware
-rejects missing headers before parsing but downstream API validation happens
-after the request body is accepted.
+100 MB maximum), before base64 decoding applies the exact byte cap. Until a
+session has completed a successful downstream qURL API call, its parser ceiling
+remains at the smaller 10 MB default upload setting; clients configured for a
+larger first upload must validate the session with a small qURL API call first.
+Size the configured maximum and reverse-proxy concurrency limit together.
 
 Set `QURL_API_KEY` in the environment for `stdio` mode. In HTTP mode, every
 client request supplies its own qURL API key as a bearer token.
@@ -309,12 +315,12 @@ The listener defaults to `127.0.0.1`. A non-loopback `host` is rejected unless
 `allowedHosts` is explicitly configured. Set `trustProxyHops` (or
 `MCP_TRUST_PROXY_HOPS`) to the exact number of trusted proxy hops; leave it at
 `0` for direct connections so forwarded IP headers cannot spoof rate-limit keys.
-Because `/mcp` rate limits are keyed by client IP, reverse-proxy deployments
-must set the correct hop count or all callers behind the proxy will share the
-proxy's single rate-limit bucket.
-There is no separate per-key request-rate bucket; callers sharing one source IP
-also share the configured request allowance. `maxSessionsPerCredential`
-separately prevents one bearer credential from occupying the full session pool.
+`/mcp` applies the configured request allowance independently to both the
+client IP and the SHA-256 digest of the authenticated bearer. Reverse-proxy
+deployments must set the correct hop count or all callers behind the proxy will
+share the proxy's single IP bucket. The credential bucket also prevents one
+key from bypassing the request allowance by rotating source IPs, while
+`maxSessionsPerCredential` prevents it from occupying the full session pool.
 Bearer credentials are conclusively validated by the first successful
 downstream qURL API call. Until then, sessions use the smaller pending-session
 cap and one-minute validation deadline, so arbitrary non-empty bearer strings
@@ -329,6 +335,10 @@ bounded session slot for a 30-second reconnect grace period. A reconnect clears
 that deadline; otherwise the session is reaped without waiting for the longer
 idle TTL. Size `maxSessions` and the idle TTL for clients that remain connected
 but do not perform explicit session teardown.
+Validated sessions intentionally have no separate absolute lifetime: a client
+that continues making requests inside the idle window can retain its session
+until disconnect, explicit deletion, or server restart. The global and
+per-credential caps keep that deliberate long-lived-session behavior bounded.
 The first downstream qURL operation must therefore complete before that
 deadline; an unusually slow first API call may be interrupted and the client
 must re-initialize. This fail-closed behavior prevents an invalid credential
@@ -339,6 +349,9 @@ global session cap, per-credential session cap, pending-session cap, absolute
 deadline, and request rate limit bound invalid-key slot usage. The MCP
 middleware does not validate the key itself; only a successful downstream qURL
 API response promotes the session.
+Downstream errors, including non-2xx responses that appear authenticated, do
+not promote it because an intermediary may have generated them before the qURL
+API authenticated the bearer.
 Consequently, any caller with a non-empty bearer can enumerate the public
 tool/resource/prompt catalog and briefly hold bounded pending-session state. On
 hostile networks, place non-loopback deployments behind an identity-aware proxy
@@ -349,6 +362,10 @@ apply independently to each server process. A horizontally scaled deployment
 therefore has aggregate limits of roughly the configured value multiplied by
 its instance count; use shared edge limits or a single routed instance when a
 global cap is required.
+`/healthz` uses its own `publicFileRateLimitPerMinute` bucket, isolated from
+legal and video traffic. Keep load-balancer and liveness-probe frequency below
+that per-source-IP allowance (300 requests/minute by default), or raise it for
+deployments with unusually aggressive probes.
 
 ## Configuration Priority
 

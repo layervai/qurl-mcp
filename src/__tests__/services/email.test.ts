@@ -175,6 +175,33 @@ describe("sendEmailMessage", () => {
     expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
   });
 
+  it.each(["0x10", "1e3", "3.0"])(
+    "rejects non-decimal SMTP recipient limit %s",
+    async (maxRecipientsPerMessage) => {
+      const configPath = join(tempDir!, "qurl-mcp.config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          smtp: {
+            host: "smtp.example.com",
+            port: 587,
+            secure: false,
+            username: "mailer",
+            password: "secret",
+            fromEmail: "noreply@example.com",
+            maxRecipientsPerMessage,
+          },
+        }),
+      );
+      process.env.QURL_MCP_CONFIG = configPath;
+
+      await expect(
+        sendEmailMessage({ to: ["alice@example.com"], subject: "Hello", text: "World" }),
+      ).rejects.toThrow("must be a positive integer");
+      expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
+    },
+  );
+
   it("requires a request-scoped quota principal when server-key fallback is disabled", async () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
@@ -450,6 +477,44 @@ describe("sendEmailMessage", () => {
     });
     expect(allBlocked).toEqual(expect.objectContaining({ attempted: false, sent: 0, failed: 1 }));
     expect(nodemailerMocks.close).toHaveBeenCalledOnce();
+  });
+
+  it("normalizes mixed-case IDNA addresses before exact-recipient allowlist matching", async () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+          allowedRecipients: ["Alice@BÜCHER.Example."],
+        },
+      }),
+    );
+    process.env.QURL_MCP_CONFIG = configPath;
+    nodemailerMocks.sendMail.mockResolvedValue({ messageId: "msg-idna" });
+
+    const result = await sendEmailMessage({
+      to: ["ALICE@bücher.example", "bob@bücher.example"],
+      subject: "Secure link ready",
+      text: "Body",
+    });
+
+    expect(nodemailerMocks.sendMail).toHaveBeenCalledOnce();
+    expect(nodemailerMocks.sendMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "alice@xn--bcher-kva.example" }),
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        sent: 1,
+        failed: 1,
+        recipients: ["alice@xn--bcher-kva.example", "bob@xn--bcher-kva.example"],
+      }),
+    );
   });
 
   it("fails closed when a new principal would exceed quota tracking capacity", () => {

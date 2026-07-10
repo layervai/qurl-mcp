@@ -464,12 +464,12 @@ export class QURLClient implements IQURLClient {
   private async call<T>(fn: (sdk: SDKQURLClient) => Promise<T>): Promise<T> {
     try {
       const result = await fn(this.sdk);
-      markRequestCredentialValidated();
-      return result;
-    } catch (err) {
       // Only a successful API response conclusively validates the request
       // credential. Any error status may have originated from an intermediary
       // before the qURL API authenticated the bearer token.
+      markRequestCredentialValidated();
+      return result;
+    } catch (err) {
       throw translateError(err);
     }
   }

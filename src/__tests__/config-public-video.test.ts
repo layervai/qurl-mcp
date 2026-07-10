@@ -220,6 +220,15 @@ describe("public video config", () => {
     expect(loadRuntimeConfig(configPath).qurlApiKey).toBe("rotated-env-key");
   });
 
+  it("reloads runtime configuration when the config file changes", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(configPath, JSON.stringify({ defaultQurlApiUrl: "https://first.example.com" }));
+    expect(loadRuntimeConfig(configPath).defaultQurlApiUrl).toBe("https://first.example.com");
+
+    writeFileSync(configPath, JSON.stringify({ defaultQurlApiUrl: "https://updated.example.com" }));
+    expect(loadRuntimeConfig(configPath).defaultQurlApiUrl).toBe("https://updated.example.com");
+  });
+
   it("bounds upload memory and validates service URLs without breaking internal HTTP APIs", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(configPath, JSON.stringify({ maxUploadFileDataBytes: "101mb" }));
@@ -255,6 +264,6 @@ describe("public video config", () => {
       configPath,
       JSON.stringify({ defaultQurlApiUrl: "https://api.example.com/#fragment" }),
     );
-    expect(() => loadRuntimeConfig(configPath)).toThrow("a query");
+    expect(() => loadRuntimeConfig(configPath)).toThrow("a fragment");
   });
 });

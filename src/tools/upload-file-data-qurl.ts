@@ -86,7 +86,7 @@ function normalizeBase64Input(input: string): {
   // Step 1: Parse and strip the data URL prefix if present (e.g.,
   // "data:image/png;base64,"). Return its media type so callers do not need
   // to parse the same prefix again.
-  const dataUrl = /^data:([^;,]*);base64,/i.exec(trimmed);
+  const dataUrl = /^data:([^;,]*)(?:;[a-z0-9!#$&^_.+-]+=[^;,\s]*)*;base64,/i.exec(trimmed);
   if (!dataUrl && trimmed.toLowerCase().startsWith("data:")) {
     throw new Error("Only base64-encoded data URLs are supported.");
   }
