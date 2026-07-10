@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
-import { isAbsolute, normalize, resolve } from "node:path";
+import { extname, isAbsolute, normalize, resolve } from "node:path";
 import { isEmailAddress, normalizeEmailAddress, normalizeEmailDomain } from "./email-addresses.js";
 
 export interface SmtpConfig {
@@ -434,6 +434,9 @@ export function normalizePublicVideoConfig(
   const filePath = normalizeAbsoluteFilePath(rawConfig?.filePath, "publicVideo.filePath");
   if (!filePath) {
     return undefined;
+  }
+  if (extname(filePath).toLowerCase() !== ".mp4") {
+    throw new Error("publicVideo.filePath must reference an MP4 file with a .mp4 extension.");
   }
 
   return {

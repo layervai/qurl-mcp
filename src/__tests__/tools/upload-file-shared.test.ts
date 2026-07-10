@@ -58,6 +58,9 @@ describe("getConnectorUploadUrl", () => {
     expect(getConnectorUploadUrl("https://connector.example.com/qurl")).toBe(
       "https://connector.example.com/qurl/api/upload",
     );
+    expect(getConnectorUploadUrl("https://connector.example.com/api/uploads")).toBe(
+      "https://connector.example.com/api/uploads/api/upload",
+    );
     expect(() => getConnectorUploadUrl("https://connector.example.com?target=other")).toThrow(
       "must not contain a query",
     );

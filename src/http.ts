@@ -114,6 +114,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   });
   const credentialRateLimiter = rateLimit({
     windowMs: 60_000,
+    // The matching threshold is intentional: the IP policy bounds aggregate
+    // traffic from one network (including shared egress), while this policy
+    // follows one credential even if it rotates source addresses. Requests
+    // must satisfy both independent abuse controls.
     limit: config.mcpRateLimitPerMinute,
     identifier: "credential",
     keyGenerator: (req) => {

@@ -365,6 +365,16 @@ describe("public video config", () => {
     expect(() => loadRuntimeConfig(configPath)).toThrow("must be an absolute filesystem path");
   });
 
+  it("requires the configured public video to use the advertised MP4 format", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ publicVideo: { pagePath: "/media/video", filePath: "/srv/video.webm" } }),
+    );
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow("must reference an MP4 file");
+  });
+
   it("loads the qurl API key only from the environment", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
