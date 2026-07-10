@@ -123,6 +123,7 @@ export async function maybeDeliverToolEmail(
   const recipients = uniqueRecipients(input.delivery.to);
   // Fail with a structured skipped result here for tool callers. The service
   // repeats this boundary check because it is also exported for direct use.
+  // Match Zod's UTF-16-unit maxLength semantics for caller-provided sections.
   if (text.length > 10_000) {
     return skippedDeliveryResult(
       recipients,

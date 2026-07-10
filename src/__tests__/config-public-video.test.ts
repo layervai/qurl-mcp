@@ -62,6 +62,16 @@ describe("public video config", () => {
     });
   });
 
+  it("normalizes lexical dot segments in operator-selected video paths", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ publicVideo: { filePath: "/srv/videos/../shared/demo.mp4" } }),
+    );
+
+    expect(loadRuntimeConfig(configPath).publicVideo?.filePath).toBe("/srv/shared/demo.mp4");
+  });
+
   it("loads public video settings from the distinct HTTP config file", () => {
     const runtimeConfigPath = join(tempDir!, "qurl-mcp.config.json");
     const httpConfigPath = join(tempDir!, "qurl-mcp.http.json");
@@ -174,6 +184,31 @@ describe("public video config", () => {
     );
 
     expect(() => loadRuntimeConfig(configPath)).toThrow("port 465 requires smtp.secure to be true");
+  });
+
+  it.each([
+    ["host", "smtp.example.com\r\nattacker.example.com", "SMTP host"],
+    ["host", "smtp_example.com", "SMTP host"],
+    ["username", "mailer\nadmin", "SMTP username"],
+    ["password", "secret\r\nnext", "SMTP password"],
+  ])("rejects malformed SMTP %s values", (field, value, message) => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+          [field]: value,
+        },
+      }),
+    );
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow(message);
   });
 
   it("rejects a present but malformed SMTP secure value", () => {

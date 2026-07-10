@@ -57,6 +57,8 @@ export async function createTextPdfTempFile(input: {
   filePath: string;
   sizeBytes: number;
 }> {
+  // Deliberately match Zod's UTF-16-unit maxLength behavior in the public tool
+  // schema. The HTTP parser and connector byte caps provide the memory bound.
   if (input.content.length > MAX_TEXT_PDF_CONTENT_CHARACTERS) {
     throw new Error(
       `PDF content must not exceed ${MAX_TEXT_PDF_CONTENT_CHARACTERS.toLocaleString("en-US")} characters.`,

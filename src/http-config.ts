@@ -7,6 +7,7 @@ import {
   normalizeAbsoluteFilePath,
   normalizePublicPath,
   normalizePublicVideoTitle,
+  normalizeServiceBaseUrl,
   parseConfigFile,
   trimString,
   type PublicVideoConfig,
@@ -107,22 +108,7 @@ function normalizeBaseUrl(value: unknown): string {
   if (typeof value !== "string") {
     throw new Error("MCP_BASE_URL/baseUrl must be a valid absolute URL.");
   }
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error("MCP_BASE_URL/baseUrl must be a valid absolute URL.");
-  }
-  if (url.username || url.password || url.search || url.hash) {
-    throw new Error("MCP_BASE_URL/baseUrl must not include credentials, a query, or a fragment.");
-  }
-  if (
-    url.protocol !== "https:" &&
-    !(url.protocol === "http:" && isLoopbackHostname(url.hostname))
-  ) {
-    throw new Error("MCP_BASE_URL/baseUrl must use HTTPS except for loopback development URLs.");
-  }
-  return url.toString().replace(/\/$/, "");
+  return normalizeServiceBaseUrl(value, "MCP_BASE_URL/baseUrl", true);
 }
 
 function normalizeBindHost(value: unknown): string {

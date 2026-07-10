@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, normalize, resolve } from "node:path";
 import { isEmailAddress, normalizeEmailAddress, normalizeEmailDomain } from "./email-addresses.js";
 
 export interface SmtpConfig {
@@ -380,7 +380,41 @@ export function normalizeAbsoluteFilePath(value: unknown, fieldName: string): st
   if (!isAbsolute(filePath)) {
     throw new Error(`${fieldName} must be an absolute filesystem path.`);
   }
-  return filePath;
+  // Collapse lexical dot segments so logs, startup checks, and request-time
+  // reads all refer to one unambiguous operator-selected path.
+  return normalize(filePath);
+}
+
+function normalizeSmtpHost(host: string): string {
+  if (host.length > 253 || /[\r\n]/.test(host)) {
+    throw new Error("SMTP host must be a single-line hostname or IP address.");
+  }
+  const unbracketed = host.replace(/^\[(.*)\]$/, "$1");
+  if (isIP(unbracketed) !== 0) return unbracketed;
+  const normalized = host.toLowerCase();
+  const labels = normalized.split(".");
+  if (
+    labels.some(
+      (label) =>
+        !label ||
+        label.length > 63 ||
+        !/^[a-z0-9-]+$/.test(label) ||
+        label.startsWith("-") ||
+        label.endsWith("-"),
+    )
+  ) {
+    throw new Error("SMTP host must be a single-line hostname or IP address.");
+  }
+  return normalized;
+}
+
+function validateSmtpCredential(value: string, fieldName: "username" | "password"): void {
+  const maximumLength = fieldName === "username" ? 320 : 4096;
+  if (value.length > maximumLength || /[\r\n]/.test(value)) {
+    throw new Error(
+      `SMTP ${fieldName} must be a single line of at most ${maximumLength} characters.`,
+    );
+  }
 }
 
 export function normalizePublicVideoTitle(value: string | undefined): string {
@@ -426,6 +460,10 @@ function resolveSmtpConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpCon
   if (port === 465 && !secure) {
     throw new Error("SMTP port 465 requires smtp.secure to be true.");
   }
+
+  const normalizedHost = normalizeSmtpHost(host);
+  validateSmtpCredential(username, "username");
+  validateSmtpCredential(password, "password");
 
   if (/[\r\n]/.test(fromEmail)) {
     throw new Error("SMTP fromEmail must be a single line.");
@@ -478,7 +516,7 @@ function resolveSmtpConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpCon
   }
 
   return {
-    host,
+    host: normalizedHost,
     port,
     secure,
     username,

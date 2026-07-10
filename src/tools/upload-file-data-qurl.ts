@@ -30,36 +30,43 @@ import { uploadMintOptionsShape } from "./upload-mint-options.js";
 // the HTTP JSON-body limit before tool dispatch, and getMaxUploadFileBytes on
 // the normalized decoded payload. The operator's runtime limit is usually the
 // smallest; keeping this first ceiling fixed preserves schema stability.
-const MAX_UPLOAD_FILE_BASE64_CHARACTERS = Math.ceil((MAX_UPLOAD_FILE_DATA_BYTES * 4) / 3) + 1024;
+export const MAX_UPLOAD_FILE_BASE64_CHARACTERS =
+  Math.ceil((MAX_UPLOAD_FILE_DATA_BYTES * 4) / 3) + 1024;
 
-export const uploadFileDataQurlSchema = z
-  .object({
-    file_base64: z
-      .string()
-      .min(1)
-      .max(MAX_UPLOAD_FILE_BASE64_CHARACTERS)
-      .describe(
-        "Base64-encoded PDF or raster image content. Raw base64 and data URLs are both accepted. For compressible images, compress them first and then convert them to base64 before calling this tool.",
-      ),
-    file_name: z
-      .string()
-      .min(1)
-      .max(255)
-      .describe(
-        "Filename to register with the connector. `.jpg` and `.jpeg` files should use `image/jpeg`.",
-      ),
-    content_type: z
-      .enum(supportedMimeTypes)
-      .describe(
-        "MIME type for the uploaded file. Supported: application/pdf, image/png, image/jpeg, image/webp, image/gif.",
-      ),
-    email_delivery: emailDeliveryInputSchema
-      .optional()
-      .describe(
-        "Optional email notification settings for sending the uploaded file's qURL to one or more recipients.",
-      ),
-  })
-  .extend(uploadMintOptionsShape);
+export function createUploadFileDataQurlSchema(
+  maxBase64Characters = MAX_UPLOAD_FILE_BASE64_CHARACTERS,
+) {
+  return z
+    .object({
+      file_base64: z
+        .string()
+        .min(1)
+        .max(maxBase64Characters)
+        .describe(
+          "Base64-encoded PDF or raster image content. Raw base64 and data URLs are both accepted. For compressible images, compress them first and then convert them to base64 before calling this tool.",
+        ),
+      file_name: z
+        .string()
+        .min(1)
+        .max(255)
+        .describe(
+          "Filename to register with the connector. `.jpg` and `.jpeg` files should use `image/jpeg`.",
+        ),
+      content_type: z
+        .enum(supportedMimeTypes)
+        .describe(
+          "MIME type for the uploaded file. Supported: application/pdf, image/png, image/jpeg, image/webp, image/gif.",
+        ),
+      email_delivery: emailDeliveryInputSchema
+        .optional()
+        .describe(
+          "Optional email notification settings for sending the uploaded file's qURL to one or more recipients.",
+        ),
+    })
+    .extend(uploadMintOptionsShape);
+}
+
+export const uploadFileDataQurlSchema = createUploadFileDataQurlSchema();
 
 /**
  * Normalize and validate base64 input for file upload.

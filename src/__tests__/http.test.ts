@@ -3,9 +3,10 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { rateLimit } from "express-rate-limit";
 import { createHash } from "node:crypto";
-import { statSync } from "node:fs";
+import { statSync, type ReadStream } from "node:fs";
 import { createServer as createNodeServer, request, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
+import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markRequestCredentialValidated } from "../auth/request-context.js";
 import { QURLAPIError } from "../client.js";
@@ -59,6 +60,18 @@ async function start(serverApp = app): Promise<string> {
   return `http://127.0.0.1:${address.port}`;
 }
 
+async function getStartedServerBaseUrl(server: Server): Promise<string> {
+  if (!server.listening) {
+    await new Promise<void>((resolve, reject) => {
+      server.once("listening", resolve);
+      server.once("error", reject);
+    });
+  }
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Expected a TCP test server");
+  return `http://127.0.0.1:${address.port}`;
+}
+
 async function initialize(baseUrl: string, token: string): Promise<string> {
   const response = await fetch(`${baseUrl}/mcp`, {
     method: "POST",
@@ -98,7 +111,7 @@ afterEach(async () => {
 });
 
 describe("HTTP MCP server", () => {
-  it("creates isolated apps and session registries from explicit config", () => {
+  it("creates isolated apps and session registries from explicit config", async () => {
     const otherRuntime = createHttpRuntime(
       { ...testConfig, baseUrl: "http://127.0.0.1:3001" },
       { version: "0.0.0-test" },
@@ -107,6 +120,12 @@ describe("HTTP MCP server", () => {
     expect(otherRuntime.app).not.toBe(app);
     expect(otherRuntime.getActiveSessionCount()).toBe(0);
     expect(getActiveSessionCount()).toBe(0);
+
+    const baseUrl = await start(otherRuntime.app);
+    await initialize(baseUrl, "lv_live_isolated_runtime");
+    expect(otherRuntime.getActiveSessionCount()).toBe(1);
+    expect(getActiveSessionCount()).toBe(0);
+    await otherRuntime.closeAllSessions();
   });
 
   it("serves a protected health endpoint surface without Express metadata", async () => {
@@ -145,6 +164,25 @@ describe("HTTP MCP server", () => {
           code: -32700,
           message: "Request body must be valid JSON.",
         }),
+      }),
+    );
+  });
+
+  it("returns a bounded JSON-RPC error for unsupported JSON character sets", async () => {
+    const baseUrl = await start();
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        ...bearerHeaders("lv_live_charset_test"),
+        "content-type": "application/json; charset=iso-8859-1",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+    });
+
+    expect(response.status).toBe(415);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({
+        error: expect.objectContaining({ message: "Request body could not be processed." }),
       }),
     );
   });
@@ -207,6 +245,65 @@ describe("HTTP MCP server", () => {
           }),
         }),
       );
+    } finally {
+      await raisedLimitRuntime.closeAllSessions();
+    }
+  });
+
+  it("accepts the configured body ceiling after downstream credential validation", async () => {
+    const raisedLimitRuntime = createHttpRuntime(
+      { ...testConfig, maxUploadFileDataBytes: 20 * 1024 * 1024 },
+      {
+        version: "0.0.0-test",
+        clientFactory: () =>
+          makeMockClient({
+            createQURL: vi.fn(async () => {
+              markRequestCredentialValidated();
+              return { data: sampleCreateQURLData() };
+            }),
+          }),
+      },
+    );
+    const baseUrl = await start(raisedLimitRuntime.app);
+    const token = "lv_live_large_validated_request";
+
+    try {
+      const sessionId = await initialize(baseUrl, token);
+      const headers = { ...bearerHeaders(token), "mcp-session-id": sessionId };
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+        }),
+      });
+      const validation = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "create_qurl", arguments: { target_url: "https://example.com" } },
+        }),
+      });
+      expect(validation.status).toBe(200);
+
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/list",
+          params: { padding: "x".repeat(16 * 1024 * 1024) },
+        }),
+      });
+
+      expect(response.status).not.toBe(413);
+      expect(await response.text()).not.toContain("Request body is too large");
     } finally {
       await raisedLimitRuntime.closeAllSessions();
     }
@@ -949,6 +1046,152 @@ describe("HTTP MCP server", () => {
     }
   });
 
+  it("returns 409 when a session closes during transport handling", async () => {
+    let expiringRuntime!: ReturnType<typeof createHttpRuntime>;
+    let requestCount = 0;
+    expiringRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      transportFactory: () => {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => "mid-request-expiry-session",
+        });
+        const handleRequest = transport.handleRequest.bind(transport);
+        transport.handleRequest = async (...args) => {
+          requestCount += 1;
+          if (requestCount === 3) {
+            await expiringRuntime.closeAllSessions();
+            throw new Error("transport failed after session expiry");
+          }
+          await handleRequest(...args);
+        };
+        return transport;
+      },
+    });
+    const baseUrl = await start(expiringRuntime.app);
+    const token = "lv_live_mid_request_expiry";
+
+    try {
+      const sessionId = await initialize(baseUrl, token);
+      const headers = { ...bearerHeaders(token), "mcp-session-id": sessionId };
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+        }),
+      });
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/list",
+          params: {},
+        }),
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            message: "Session closed during request. Please re-initialize.",
+          }),
+        }),
+      );
+    } finally {
+      await expiringRuntime.closeAllSessions();
+    }
+  });
+
+  it("runs the scheduled session sweep at the bounded interval", async () => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    const sweepRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        port: 0,
+        sessionIdleTtlMs: 1_000,
+        unvalidatedSessionTtlMs: 1_000,
+      },
+      { version: "0.0.0-test" },
+    );
+    const server = sweepRuntime.startHttpServer();
+    const closed = new Promise<void>((resolve) => server.once("close", () => resolve()));
+
+    try {
+      const baseUrl = await getStartedServerBaseUrl(server);
+      await initialize(baseUrl, "lv_live_scheduled_sweep");
+      expect(sweepRuntime.getActiveSessionCount()).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(4_999);
+      expect(sweepRuntime.getActiveSessionCount()).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(sweepRuntime.getActiveSessionCount()).toBe(0);
+    } finally {
+      sweepRuntime.shutdownHttpServer("test sweep shutdown");
+      await closed;
+    }
+  });
+
+  it("force-closes lingering connections and sessions after the shutdown grace period", async () => {
+    const initialSigtermListeners = process.listenerCount("SIGTERM");
+    const initialSigintListeners = process.listenerCount("SIGINT");
+    const shutdownRuntime = createHttpRuntime(
+      { ...testConfig, port: 0 },
+      { version: "0.0.0-test" },
+    );
+    const server = shutdownRuntime.startHttpServer();
+    expect(process.listenerCount("SIGTERM")).toBe(initialSigtermListeners + 1);
+    expect(process.listenerCount("SIGINT")).toBe(initialSigintListeners + 1);
+    const closed = new Promise<void>((resolve) => server.once("close", () => resolve()));
+    const controller = new globalThis.AbortController();
+
+    try {
+      const baseUrl = await getStartedServerBaseUrl(server);
+      const token = "lv_live_shutdown_drain";
+      const sessionId = await initialize(baseUrl, token);
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "mcp-session-id": sessionId },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+        }),
+      });
+      const sse = await fetch(`${baseUrl}/mcp`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "text/event-stream",
+          "mcp-session-id": sessionId,
+        },
+        signal: controller.signal,
+      });
+      expect(sse.status).toBe(200);
+
+      const closeAllConnections = vi.spyOn(server, "closeAllConnections");
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      shutdownRuntime.shutdownHttpServer("SIGTERM");
+      expect(process.listenerCount("SIGTERM")).toBe(initialSigtermListeners);
+      expect(process.listenerCount("SIGINT")).toBe(initialSigintListeners);
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(closeAllConnections).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(closeAllConnections).toHaveBeenCalledOnce();
+      vi.useRealTimers();
+      await closed;
+      expect(shutdownRuntime.getActiveSessionCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+      controller.abort();
+      shutdownRuntime.shutdownHttpServer("test cleanup");
+      if (server.listening) await closed;
+      await shutdownRuntime.closeAllSessions();
+    }
+  });
+
   it("reaps a disconnected validated session after the reconnect grace period", async () => {
     const disconnectedRuntime = createHttpRuntime(testConfig, {
       version: "0.0.0-test",
@@ -1325,5 +1568,35 @@ describe("public video range streaming", () => {
     expect(response.status).toBe(404);
     expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("returns 404 when the configured path is not a regular file", async () => {
+    const videoApp = express();
+    videoApp.get("/file", (req, res) => streamPublicVideo(req, res, process.cwd()));
+    const baseUrl = await start(videoApp);
+
+    expect((await fetch(`${baseUrl}/file`)).status).toBe(404);
+  });
+
+  it("destroys the response when the video stream fails after inspection", async () => {
+    const streamErrorRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      fileStreamFactory: () => {
+        const stream = new PassThrough();
+        globalThis.queueMicrotask(() => stream.destroy(new Error("video read failed")));
+        return stream as unknown as ReadStream;
+      },
+    });
+    const videoApp = express();
+    videoApp.get("/file", (req, res) =>
+      streamErrorRuntime.streamPublicVideo(req, res, fixturePath),
+    );
+    const baseUrl = await start(videoApp);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(
+      fetch(`${baseUrl}/file`).then((response) => response.arrayBuffer()),
+    ).rejects.toThrow();
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("video read failed"));
   });
 });

@@ -107,6 +107,7 @@ export async function sendEmailMessage(
   }
   // Defense at the exported service boundary; tool assembly also checks this
   // limit so it can return a structured skipped-delivery result.
+  // Keep the same UTF-16-unit semantics as the Zod email input schemas.
   if (input.text.length > 10_000) {
     throw new EmailDeliverySetupError("input", "Email text exceeds the 10,000 character limit.");
   }

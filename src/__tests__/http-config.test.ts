@@ -170,6 +170,9 @@ describe("HTTP listener config", () => {
 
     writeFileSync(configPath, JSON.stringify({ host: "127.0.0.1:3000" }));
     expect(() => loadHttpServerConfig(configPath)).toThrow("without a port");
+
+    writeFileSync(configPath, JSON.stringify({ baseUrl: "https://mcp.example.com/a/../mcp" }));
+    expect(() => loadHttpServerConfig(configPath)).toThrow("dot path segments");
   });
 
   it("requires an explicit public base URL for non-loopback listeners", () => {

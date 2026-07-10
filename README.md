@@ -66,6 +66,8 @@ in-chat attachments without first materializing them at a known host path.
 Connector upload and qURL minting are separate operations. If minting fails
 after upload, the connector currently has no delete endpoint; the server logs
 the orphaned `resource_id` for operator cleanup and returns the mint failure.
+HTTP upload attempts remain bounded by the per-IP and per-credential MCP rate
+limits; stdio operators should separately constrain autonomous retry loops.
 Upload validation binds the declared media type to the filename plus format
 start/end markers; it is not a malware scanner or full PDF/image decoder.
 Connectors must preserve the declared safe media type and serve downloads with

@@ -7,7 +7,6 @@ import { stat } from "node:fs/promises";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { clearInterval, clearTimeout, setInterval, setTimeout } from "node:timers";
 import { fileURLToPath } from "node:url";
 import {
   formatErrorForLog,
@@ -73,6 +72,10 @@ function getJsonBodyLimitBytes(maxUploadFileDataBytes: number): number {
 
 export interface HttpRuntimeOptions {
   clientFactory?: (bearerToken: string) => IQURLClient;
+  fileStreamFactory?: (
+    filePath: string,
+    options: { start?: number; end?: number },
+  ) => ReturnType<typeof createReadStream>;
   transportFactory?: () => StreamableHTTPServerTransport;
   runtimeConfigPath?: string;
   version: string;
@@ -368,7 +371,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     const range = req.headers.range;
 
     const pipeFile = (start?: number, end?: number): void => {
-      const stream = createReadStream(filePath, { start, end });
+      const stream = options.fileStreamFactory
+        ? options.fileStreamFactory(filePath, { start, end })
+        : createReadStream(filePath, { start, end });
       const destroyStream = () => stream.destroy();
       res.once("close", destroyStream);
       stream.once("close", () => res.off("close", destroyStream));
@@ -823,6 +828,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     res.status(500).type("text").send("Internal server error.");
   }) satisfies express.ErrorRequestHandler);
 
+  let shutdownHttpServer: (signal?: string) => void = () => undefined;
+
   function startHttpServer(): Server {
     installTimestampedConsole();
     let sweepInProgress = false;
@@ -831,7 +838,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       config.sessionAbsoluteTtlMs,
       config.unvalidatedSessionTtlMs,
     );
-    const sweepTimer = setInterval(
+    const sweepTimer = globalThis.setInterval(
       () => {
         if (sweepInProgress) return;
         sweepInProgress = true;
@@ -849,7 +856,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
     const httpServer = app.listen(port, host, () => {
       logInfo(`qURL MCP HTTP server listening on ${sanitizeLogValue(host)}:${port}`);
-      logInfo("HTTP MCP auth mode: bearer token (qURL API key passthrough)");
+      logInfo("HTTP MCP auth mode: qURL API-key passthrough");
       if (config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES) {
         console.warn(
           "Warning: maxUploadFileDataBytes exceeds the default; requests above the default parser ceiling require an already-validated MCP session. Apply an authenticated edge request-size limit on hostile networks.",
@@ -889,20 +896,25 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     });
 
     let shuttingDown = false;
+    const removeSignalHandlers = (): void => {
+      process.removeListener("SIGTERM", handleSigterm);
+      process.removeListener("SIGINT", handleSigint);
+    };
     const shutdown = (signal: string): void => {
       if (shuttingDown) return;
       shuttingDown = true;
-      clearInterval(sweepTimer);
+      globalThis.clearInterval(sweepTimer);
+      removeSignalHandlers();
       logInfo(`Received ${signal}; draining HTTP connections and MCP sessions.`);
 
-      const forceCloseTimer = setTimeout(() => {
+      const forceCloseTimer = globalThis.setTimeout(() => {
         httpServer.closeAllConnections();
       }, 10_000);
       forceCloseTimer.unref();
 
       httpServer.close((error) => {
         void closeAllSessions().finally(() => {
-          clearTimeout(forceCloseTimer);
+          globalThis.clearTimeout(forceCloseTimer);
           if (error) {
             console.error(`HTTP server shutdown failed (${formatErrorForLog(error)})`);
             process.exitCode = 1;
@@ -911,8 +923,15 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       });
     };
 
-    process.once("SIGTERM", () => shutdown("SIGTERM"));
-    process.once("SIGINT", () => shutdown("SIGINT"));
+    const handleSigterm = (): void => shutdown("SIGTERM");
+    const handleSigint = (): void => shutdown("SIGINT");
+    process.once("SIGTERM", handleSigterm);
+    process.once("SIGINT", handleSigint);
+    httpServer.once("close", () => {
+      globalThis.clearInterval(sweepTimer);
+      removeSignalHandlers();
+    });
+    shutdownHttpServer = (signal = "shutdown") => shutdown(signal);
     return httpServer;
   }
 
@@ -922,6 +941,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     app,
     closeAllSessions,
     getActiveSessionCount,
+    shutdownHttpServer: (signal?: string) => shutdownHttpServer(signal),
     startHttpServer,
     streamPublicVideo,
     sweepExpiredSessions,

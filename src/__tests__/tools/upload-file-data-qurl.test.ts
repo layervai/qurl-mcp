@@ -7,6 +7,7 @@ import { QURLAPIError } from "../../client.js";
 import { clearRuntimeConfigCache } from "../../config.js";
 import { makeMockClient } from "../helpers.js";
 import {
+  createUploadFileDataQurlSchema,
   uploadFileDataQurlSchema,
   uploadFileDataQurlTool as uploadFileDataQurlToolFactory,
 } from "../../tools/upload-file-data-qurl.js";
@@ -72,6 +73,17 @@ describe("uploadFileDataQurlTool", () => {
         file_name: "sample.pdf",
         content_type: "image/svg+xml",
       });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects base64 strings above the protocol-wide schema ceiling", () => {
+      const boundedSchema = createUploadFileDataQurlSchema(8);
+      const result = boundedSchema.safeParse({
+        file_base64: "A".repeat(9),
+        file_name: "sample.pdf",
+        content_type: "application/pdf",
+      });
+
       expect(result.success).toBe(false);
     });
   });
