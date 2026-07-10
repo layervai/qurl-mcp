@@ -121,6 +121,13 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
   });
   const credentialRateLimitKeys = new WeakMap<express.Request, string>();
+  const getCredentialRateLimitKey = (req: express.Request): string => {
+    const key = credentialRateLimitKeys.get(req);
+    if (!key) {
+      throw new Error("Credential rate limiter invoked without an authenticated key.");
+    }
+    return key;
+  };
   const credentialRateLimiterCore = rateLimit({
     windowMs: 60_000,
     // The matching threshold is intentional: the IP policy bounds aggregate
@@ -131,7 +138,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     identifier: "credential",
     // The enclosing credentialRateLimiter wrapper always installs this value
     // synchronously before invoking the core limiter.
-    keyGenerator: (req) => credentialRateLimitKeys.get(req)!,
+    keyGenerator: getCredentialRateLimitKey,
     standardHeaders: "draft-8",
     legacyHeaders: false,
     handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
