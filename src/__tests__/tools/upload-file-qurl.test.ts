@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -75,9 +75,9 @@ describe("uploadFileQurlTool", () => {
     it("rejects a file that grows beyond the limit after its initial stat", async () => {
       const filePath = join(tempDir!, "growing.pdf");
       writeFileSync(filePath, "%PDF-");
-      const fileHandle = await open(filePath, "r");
+      const fileHandle = await open(filePath, "r+");
       const initialSize = (await fileHandle.stat()).size;
-      appendFileSync(filePath, "x".repeat(32));
+      await fileHandle.write("x".repeat(32), initialSize, "utf8");
 
       try {
         await expect(readFileWithinLimit(fileHandle, 8, initialSize)).rejects.toThrow(
