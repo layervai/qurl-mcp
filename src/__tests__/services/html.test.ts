@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { escapeHtml, escapeHttpUrlAttribute } from "../../services/html.js";
 
@@ -20,5 +21,17 @@ describe("HTML helpers", () => {
     expect(() => escapeHttpUrlAttribute("https://user:secret@example.com")).toThrow(
       "absolute HTTP(S)",
     );
+  });
+
+  it("keeps dynamic renderer values inside quoted HTML attributes", () => {
+    for (const sourcePath of ["src/services/legal-pages.ts", "src/services/video-page.ts"]) {
+      const source = readFileSync(sourcePath, "utf8");
+      // escapeHtml is safe for text and quoted attributes, not for unquoted
+      // attribute contexts. Pin that load-bearing renderer convention.
+      const unquotedInterpolations = source.match(
+        /\b[A-Za-z_:][-A-Za-z0-9_:.]*\s*=\s*(?!["'])[^>\s]*\$\{/g,
+      );
+      expect(unquotedInterpolations, sourcePath).toBeNull();
+    }
   });
 });

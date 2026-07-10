@@ -29,7 +29,9 @@ import { uploadMintOptionsShape } from "./upload-mint-options.js";
 // Uploads pass three deliberate bounds: this protocol-wide raw-string ceiling,
 // the HTTP JSON-body limit before tool dispatch, and getMaxUploadFileBytes on
 // the normalized decoded payload. The operator's runtime limit is usually the
-// smallest; keeping this first ceiling fixed preserves schema stability.
+// smallest; keeping this first ceiling fixed preserves schema stability. HTTP
+// only opens a parser ceiling above the 10 MB default for a session already
+// validated by a successful downstream qURL API call (see createHttpRuntime).
 export const MAX_UPLOAD_FILE_BASE64_CHARACTERS =
   Math.ceil((MAX_UPLOAD_FILE_DATA_BYTES * 4) / 3) + 1024;
 

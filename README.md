@@ -219,6 +219,10 @@ Loopback means `127.0.0.0/8` or `::1`; wildcard bind addresses such as
 Connector destinations are trusted operator configuration rather than caller
 input; private addresses and DNS resolution are therefore permitted. Pin the
 connector hostname in deployment DNS and do not point it at metadata services.
+The MCP server performs bounded file-framing checks, not full media parsing;
+the connector must independently revalidate uploaded content before storage or
+serving, and delivery must retain `nosniff` behavior as the authoritative type
+boundary.
 
 API and connector base URLs that contain embedded credentials, a query string,
 or a fragment are now rejected during startup. Deployments that previously used
@@ -276,6 +280,9 @@ enforce a corresponding aggregate limit at the SMTP provider or gateway.
 Tracking fails closed for new principals after 10,000 principals are retained
 in one process; existing principals continue to use their current buckets until
 expired entries are pruned.
+Restrict qURL API-key issuance and monitor new-principal quota-cap rejections:
+cycling many valid keys can deliberately hold that shared table at capacity for
+up to one quota window.
 The quota uses a fixed one-hour window that starts with the first attempted
 delivery after the prior window expires.
 As with any fixed window, traffic immediately before and after a boundary can
