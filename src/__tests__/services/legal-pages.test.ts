@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   findLegalDocument,
   getLegalDocuments,
+  renderMarkdownToHtml,
   renderLegalDocumentHtml,
 } from "../../services/legal-pages.js";
 
@@ -44,5 +45,13 @@ describe("legal pages", () => {
   it("returns undefined for unknown routes", () => {
     expect(findLegalDocument("/legal/missing")).toBeUndefined();
     expect(renderLegalDocumentHtml("/legal/missing", "https://qurl.example.com")).toBeUndefined();
+  });
+
+  it("escapes source HTML before applying the fixed markdown tag vocabulary", () => {
+    const html = renderMarkdownToHtml("# <script>alert(1)</script> **safe**");
+
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).toContain("<strong>safe</strong>");
   });
 });

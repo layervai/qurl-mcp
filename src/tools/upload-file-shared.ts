@@ -134,7 +134,10 @@ export function validateFileNameContentType(fileName: string, contentType: strin
 }
 
 export function validateFileSignature(fileData: Uint8Array, contentType: string): void {
-  const bytes = Buffer.from(fileData.buffer, fileData.byteOffset, fileData.byteLength);
+  const bytes =
+    fileData.buffer instanceof ArrayBuffer
+      ? Buffer.from(fileData.buffer, fileData.byteOffset, fileData.byteLength)
+      : Buffer.from(fileData);
   // latin1 preserves byte values exactly; Node's ascii decoder masks the high
   // bit and would let non-ASCII bytes impersonate an ASCII magic header.
   // These are bounded type-confusion guards rather than full decoders. Start

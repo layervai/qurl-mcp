@@ -187,7 +187,7 @@ function renderInlineMarkdown(value: string): string {
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
 }
 
-function renderMarkdownToHtml(markdown: string): string {
+export function renderMarkdownToHtml(markdown: string): string {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const html: string[] = [];
   let paragraph: string[] = [];

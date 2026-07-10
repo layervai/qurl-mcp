@@ -353,6 +353,38 @@ describe("sendEmailMessage", () => {
     );
   });
 
+  it("falls back to file SMTP port and TLS settings when environment values are empty", async () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 465,
+          secure: true,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+        },
+      }),
+    );
+    process.env.QURL_MCP_CONFIG = configPath;
+    process.env.QURL_SMTP_PORT = " ";
+    process.env.QURL_SMTP_SECURE = "";
+    nodemailerMocks.sendMail.mockResolvedValue({ messageId: "msg-file-tls" });
+
+    const result = await sendEmailMessage({
+      to: ["alice@example.com"],
+      subject: "Secure link ready",
+      text: "Body",
+    });
+
+    expect(result.sent).toBe(1);
+    expect(nodemailerMocks.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({ port: 465, secure: true, requireTLS: false }),
+    );
+  });
+
   it("records per-recipient SMTP failures and still closes the transport", async () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
@@ -371,7 +403,9 @@ describe("sendEmailMessage", () => {
     process.env.QURL_MCP_CONFIG = configPath;
     nodemailerMocks.sendMail
       .mockRejectedValueOnce(
-        new Error("smtp.internal: mail%2Ber s%20ecret recipient mailbox unavailable"),
+        new Error(
+          "smtp.internal: mail%2Ber s%20ecret bWFpbCtlcg== cyBlY3JldA== recipient mailbox unavailable",
+        ),
       )
       .mockResolvedValueOnce({ messageId: "msg-2" });
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -404,6 +438,8 @@ describe("sendEmailMessage", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("recipient mailbox unavailable"));
     expect(log).not.toHaveBeenCalledWith(expect.stringContaining("mail%2Ber"));
     expect(log).not.toHaveBeenCalledWith(expect.stringContaining("s%20ecret"));
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("bWFpbCtlcg=="));
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("cyBlY3JldA=="));
     expect(JSON.stringify(result)).not.toContain("smtp.internal");
     expect(nodemailerMocks.close).toHaveBeenCalledOnce();
   });

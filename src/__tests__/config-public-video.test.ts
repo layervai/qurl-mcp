@@ -315,6 +315,17 @@ describe("public video config", () => {
     });
   });
 
+  it("falls back to the configured video path when the environment value is empty", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ publicVideo: { filePath: "/srv/videos/config.mp4" } }),
+    );
+    process.env.QURL_PUBLIC_VIDEO_FILE_PATH = "   ";
+
+    expect(loadRuntimeConfig(configPath).publicVideo?.filePath).toBe("/srv/videos/config.mp4");
+  });
+
   it("rejects public video paths that collide with protocol routes", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(

@@ -450,7 +450,8 @@ function resolvePublicVideoConfig(
   fileConfig: Partial<PublicVideoConfig> | undefined,
 ): PublicVideoConfig | undefined {
   return normalizePublicVideoConfig({
-    filePath: process.env.QURL_PUBLIC_VIDEO_FILE_PATH ?? fileConfig?.filePath,
+    filePath:
+      trimString(process.env.QURL_PUBLIC_VIDEO_FILE_PATH) ?? trimString(fileConfig?.filePath),
     title: trimString(process.env.QURL_PUBLIC_VIDEO_TITLE) ?? trimString(fileConfig?.title),
     pagePath:
       trimString(process.env.QURL_PUBLIC_VIDEO_PAGE_PATH) ?? trimString(fileConfig?.pagePath),
@@ -540,8 +541,8 @@ function resolveSmtpConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpCon
 function resolveSmtpFieldValues(fileConfig: Partial<SmtpConfig> | undefined) {
   return {
     host: trimString(process.env.QURL_SMTP_HOST) ?? trimString(fileConfig?.host),
-    port: parseSmtpPort(process.env.QURL_SMTP_PORT ?? fileConfig?.port),
-    secure: parseBoolean(process.env.QURL_SMTP_SECURE ?? fileConfig?.secure),
+    port: parseSmtpPort(trimString(process.env.QURL_SMTP_PORT) ?? fileConfig?.port),
+    secure: parseBoolean(trimString(process.env.QURL_SMTP_SECURE) ?? fileConfig?.secure),
     username: trimString(process.env.QURL_SMTP_USERNAME) ?? trimString(fileConfig?.username),
     password: trimString(process.env.QURL_SMTP_PASSWORD) ?? trimString(fileConfig?.password),
     fromEmail: trimString(process.env.QURL_SMTP_FROM_EMAIL) ?? trimString(fileConfig?.fromEmail),

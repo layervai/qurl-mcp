@@ -104,6 +104,10 @@ describe("file name validation", () => {
     expect(() =>
       validateFileSignature(Buffer.from("%PDF-1.7\n%%EOF\n"), "application/pdf"),
     ).not.toThrow();
+    const pdfBytes = Buffer.from("%PDF-1.7\n%%EOF\n");
+    const sharedPdf = new Uint8Array(new SharedArrayBuffer(pdfBytes.byteLength));
+    sharedPdf.set(pdfBytes);
+    expect(() => validateFileSignature(sharedPdf, "application/pdf")).not.toThrow();
     expect(() =>
       validateFileSignature(Buffer.from(`%PDF-1.7\n%%EOF\n${" ".repeat(2048)}`), "application/pdf"),
     ).not.toThrow();
