@@ -52,7 +52,7 @@ export interface UploadEmailDetails {
   extraLines?: string[];
 }
 
-function singleLineEmailDetail(value: string): string {
+export function singleLineEmailDetail(value: string): string {
   return flattenControlCharacters(value);
 }
 

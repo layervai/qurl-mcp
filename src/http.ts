@@ -161,6 +161,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
     next();
   };
+  // Security invariant: keep the credential guard immediately before the
+  // credential-keyed limiter. The key generator deliberately throws instead
+  // of sharing a fallback bucket if a future middleware edit violates this
+  // order; tokenless requests must be rejected outright by the guard.
   const authenticatedMcpMiddleware = [
     bearerAuthMiddleware,
     requireRateLimitCredential,

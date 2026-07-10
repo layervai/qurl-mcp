@@ -308,6 +308,34 @@ describe("createQurlTool", () => {
       });
     });
 
+    it("flattens control characters in generated create-result detail lines", async () => {
+      const mockCreate = vi.fn().mockResolvedValue({
+        data: sampleCreateQURLData({ label: "Example\u2028Forged" }),
+      });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com"],
+        sent: 1,
+        failed: 0,
+        results: [{ email: "alice@example.com", success: true, skipped: false }],
+      });
+      const tool = createQurlTool(makeMockClient({ createQURL: mockCreate }));
+
+      await tool.handler({
+        target_url: "https://example.com/protected",
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("Label: Example Forged"),
+        }),
+        expect.any(Object),
+      );
+      expect(vi.mocked(sendEmailMessage).mock.calls[0]?.[0].text).not.toMatch(/[\u2028\u2029]/u);
+    });
+
     it("uses request-scoped email quota credentials in HTTP mode and omits an absent site", async () => {
       const mockCreate = vi.fn().mockResolvedValue({
         data: sampleCreateQURLData({ expires_at: undefined, qurl_site: undefined }),

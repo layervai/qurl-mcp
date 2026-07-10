@@ -8,6 +8,7 @@ import {
 import {
   emailDeliveryInputSchema,
   maybeDeliverToolEmail,
+  singleLineEmailDetail,
   toEmailAugmentedResult,
 } from "./email-delivery.js";
 import { createQurlOutputSchema } from "./output-schemas.js";
@@ -130,14 +131,18 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
         defaultSubject: "Your secure qURL link is ready",
         detailLines: [
           "A secure qURL link has been created for you.",
-          `Target URL: ${createInput.target_url}`,
-          `Secure Link: ${result.data.qurl_link}`,
+          `Target URL: ${singleLineEmailDetail(createInput.target_url)}`,
+          `Secure Link: ${singleLineEmailDetail(result.data.qurl_link)}`,
           // The SDK type requires expires_at; keep the guard so upstream
           // response drift cannot render "undefined" into a customer email.
-          ...(result.data.expires_at ? [`Expires At: ${result.data.expires_at}`] : []),
-          ...(result.data.qurl_site ? [`qURL Site: ${result.data.qurl_site}`] : []),
-          ...(result.data.label ? [`Label: ${result.data.label}`] : []),
-          ...(result.data.type ? [`Type: ${result.data.type}`] : []),
+          ...(result.data.expires_at
+            ? [`Expires At: ${singleLineEmailDetail(result.data.expires_at)}`]
+            : []),
+          ...(result.data.qurl_site
+            ? [`qURL Site: ${singleLineEmailDetail(result.data.qurl_site)}`]
+            : []),
+          ...(result.data.label ? [`Label: ${singleLineEmailDetail(result.data.label)}`] : []),
+          ...(result.data.type ? [`Type: ${singleLineEmailDetail(result.data.type)}`] : []),
         ],
       });
       return toEmailAugmentedResult(result.data, emailResult);
