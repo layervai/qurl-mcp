@@ -20,6 +20,7 @@ vi.mock("nodemailer", () => ({
 import { clearRuntimeConfigCache } from "../../config.js";
 import {
   clearEmailQuotaState,
+  EMAIL_DELIVERY_DEADLINE_MS,
   hasEmailQuotaTrackingCapacity,
   sendEmailMessage,
 } from "../../services/email.js";
@@ -94,6 +95,42 @@ describe("sendEmailMessage", () => {
       failed: 0,
       results: [],
       skipped_reason: "SMTP is not configured.",
+    });
+    expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
+  });
+
+  it("reports no-recipient calls without conflating them with SMTP enablement", async () => {
+    const disabledConfigPath = join(tempDir!, "disabled.json");
+    writeFileSync(disabledConfigPath, JSON.stringify({}));
+    process.env.QURL_MCP_CONFIG = disabledConfigPath;
+
+    expect(await sendEmailMessage({ to: [], subject: "Unused", text: "Unused" })).toMatchObject({
+      attempted: false,
+      enabled: false,
+      skipped_reason: "No email recipients were provided.",
+    });
+
+    const enabledConfigPath = join(tempDir!, "enabled.json");
+    writeFileSync(
+      enabledConfigPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+        },
+      }),
+    );
+    process.env.QURL_MCP_CONFIG = enabledConfigPath;
+    clearRuntimeConfigCache();
+
+    expect(await sendEmailMessage({ to: [], subject: "Unused", text: "Unused" })).toMatchObject({
+      attempted: false,
+      enabled: true,
+      skipped_reason: "No email recipients were provided.",
     });
     expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
   });
@@ -493,6 +530,57 @@ describe("sendEmailMessage", () => {
     expect(nodemailerMocks.close).toHaveBeenCalledOnce();
   });
 
+  it("bounds the complete sequential delivery batch with an aggregate deadline", async () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+        },
+      }),
+    );
+    process.env.QURL_MCP_CONFIG = configPath;
+    nodemailerMocks.sendMail.mockReturnValueOnce(new Promise(() => undefined));
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+
+    try {
+      const delivery = sendEmailMessage({
+        to: ["first@example.com", "second@example.com"],
+        subject: "Secure link ready",
+        text: "Body",
+      });
+      while (!nodemailerMocks.sendMail.mock.calls.length) {
+        await new Promise<void>((resolve) => globalThis.setImmediate(resolve));
+      }
+      await vi.advanceTimersByTimeAsync(EMAIL_DELIVERY_DEADLINE_MS);
+
+      const result = await delivery;
+      expect(nodemailerMocks.sendMail).toHaveBeenCalledOnce();
+      expect(result.results).toEqual([
+        expect.objectContaining({
+          email: "first@example.com",
+          success: false,
+          skipped: false,
+          error: "Email delivery exceeded the aggregate deadline.",
+        }),
+        expect.objectContaining({
+          email: "second@example.com",
+          success: false,
+          skipped: true,
+        }),
+      ]);
+      expect(nodemailerMocks.close).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rejects a message above the configured per-message recipient cap", async () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
@@ -668,6 +756,43 @@ describe("sendEmailMessage", () => {
     expect(afterWindow.sent).toBe(1);
     expect(nodemailerMocks.sendMail).toHaveBeenCalledTimes(2);
     now.mockRestore();
+  });
+
+  it("does not consume recipient quota when transport construction fails", async () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+          maxRecipientsPerHour: 1,
+        },
+      }),
+    );
+    process.env.QURL_MCP_CONFIG = configPath;
+    process.env.QURL_API_KEY = "lv_live_transport_setup";
+    nodemailerMocks.createTransport.mockImplementationOnce(() => {
+      throw new Error("invalid transport options");
+    });
+
+    await expect(
+      sendEmailMessage({ to: ["first@example.com"], subject: "First", text: "Body" }),
+    ).rejects.toThrow("SMTP transport could not be created");
+
+    nodemailerMocks.sendMail.mockResolvedValueOnce({ messageId: "msg-after-setup-failure" });
+    const retry = await sendEmailMessage({
+      to: ["second@example.com"],
+      subject: "Second",
+      text: "Body",
+    });
+
+    expect(retry.sent).toBe(1);
+    expect(nodemailerMocks.sendMail).toHaveBeenCalledOnce();
   });
 
   it("tracks two request-scoped principals independently", async () => {

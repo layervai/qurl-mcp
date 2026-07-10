@@ -73,9 +73,11 @@ start/end markers; it is not a malware scanner or full PDF/image decoder.
 For polyglot resistance, a PDF's final `%%EOF` marker must be followed only by
 ASCII whitespace; producer output with other trailing bytes is rejected even
 if a permissive PDF reader would accept it. JPEG validation checks framing and
-terminal markers rather than decoding image segments.
-Connectors must preserve the declared safe media type and serve downloads with
-`X-Content-Type-Options: nosniff` rather than inferring an executable type.
+terminal markers rather than decoding image segments. The authenticated
+connector must independently decode or otherwise fully validate content before
+storage when semantic media validity matters. It must also preserve the
+declared safe media type and serve downloads with `X-Content-Type-Options:
+nosniff` rather than inferring an executable type.
 There is intentionally no application-level path allowlist: symlinks and
 time-of-check/time-of-use races make a lexical prefix check a misleading
 security boundary. Use a dedicated OS account, container, or read-only mount
@@ -285,12 +287,18 @@ The SMTP transport uses bounded connection/socket timeouts and is closed after
 each delivery batch. Failed SMTP attempts still consume quota—including when a
 transient outage results in zero delivered messages—so repeated failures cannot
 bypass the abuse limit.
+Each delivery request also has a 60-second aggregate deadline. Recipients not
+started before that deadline are reported as skipped; provider-side queues are
+the supported path for larger or slower fan-out.
 Transport encryption is mandatory: `smtp.secure: true` uses implicit TLS,
 while `smtp.secure: false` requires a successful STARTTLS upgrade. Port 465 is
 reserved for implicit TLS and therefore requires `smtp.secure: true`.
 Hourly quota state is maintained per server process: it resets on restart and
 is not shared across replicas. Operators running multiple instances should
 enforce a corresponding aggregate limit at the SMTP provider or gateway.
+The in-process quota is therefore an abuse backstop, not a durable global
+safety boundary; restart/scale-out fail-open behavior must be covered by that
+provider-side limit.
 Tracking fails closed for new principals after 10,000 principals are retained
 in one process; existing principals continue to use their current buckets until
 expired entries are pruned.

@@ -37,6 +37,31 @@ const emailQuotaByPrincipal = new Map<string, EmailQuota>();
 // policy should enforce it at the SMTP provider or gateway across replicas.
 const EMAIL_QUOTA_WINDOW_MS = 60 * 60 * 1000;
 const EMAIL_QUOTA_SALT = randomBytes(16);
+export const EMAIL_DELIVERY_DEADLINE_MS = 60_000;
+
+class EmailDeliveryDeadlineError extends Error {
+  constructor() {
+    super("Aggregate email delivery deadline exceeded.");
+    this.name = "EmailDeliveryDeadlineError";
+  }
+}
+
+async function settleBeforeDeliveryDeadline<T>(
+  operation: Promise<T>,
+  remainingMs: number,
+): Promise<T> {
+  if (remainingMs <= 0) throw new EmailDeliveryDeadlineError();
+  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = globalThis.setTimeout(() => reject(new EmailDeliveryDeadlineError()), remainingMs);
+    timeout.unref?.();
+  });
+  try {
+    return await Promise.race([operation, deadline]);
+  } finally {
+    if (timeout !== undefined) globalThis.clearTimeout(timeout);
+  }
+}
 
 function formatSmtpErrorForLog(error: unknown, smtp: SmtpConfig): string {
   if (!(error instanceof Error)) return formatErrorForLog(error);
@@ -91,15 +116,26 @@ async function deriveEmailQuotaPrincipal(principalKey: string): Promise<string> 
   });
 }
 
+function loadEmailRuntimeConfig(): RuntimeConfig {
+  try {
+    return loadRuntimeConfig();
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "SMTP configuration could not be loaded.";
+    throw new EmailDeliverySetupError("smtp", message, { cause: error });
+  }
+}
+
 export async function sendEmailMessage(
   input: EmailMessageInput,
   options: EmailMessageOptions = {},
 ): Promise<EmailDeliveryResult> {
   const recipients = uniqueRecipients(input.to);
   if (recipients.length === 0) {
+    const smtp = loadEmailRuntimeConfig().smtp;
     return {
       attempted: false,
-      enabled: false,
+      enabled: smtp !== undefined,
       recipients,
       sent: 0,
       failed: 0,
@@ -121,14 +157,7 @@ export async function sendEmailMessage(
     throw new EmailDeliverySetupError("input", "Email text exceeds the 10,000 character limit.");
   }
 
-  let runtimeConfig: RuntimeConfig;
-  try {
-    runtimeConfig = loadRuntimeConfig();
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "SMTP configuration could not be loaded.";
-    throw new EmailDeliverySetupError("smtp", message, { cause: error });
-  }
+  const runtimeConfig = loadEmailRuntimeConfig();
   const smtp = runtimeConfig.smtp;
   if (!smtp) {
     return {
@@ -267,46 +296,58 @@ export async function sendEmailMessage(
       "Email delivery was skipped because the hourly quota was reached.",
     );
   }
+  let transporter: ReturnType<typeof nodemailer.createTransport>;
+  try {
+    transporter = nodemailer.createTransport({
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      // Port 587-style connections must upgrade before credentials or qURL
+      // links are sent. Implicit-TLS transports are already encrypted.
+      requireTLS: !smtp.secure,
+      auth: {
+        user: smtp.username,
+        pass: smtp.password,
+      },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 30_000,
+    });
+  } catch (error) {
+    throw new EmailDeliverySetupError("smtp", "SMTP transport could not be created.", {
+      cause: error,
+    });
+  }
+
   // Count attempted recipients, not only successful sends. Refunding failures
   // would let a failing or adversarial SMTP destination bypass the abuse cap
-  // by retrying indefinitely.
+  // by retrying indefinitely. Construction above is synchronous, so the quota
+  // check, transport creation, and reservation still have no interleaving await.
   emailQuotaByPrincipal.set(principal, {
     ...quota,
     recipients: quota.recipients + allowedRecipients.length,
   });
 
-  const transporter = nodemailer.createTransport({
-    host: smtp.host,
-    port: smtp.port,
-    secure: smtp.secure,
-    // Port 587-style connections must upgrade before credentials or qURL
-    // links are sent. Implicit-TLS transports are already encrypted.
-    requireTLS: !smtp.secure,
-    auth: {
-      user: smtp.username,
-      pass: smtp.password,
-    },
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 30_000,
-  });
-
   const from = smtp.fromName ? { name: smtp.fromName, address: smtp.fromEmail } : smtp.fromEmail;
 
   const results = blockedRecipientResults(blockedRecipients);
+  const deliveryDeadlineAt = Date.now() + EMAIL_DELIVERY_DEADLINE_MS;
   try {
     // Send sequentially to apply backpressure to the SMTP server and preserve
     // deterministic per-recipient outcomes. maxRecipientsPerMessage bounds
     // the resulting latency; operators needing bulk throughput should use a
     // provider-side queue rather than increasing in-process concurrency.
-    for (const recipient of allowedRecipients) {
+    for (const [index, recipient] of allowedRecipients.entries()) {
       try {
-        const sent = await transporter.sendMail({
-          from,
-          to: recipient,
-          subject,
-          text: input.text,
-        });
+        const sent = await settleBeforeDeliveryDeadline(
+          transporter.sendMail({
+            from,
+            to: recipient,
+            subject,
+            text: input.text,
+          }),
+          deliveryDeadlineAt - Date.now(),
+        );
         results.push({
           email: recipient,
           success: true,
@@ -314,6 +355,21 @@ export async function sendEmailMessage(
           message_id: sent.messageId,
         });
       } catch (error) {
+        if (error instanceof EmailDeliveryDeadlineError) {
+          results.push({
+            email: recipient,
+            success: false,
+            skipped: false,
+            error: "Email delivery exceeded the aggregate deadline.",
+          });
+          results.push(
+            ...skippedRecipientResults(
+              allowedRecipients.slice(index + 1),
+              "Email delivery was skipped after the aggregate deadline.",
+            ),
+          );
+          break;
+        }
         console.error(
           `Email delivery to one recipient failed (${formatSmtpErrorForLog(error, smtp)})`,
         );

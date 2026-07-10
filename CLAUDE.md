@@ -75,9 +75,20 @@ qurl-mcp/
 │   │   ├── update-qurl.ts
 │   │   ├── mint-link.ts
 │   │   ├── batch-create.ts
+│   │   ├── revoke-qurl-token.ts
+│   │   ├── update-qurl-token.ts
+│   │   ├── list-qurl-sessions.ts
+│   │   ├── terminate-qurl-sessions.ts
 │   │   └── upload-*.ts    # File/data/text upload workflows
-│   ├── auth/              # Request-scoped credentials and bearer verification
-│   ├── services/          # Email, PDF, legal-page, and video-page services
+│   ├── auth/
+│   │   ├── request-context.ts # Request-scoped credentials and validation state
+│   │   └── static-bearer.ts   # Passthrough bearer verifier/client construction
+│   ├── services/
+│   │   ├── email.ts       # Policy-controlled SMTP delivery and quotas
+│   │   ├── text-pdf.ts    # Bounded text-to-PDF generation
+│   │   ├── html.ts        # Shared HTML escaping
+│   │   ├── legal-pages.ts # Static legal document rendering
+│   │   └── video-page.ts  # Optional public video page rendering
 │   ├── resources/
 │   │   ├── links.ts
 │   │   └── usage.ts
@@ -208,6 +219,7 @@ feat(tools)!: rename resolve_qurl to resolve tool
 | `resources` | MCP resources                                              |
 | `prompts`   | MCP prompts                                                |
 | `http`      | HTTP transport, public routes, and remote-server lifecycle |
+| `security`  | Cross-cutting authentication, validation, and hardening     |
 | `ci`        | GitHub Actions workflows                                   |
 | `deps`      | Dependencies                                               |
 
