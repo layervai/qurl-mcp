@@ -121,6 +121,9 @@ export async function maybeDeliverToolEmail(
   if (!input.delivery) return undefined;
 
   const subject = input.delivery.subject?.trim() || input.defaultSubject;
+  // Preserve formatting in the caller-authored message because it is sent only
+  // as the plain-text body. Generated detail fields are flattened separately
+  // so an untrusted value cannot visually create another structured detail row.
   const sections = [
     input.delivery.message?.trim(),
     input.detailLines.join("\n"),

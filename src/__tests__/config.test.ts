@@ -59,4 +59,12 @@ describe("parseSizeBytes", () => {
       "must be a positive number",
     );
   });
+
+  it("enforces the upload ceiling for every caller", () => {
+    expect(() => parseSizeBytes("101mb", 1, "size")).toThrow("must not exceed 100mb");
+    expect(() => parseSizeBytes(101 * 1024 * 1024, 1, "size")).toThrow("must not exceed 100mb");
+    expect(() => parseSizeBytes(undefined, 101 * 1024 * 1024, "size")).toThrow(
+      "must not exceed 100mb",
+    );
+  });
 });

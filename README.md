@@ -200,6 +200,9 @@ permissions (for example, `chmod 600`); startup warns when group/other read bits
 are present. This check is intentionally advisory so existing deployments do
 not fail after an upgrade, and it is skipped on Windows because POSIX mode bits
 are not available there.
+Email delivery itself is fail-closed unless at least one exact
+`smtp.allowedRecipients` entry or `smtp.allowedRecipientDomains` entry is
+configured; startup warns when complete SMTP credentials lack that policy.
 
 Raising `maxUploadFileDataBytes` also raises the HTTP JSON parser's per-request
 memory ceiling to roughly 1.5 times that value (up to about 150 MB at the
@@ -221,6 +224,8 @@ Loopback means `127.0.0.0/8` or `::1`; wildcard bind addresses such as
 Connector destinations are trusted operator configuration rather than caller
 input; private addresses and DNS resolution are therefore permitted. Pin the
 connector hostname in deployment DNS and do not point it at metadata services.
+The caller's qURL bearer credential is forwarded to this host, so treat connector
+URL and DNS control as part of the credential trust boundary.
 Configure the connector service base URL, not an upload route: qurl-mcp appends
 `/api/upload` to ordinary base paths, accepts that exact endpoint suffix, and
 rejects ambiguous upload-like paths such as `/upload` or `/api/upload/v2`.
@@ -418,8 +423,8 @@ that preserves the caller's qURL bearer credential for `/mcp` authorization.
 Session caps, request rate limits, and email recipient quotas are in-memory and
 apply independently to each server process. A horizontally scaled deployment
 therefore has aggregate limits of roughly the configured value multiplied by
-its instance count; use shared edge limits or a single routed instance when a
-global cap is required.
+its instance count, and email quota state resets on process restart. Use shared
+edge/provider limits or a single routed instance when a global cap is required.
 `/healthz` and the public video-file endpoint each use their own
 `publicFileRateLimitPerMinute` bucket, isolated from legal/video-page traffic
 and from each other. Keep load-balancer, liveness-probe, and expected video

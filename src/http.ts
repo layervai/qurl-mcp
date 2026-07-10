@@ -3,7 +3,7 @@
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { createReadStream } from "node:fs";
-import { stat } from "node:fs/promises";
+import { lstat } from "node:fs/promises";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
@@ -372,13 +372,15 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     setPublicPageSecurityHeaders(res);
     let stats;
     try {
-      stats = await stat(filePath);
+      // Refuse a final-component symlink so a public video path cannot be
+      // retargeted to a different local file after operator configuration.
+      stats = await lstat(filePath);
     } catch (error) {
       console.error(`[public-video] file inspection failed (${formatErrorForLog(error)})`);
       res.status(404).send("Configured video file was not found.");
       return;
     }
-    if (!stats.isFile() || stats.size === 0) {
+    if (stats.isSymbolicLink() || !stats.isFile() || stats.size === 0) {
       res.status(404).send("Configured video file was not found.");
       return;
     }
@@ -903,9 +905,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       logInfo(`Public legal pages enabled: ${legalDocuments.length}`);
       if (config.publicVideo) {
         logInfo("Public video page enabled.");
-        void stat(config.publicVideo.filePath)
+        void lstat(config.publicVideo.filePath)
           .then((stats) => {
-            if (!stats.isFile()) {
+            if (stats.isSymbolicLink() || !stats.isFile()) {
               console.warn("[public-video] configured path is not a regular file at startup");
             } else if (stats.size === 0) {
               console.warn("[public-video] configured video file is empty at startup");

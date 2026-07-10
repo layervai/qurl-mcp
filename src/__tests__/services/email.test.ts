@@ -33,6 +33,8 @@ describe("sendEmailMessage", () => {
   const originalSmtpPassword = process.env.QURL_SMTP_PASSWORD;
   const originalSmtpFromEmail = process.env.QURL_SMTP_FROM_EMAIL;
   const originalSmtpFromName = process.env.QURL_SMTP_FROM_NAME;
+  const originalAllowedRecipients = process.env.QURL_SMTP_ALLOWED_RECIPIENTS;
+  const originalAllowedRecipientDomains = process.env.QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS;
   const originalApiKey = process.env.QURL_API_KEY;
   let tempDir: string | undefined;
 
@@ -47,6 +49,8 @@ describe("sendEmailMessage", () => {
     delete process.env.QURL_SMTP_PASSWORD;
     delete process.env.QURL_SMTP_FROM_EMAIL;
     delete process.env.QURL_SMTP_FROM_NAME;
+    delete process.env.QURL_SMTP_ALLOWED_RECIPIENTS;
+    process.env.QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS = "example.com";
     delete process.env.QURL_API_KEY;
     tempDir = mkdtempSync(join(tmpdir(), "qurl-email-test-"));
   });
@@ -60,6 +64,8 @@ describe("sendEmailMessage", () => {
     process.env.QURL_SMTP_PASSWORD = originalSmtpPassword;
     process.env.QURL_SMTP_FROM_EMAIL = originalSmtpFromEmail;
     process.env.QURL_SMTP_FROM_NAME = originalSmtpFromName;
+    process.env.QURL_SMTP_ALLOWED_RECIPIENTS = originalAllowedRecipients;
+    process.env.QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS = originalAllowedRecipientDomains;
     process.env.QURL_API_KEY = originalApiKey;
     clearEmailQuotaState();
     clearRuntimeConfigCache();
@@ -89,6 +95,42 @@ describe("sendEmailMessage", () => {
       results: [],
       skipped_reason: "SMTP is not configured.",
     });
+    expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when SMTP has no recipient allowlist", async () => {
+    delete process.env.QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS;
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+        },
+      }),
+    );
+    process.env.QURL_MCP_CONFIG = configPath;
+
+    const result = await sendEmailMessage({
+      to: ["attacker@elsewhere.test"],
+      subject: "Secure link ready",
+      text: "Body",
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        attempted: false,
+        enabled: true,
+        sent: 0,
+        failed: 1,
+        skipped_reason: expect.stringContaining("requires at least one configured allowed"),
+      }),
+    );
     expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
   });
 
@@ -474,6 +516,7 @@ describe("sendEmailMessage", () => {
   });
 
   it("enforces recipient allowlists without attempting blocked deliveries", async () => {
+    delete process.env.QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS;
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
       configPath,
@@ -529,6 +572,7 @@ describe("sendEmailMessage", () => {
   });
 
   it("normalizes mixed-case IDNA addresses before exact-recipient allowlist matching", async () => {
+    delete process.env.QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS;
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
       configPath,

@@ -148,6 +148,13 @@ const SIZE_UNITS = new Map<string, number>([
   ["gb", 1024 * 1024 * 1024],
 ]);
 
+function enforceUploadSizeCeiling(bytes: number, fieldName: string): number {
+  if (bytes > MAX_UPLOAD_FILE_DATA_BYTES) {
+    throw new Error(`${fieldName} must not exceed 100mb.`);
+  }
+  return bytes;
+}
+
 export function parseConfigFile(configPath: string): UncheckedConfigFileShape {
   try {
     const content = readFileSync(configPath, "utf8");
@@ -178,12 +185,12 @@ export function parseConfigFile(configPath: string): UncheckedConfigFileShape {
 }
 
 export function parseSizeBytes(value: unknown, fallback: number, fieldName: string): number {
-  if (value === undefined) return fallback;
+  if (value === undefined) return enforceUploadSizeCeiling(fallback, fieldName);
   if (typeof value === "number") {
     if (!Number.isSafeInteger(value) || value <= 0) {
       throw new Error(`${fieldName} must be a positive number.`);
     }
-    return value;
+    return enforceUploadSizeCeiling(value, fieldName);
   }
   if (typeof value !== "string") {
     throw new Error(`${fieldName} must be a positive byte size.`);
@@ -199,7 +206,7 @@ export function parseSizeBytes(value: unknown, fallback: number, fieldName: stri
     if (!Number.isSafeInteger(bytes) || bytes <= 0) {
       throw new Error(`${fieldName} must be a positive number.`);
     }
-    return bytes;
+    return enforceUploadSizeCeiling(bytes, fieldName);
   }
 
   const match = /^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)$/.exec(trimmed);
@@ -217,7 +224,7 @@ export function parseSizeBytes(value: unknown, fallback: number, fieldName: stri
   if (!Number.isSafeInteger(bytes) || bytes <= 0) {
     throw new Error(`${fieldName} must resolve to a positive whole number of bytes.`);
   }
-  return bytes;
+  return enforceUploadSizeCeiling(bytes, fieldName);
 }
 
 export function getDefaultConfigPath(): string {
@@ -588,9 +595,6 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES,
     "maxUploadFileDataBytes",
   );
-  if (maxUploadFileDataBytes > MAX_UPLOAD_FILE_DATA_BYTES) {
-    throw new Error("maxUploadFileDataBytes must not exceed 100mb.");
-  }
   const defaultQurlApiUrl = normalizeServiceBaseUrl(
     trimString(process.env.QURL_API_URL) ||
       trimString(fileConfig.defaultQurlApiUrl) ||
@@ -646,6 +650,17 @@ function inspectSmtpFileConfig(
     !fromEmail ? "fromEmail" : undefined,
   ].filter((field): field is string => typeof field === "string");
   const securityWarnings: string[] = [];
+  const hasRecipientRestrictions = Boolean(
+    parseCsvList(process.env.QURL_SMTP_ALLOWED_RECIPIENTS ?? fileConfig?.allowedRecipients) ||
+    parseCsvList(
+      process.env.QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS ?? fileConfig?.allowedRecipientDomains,
+    ),
+  );
+  if (missingFields.length === 0 && !hasRecipientRestrictions) {
+    securityWarnings.push(
+      "SMTP delivery is fail-closed until smtp.allowedRecipients or smtp.allowedRecipientDomains is configured.",
+    );
+  }
   if (trimString(fileConfig?.password) && process.platform !== "win32") {
     try {
       if ((statSync(configPath).mode & 0o077) !== 0) {

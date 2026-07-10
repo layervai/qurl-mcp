@@ -179,14 +179,26 @@ export async function sendEmailMessage(
   const exactAllowlist = new Set(smtp.allowedRecipients ?? []);
   const domainAllowlist = new Set((smtp.allowedRecipientDomains ?? []).map(normalizeEmailDomain));
   const hasRecipientRestrictions = exactAllowlist.size > 0 || domainAllowlist.size > 0;
+  if (!hasRecipientRestrictions) {
+    const reason =
+      "SMTP delivery requires at least one configured allowed recipient or recipient domain.";
+    return {
+      attempted: false,
+      enabled: true,
+      recipients,
+      sent: 0,
+      failed: recipients.length,
+      results: skippedRecipientResults(recipients, reason),
+      skipped_reason: reason,
+    };
+  }
   const allowedRecipients: string[] = [];
   const blockedRecipients: string[] = [];
   for (const recipient of recipients) {
     // Normalize at the enforcement boundary instead of relying on both the
     // delivery and config call paths to preserve a hidden shared invariant.
     const domain = normalizeEmailDomain(recipient.slice(recipient.lastIndexOf("@") + 1));
-    const isAllowed =
-      !hasRecipientRestrictions || exactAllowlist.has(recipient) || domainAllowlist.has(domain);
+    const isAllowed = exactAllowlist.has(recipient) || domainAllowlist.has(domain);
     (isAllowed ? allowedRecipients : blockedRecipients).push(recipient);
   }
 

@@ -205,6 +205,7 @@ describe("public video config", () => {
             username: "mailer",
             password: "secret",
             fromEmail: "noreply@example.com",
+            allowedRecipientDomains: ["example.com"],
           },
         }),
       );
@@ -216,6 +217,28 @@ describe("public video config", () => {
       expect(inspectSmtpConfig(configPath).securityWarnings).toEqual([]);
     },
   );
+
+  it("warns when complete SMTP credentials lack a recipient allowlist", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+        },
+      }),
+      { mode: 0o600 },
+    );
+
+    expect(inspectSmtpConfig(configPath).securityWarnings).toContainEqual(
+      expect.stringContaining("fail-closed"),
+    );
+  });
 
   it.each([
     ["host", "smtp.example.com\r\nattacker.example.com", "SMTP host"],

@@ -3,7 +3,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { rateLimit } from "express-rate-limit";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync, statSync, writeFileSync, type ReadStream } from "node:fs";
+import {
+  mkdtempSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+  type ReadStream,
+} from "node:fs";
 import { createServer as createNodeServer, request, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
@@ -1741,6 +1748,28 @@ describe("public video range streaming", () => {
 
     expect((await fetch(`${baseUrl}/file`)).status).toBe(404);
   });
+
+  it.skipIf(process.platform === "win32")(
+    "does not serve a symbolic link as the configured public video",
+    async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "qurl-video-symlink-test-"));
+      const target = join(tempDir, "target.mp4");
+      const linked = join(tempDir, "public.mp4");
+      writeFileSync(target, "sensitive local content");
+      symlinkSync(target, linked);
+      const videoApp = express();
+      videoApp.get("/file", rateLimit({ windowMs: 60_000, limit: 100 }), (req, res) =>
+        streamPublicVideo(req, res, linked),
+      );
+
+      try {
+        const baseUrl = await start(videoApp);
+        expect((await fetch(`${baseUrl}/file`)).status).toBe(404);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("returns 404 when the configured video file is empty", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "qurl-empty-video-test-"));
