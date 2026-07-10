@@ -62,6 +62,8 @@ export function terminateQurlSessionsTool(
         }
 
         const result = await client.terminateAllResourceSessions(input.resource_id);
+        // The typed client contract requires this count; retain a runtime guard
+        // because the SDK response is untrusted at the wire boundary.
         const terminated = result.data?.terminated;
         if (typeof terminated !== "number") {
           throw new QURLAPIError(

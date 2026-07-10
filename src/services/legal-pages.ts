@@ -189,6 +189,9 @@ function renderInlineMarkdown(value: string): string {
 }
 
 export function renderMarkdownToHtml(markdown: string): string {
+  // Production callers pass only the trusted, static legalDocuments copy.
+  // Reassess the deliberately small regex renderer before accepting operator-
+  // or request-supplied markdown, even though source text is escaped below.
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const html: string[] = [];
   let paragraph: string[] = [];

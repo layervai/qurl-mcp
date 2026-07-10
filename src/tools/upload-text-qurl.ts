@@ -1,7 +1,12 @@
 import { z } from "zod";
+import { Buffer } from "node:buffer";
 import type { IQURLClient } from "../client.js";
 import { formatErrorForLog } from "../logging.js";
-import { createTextPdfTempFile, MAX_TEXT_PDF_CONTENT_CHARACTERS } from "../services/text-pdf.js";
+import {
+  createTextPdfTempFile,
+  MAX_TEXT_PDF_CONTENT_BYTES,
+  MAX_TEXT_PDF_CONTENT_CHARACTERS,
+} from "../services/text-pdf.js";
 import {
   allowsServerApiKeyFallback,
   withMissingApiKeyHandler,
@@ -31,8 +36,11 @@ export const uploadTextQurlSchema = z
       .string()
       .min(1)
       .max(MAX_TEXT_PDF_CONTENT_CHARACTERS)
+      .refine((content) => Buffer.byteLength(content, "utf8") <= MAX_TEXT_PDF_CONTENT_BYTES, {
+        message: `Text content must not exceed ${MAX_TEXT_PDF_CONTENT_BYTES / 1024} KiB when UTF-8 encoded`,
+      })
       .describe(
-        "Text content to render into a temporary PDF before uploading to the qURL connector.",
+        "Text content to render into a temporary PDF before uploading to the qURL connector (max 100,000 UTF-16 units and 256 KiB UTF-8).",
       ),
     file_name: z
       .string()

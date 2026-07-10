@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { Buffer } from "node:buffer";
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
@@ -10,6 +11,7 @@ const bundledFontPath = fileURLToPath(
   new URL("../../assets/fonts/NotoSansSC-VF.ttf", import.meta.url),
 );
 export const MAX_TEXT_PDF_CONTENT_CHARACTERS = 100_000;
+export const MAX_TEXT_PDF_CONTENT_BYTES = 256 * 1024;
 
 export function sanitizePdfText(input: string, fallback: string): string {
   let sanitized = "";
@@ -72,12 +74,16 @@ export async function createTextPdfTempFile(input: {
   filePath: string;
   sizeBytes: number;
 }> {
-  // Deliberately match Zod's UTF-16-unit maxLength behavior in the public tool
-  // schema. The HTTP parser and connector byte caps provide the memory bound.
+  // Match Zod's UTF-16-unit maxLength behavior, then independently cap UTF-8
+  // bytes at this exported service boundary. The latter keeps every caller,
+  // including future non-HTTP callers, within the renderer's memory budget.
   if (input.content.length > MAX_TEXT_PDF_CONTENT_CHARACTERS) {
     throw new Error(
       `PDF content must not exceed ${MAX_TEXT_PDF_CONTENT_CHARACTERS.toLocaleString("en-US")} characters.`,
     );
+  }
+  if (Buffer.byteLength(input.content, "utf8") > MAX_TEXT_PDF_CONTENT_BYTES) {
+    throw new Error(`PDF content must not exceed ${MAX_TEXT_PDF_CONTENT_BYTES / 1024} KiB.`);
   }
   const tempDir = await mkdtemp(join(tmpdir(), "qurl-text-pdf-"));
   const fileName = ensurePdfFileName(input.fileName);

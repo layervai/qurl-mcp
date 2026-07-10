@@ -22,6 +22,7 @@ const fixturePath = resolve("src/__tests__/fixtures/sample.pdf");
 const fixtureSize = statSync(fixturePath).size;
 
 vi.mock("../../services/text-pdf.js", () => ({
+  MAX_TEXT_PDF_CONTENT_BYTES: 256 * 1024,
   MAX_TEXT_PDF_CONTENT_CHARACTERS: 100_000,
   createTextPdfTempFile: vi
     .fn()

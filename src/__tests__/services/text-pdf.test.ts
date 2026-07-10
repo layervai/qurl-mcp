@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createTextPdfTempFile,
   ensurePdfFileName,
+  MAX_TEXT_PDF_CONTENT_BYTES,
   resolveFontPath,
   sanitizePdfText,
 } from "../../services/text-pdf.js";
@@ -66,6 +67,15 @@ describe("createTextPdfTempFile", () => {
   it("enforces the renderer content bound at the service boundary", async () => {
     await expect(createTextPdfTempFile({ content: "x".repeat(100_001) })).rejects.toThrow(
       "must not exceed 100,000 characters",
+    );
+  });
+
+  it("enforces a UTF-8 byte bound independently of the character bound", async () => {
+    const threeByteCharacters = "界".repeat(Math.floor(MAX_TEXT_PDF_CONTENT_BYTES / 3) + 1);
+
+    expect(threeByteCharacters.length).toBeLessThan(100_000);
+    await expect(createTextPdfTempFile({ content: threeByteCharacters })).rejects.toThrow(
+      "must not exceed 256 KiB",
     );
   });
 
