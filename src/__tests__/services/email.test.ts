@@ -376,6 +376,7 @@ describe("sendEmailMessage", () => {
       port: 587,
       secure: false,
       requireTLS: true,
+      tls: { minVersion: "TLSv1.2" },
       auth: {
         user: "mailer",
         pass: "secret",

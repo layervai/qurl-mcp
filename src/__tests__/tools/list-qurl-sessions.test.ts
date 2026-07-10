@@ -27,5 +27,17 @@ describe("listQurlSessionsTool", () => {
       expect(JSON.parse(result.content[0].text)).toEqual(payload);
       expect(result.structuredContent).toEqual(payload);
     });
+
+    it("preserves an empty session list as a successful result", async () => {
+      const payload = { data: [], meta: { request_id: "req_no_sessions" } };
+      const tool = listQurlSessionsTool(
+        makeMockClient({ listResourceSessions: vi.fn().mockResolvedValue(payload) }),
+      );
+
+      const result = await tool.handler({ resource_id: resourceId });
+
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toEqual(payload);
+    });
   });
 });

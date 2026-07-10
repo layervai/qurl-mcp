@@ -1751,6 +1751,14 @@ describe("HTTP MCP server", () => {
     }
     expect(
       (
+        await fetch(`${baseUrl}/mcp/`, {
+          method: "POST",
+          headers: { origin: "https://attacker.example" },
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
         await fetch(`${baseUrl}/mcp`, {
           method: "POST",
           headers: { origin: "not a URL" },

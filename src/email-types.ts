@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const MAX_EMAIL_SUBJECT_CHARACTERS = 200;
+export const MAX_EMAIL_TEXT_CHARACTERS = 10_000;
+
 export type EmailDeliverySetupErrorKind = "authorization" | "input" | "smtp";
 
 export class EmailDeliverySetupError extends Error {

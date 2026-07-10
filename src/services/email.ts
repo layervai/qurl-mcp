@@ -4,7 +4,11 @@ import nodemailer from "nodemailer";
 import { getRequestQurlApiKey } from "../auth/request-context.js";
 import { loadRuntimeConfig, type RuntimeConfig, type SmtpConfig } from "../config.js";
 import { isEmailAddress, normalizeEmailDomain, uniqueRecipients } from "../email-addresses.js";
-import { EmailDeliverySetupError } from "../email-types.js";
+import {
+  EmailDeliverySetupError,
+  MAX_EMAIL_SUBJECT_CHARACTERS,
+  MAX_EMAIL_TEXT_CHARACTERS,
+} from "../email-types.js";
 import type { EmailDeliveryRecipientResult, EmailDeliveryResult } from "../email-types.js";
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters } from "../text.js";
@@ -151,13 +155,17 @@ export async function sendEmailMessage(
     throw new EmailDeliverySetupError("input", "Email recipients must be valid addresses.");
   }
   const subject = input.subject.trim();
-  if (!subject || subject.length > 200 || flattenControlCharacters(subject) !== subject) {
+  if (
+    !subject ||
+    subject.length > MAX_EMAIL_SUBJECT_CHARACTERS ||
+    flattenControlCharacters(subject) !== subject
+  ) {
     throw new EmailDeliverySetupError("input", "Email subject must be a non-empty single line.");
   }
   // Defense at the exported service boundary; tool assembly also checks this
   // limit so it can return a structured skipped-delivery result.
   // Keep the same UTF-16-unit semantics as the Zod email input schemas.
-  if (input.text.length > 10_000) {
+  if (input.text.length > MAX_EMAIL_TEXT_CHARACTERS) {
     throw new EmailDeliverySetupError("input", "Email text exceeds the 10,000 character limit.");
   }
 
@@ -232,6 +240,8 @@ export async function sendEmailMessage(
   for (const recipient of recipients) {
     // Normalize at the enforcement boundary instead of relying on both the
     // delivery and config call paths to preserve a hidden shared invariant.
+    // isEmailAddress above deliberately rejects quoted local parts and extra
+    // @ signs, so the final delimiter is the unambiguous domain boundary.
     const domain = normalizeEmailDomain(recipient.slice(recipient.lastIndexOf("@") + 1));
     const isAllowed = exactAllowlist.has(recipient) || domainAllowlist.has(domain);
     (isAllowed ? allowedRecipients : blockedRecipients).push(recipient);
@@ -309,6 +319,7 @@ export async function sendEmailMessage(
       // Port 587-style connections must upgrade before credentials or qURL
       // links are sent. Implicit-TLS transports are already encrypted.
       requireTLS: !smtp.secure,
+      tls: { minVersion: "TLSv1.2" },
       auth: {
         user: smtp.username,
         pass: smtp.password,

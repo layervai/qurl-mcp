@@ -16,12 +16,17 @@ export interface PassthroughBearerAuthConfig {
   qurlApiUrl: string;
 }
 
+export function canonicalizeBearerToken(token: string): string | undefined {
+  const canonical = token.trim();
+  return canonical || undefined;
+}
+
 export function createPassthroughBearerVerifier(): {
   verifyAccessToken(token: string): Promise<AuthInfo>;
 } {
   return {
     async verifyAccessToken(token: string): Promise<AuthInfo> {
-      const qurlApiKey = token.trim();
+      const qurlApiKey = canonicalizeBearerToken(token);
       if (!qurlApiKey) {
         console.warn("[mcp-auth] rejected request: empty bearer token");
         throw new InvalidTokenError("Invalid or expired token.");
@@ -46,8 +51,10 @@ export function createQurlClientFromBearerToken(
   token: string,
   config: PassthroughBearerAuthConfig,
 ): QURLClient {
+  const apiKey = canonicalizeBearerToken(token);
+  if (!apiKey) throw new Error("Bearer token must not be empty.");
   return new QURLClient({
-    apiKey: token.trim(),
+    apiKey,
     baseURL: config.qurlApiUrl.trim(),
   });
 }

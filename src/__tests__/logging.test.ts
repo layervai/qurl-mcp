@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  clearSensitiveLogValues,
   formatErrorForLog,
   installTimestampedConsole,
   logInfo,
+  registerSensitiveLogValues,
   sanitizeLogValue,
 } from "../logging.js";
 import { runWithRequestAuthContext } from "../auth/request-context.js";
@@ -11,6 +13,7 @@ describe("logging", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    clearSensitiveLogValues("test-other-session");
   });
 
   it("writes server timestamps in UTC", () => {
@@ -55,6 +58,14 @@ describe("logging", () => {
         "upstream rejected [REDACTED]",
       );
     });
+  });
+
+  it("redacts arbitrary credentials registered by another active session", () => {
+    registerSensitiveLogValues("test-other-session", ["other.secret+format"]);
+
+    expect(sanitizeLogValue("upstream echoed other.secret+format")).toBe(
+      "upstream echoed [REDACTED]",
+    );
   });
 
   it("bounds every untrusted string log value to 512 characters", () => {

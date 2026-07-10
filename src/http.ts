@@ -9,9 +9,11 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  clearSensitiveLogValues,
   formatErrorForLog,
   installTimestampedConsole,
   logInfo,
+  registerSensitiveLogValues,
   sanitizeLogValue,
 } from "./logging.js";
 import express from "express";
@@ -26,6 +28,7 @@ import { rateLimit } from "express-rate-limit";
 import { runWithRequestAuthContext } from "./auth/request-context.js";
 import type { IQURLClient } from "./client.js";
 import {
+  canonicalizeBearerToken,
   createPassthroughBearerVerifier,
   createQurlClientFromBearerToken,
 } from "./auth/static-bearer.js";
@@ -189,7 +192,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   // This is the complete stateful browser-route set today. Add any future
   // state-changing browser route here rather than assuming this check is global.
   app.use((req, res, next) => {
-    if (req.path !== MCP_HTTP_PATH) {
+    if (req.path !== MCP_HTTP_PATH && req.path !== `${MCP_HTTP_PATH}/`) {
       next();
       return;
     }
@@ -278,6 +281,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       await closePromise;
     } finally {
       closingSessions.delete(sessionId);
+      clearSensitiveLogValues(`http-session:${sessionId}`);
     }
   }
 
@@ -354,9 +358,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     // ambient Express Request augmentation remaining source-compatible.
     const auth = (req as express.Request & { auth?: unknown }).auth;
     if (typeof auth !== "object" || auth === null || !("token" in auth)) return undefined;
-    const rawToken = auth.token;
-    const token = typeof rawToken === "string" ? rawToken.trim() : undefined;
-    return token ? token : undefined;
+    return typeof auth.token === "string" ? canonicalizeBearerToken(auth.token) : undefined;
   }
 
   function digestBearerToken(token: string): Buffer {
@@ -432,6 +434,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       return;
     }
 
+    // Content-Length is a request-time snapshot. Public media is trusted,
+    // operator-owned configuration and should be replaced atomically; if it
+    // is truncated in place, the stream error path below destroys the response
+    // rather than serving a silently successful partial body.
     const fileSize = stats.size;
     const range = req.headers.range;
 
@@ -680,6 +686,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
           }
 
           const createdAt = Date.now();
+          registerSensitiveLogValues(`http-session:${transport.sessionId}`, [bearerToken]);
           sessions.set(transport.sessionId, {
             sessionId: transport.sessionId,
             transport,

@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { normalizedEmailAddressSchema, uniqueRecipients } from "../email-addresses.js";
-import { EmailDeliverySetupError } from "../email-types.js";
+import {
+  EmailDeliverySetupError,
+  MAX_EMAIL_SUBJECT_CHARACTERS,
+  MAX_EMAIL_TEXT_CHARACTERS,
+} from "../email-types.js";
 import type { EmailDeliveryResult } from "../email-types.js";
 import { formatErrorForLog } from "../logging.js";
 import { sendEmailMessage } from "../services/email.js";
@@ -17,7 +21,7 @@ export const emailDeliveryInputSchema = z.object({
     ),
   subject: z
     .string()
-    .max(200)
+    .max(MAX_EMAIL_SUBJECT_CHARACTERS)
     .refine((subject) => !/[\r\n]/.test(subject), "Subject must be a single line.")
     .optional()
     .describe(
@@ -28,7 +32,7 @@ export const emailDeliveryInputSchema = z.object({
     .max(5000)
     .optional()
     .describe(
-      "Optional plain-text message to prepend above generated qURL details. The final assembled email is limited to 10,000 characters.",
+      `Optional plain-text message to prepend above generated qURL details. The final assembled email is limited to ${MAX_EMAIL_TEXT_CHARACTERS.toLocaleString("en-US")} characters.`,
     ),
 });
 
@@ -134,10 +138,10 @@ export async function maybeDeliverToolEmail(
   // Fail with a structured skipped result here for tool callers. The service
   // repeats this boundary check because it is also exported for direct use.
   // Match Zod's UTF-16-unit maxLength semantics for caller-provided sections.
-  if (text.length > 10_000) {
+  if (text.length > MAX_EMAIL_TEXT_CHARACTERS) {
     return skippedDeliveryResult(
       recipients,
-      "Email delivery was not attempted because the assembled message exceeds 10,000 characters.",
+      `Email delivery was not attempted because the assembled message exceeds ${MAX_EMAIL_TEXT_CHARACTERS.toLocaleString("en-US")} characters.`,
     );
   }
 

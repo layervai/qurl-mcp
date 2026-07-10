@@ -585,6 +585,10 @@ function resolveSmtpFieldValues(fileConfig: Partial<SmtpConfig> | undefined) {
 export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeConfig {
   const resolvedPath = resolve(configPath);
   const environmentFingerprint = getRuntimeConfigEnvironmentFingerprint();
+  // Fingerprinting and reading are separate syscalls. A concurrent edit may
+  // produce one stale cache entry, but the next load self-heals from metadata;
+  // clearRuntimeConfigCache remains the explicit escape hatch for deliberately
+  // metadata-preserving replacement workflows.
   const fileFingerprint = getConfigFileFingerprint(resolvedPath);
   const cached = runtimeConfigCache.get(resolvedPath);
   if (

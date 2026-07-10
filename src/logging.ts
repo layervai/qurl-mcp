@@ -18,8 +18,9 @@ export function registerSensitiveLogValues(scope: string, values: Array<string |
   else sensitiveLogValuesByScope.set(scope, sensitiveValues);
 }
 
-export function clearSensitiveLogValues(): void {
-  sensitiveLogValuesByScope.clear();
+export function clearSensitiveLogValues(scope?: string): void {
+  if (scope === undefined) sensitiveLogValuesByScope.clear();
+  else sensitiveLogValuesByScope.delete(scope);
 }
 
 function formatTimestamp(date = new Date()): string {

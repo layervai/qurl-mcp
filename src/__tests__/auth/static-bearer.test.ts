@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalizeBearerToken,
   createPassthroughBearerVerifier,
   PASSTHROUGH_BEARER_CLIENT_ID,
 } from "../../auth/static-bearer.js";
@@ -9,6 +10,11 @@ describe("passthrough bearer authentication", () => {
 
   it("rejects an empty bearer token", async () => {
     await expect(verifier.verifyAccessToken("   ")).rejects.toThrow("Invalid or expired token.");
+  });
+
+  it("centralizes bearer canonicalization", () => {
+    expect(canonicalizeBearerToken("  future.secret+format  ")).toBe("future.secret+format");
+    expect(canonicalizeBearerToken("   ")).toBeUndefined();
   });
 
   it("normalizes the caller's qURL API key without duplicating it in metadata", async () => {

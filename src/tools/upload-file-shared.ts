@@ -155,14 +155,17 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
   // connector validation and nosniff delivery remain the authoritative content
   // boundary.
   const ascii = (start: number, end: number) => bytes.subarray(start, end).toString("latin1");
-  const pdfEofIndex = bytes.lastIndexOf(PDF_EOF_MARKER);
-  const hasPdfTrailer =
-    pdfEofIndex >= 0 &&
-    bytes
-      .subarray(pdfEofIndex + PDF_EOF_MARKER.length)
-      .every((byte) => byte === 9 || byte === 10 || byte === 12 || byte === 13 || byte === 32);
+  const hasPdfTrailer = (): boolean => {
+    const pdfEofIndex = bytes.lastIndexOf(PDF_EOF_MARKER);
+    return (
+      pdfEofIndex >= 0 &&
+      bytes
+        .subarray(pdfEofIndex + PDF_EOF_MARKER.length)
+        .every((byte) => byte === 9 || byte === 10 || byte === 12 || byte === 13 || byte === 32)
+    );
+  };
   const valid =
-    (contentType === "application/pdf" && ascii(0, 5) === "%PDF-" && hasPdfTrailer) ||
+    (contentType === "application/pdf" && ascii(0, 5) === "%PDF-" && hasPdfTrailer()) ||
     (contentType === "image/png" &&
       bytes.length >= PNG_SIGNATURE.length + PNG_IEND_CHUNK.length &&
       bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) &&
@@ -430,6 +433,9 @@ export async function uploadToConnector(
   contentType: string,
   connectorConfig: ConnectorConfig,
 ): Promise<ConnectorUploadResponse> {
+  // Security boundary: uploadUrl comes only from operator configuration.
+  // Never accept a per-request connector destination here; doing so would
+  // turn the caller's forwarded qURL credential into an SSRF disclosure.
   const { apiKey, uploadUrl } = connectorConfig;
   const form = new globalThis.FormData();
   // BlobPart's DOM type excludes SharedArrayBuffer-backed views. Reuse the
