@@ -17,7 +17,7 @@ describe("passthrough bearer authentication", () => {
     expect(auth.clientId).toBe(PASSTHROUGH_BEARER_CLIENT_ID);
     expect(auth.scopes).toEqual(["mcp:tools"]);
     expect(auth.token).toBe("lv_live_test");
-    expect(auth.expiresAt).toBeGreaterThan(4_000_000_000);
+    expect(auth.expiresAt).toBe(Date.UTC(2100, 0, 1) / 1000);
     expect(JSON.stringify(auth)).not.toContain("  lv_live_test  ");
   });
 });

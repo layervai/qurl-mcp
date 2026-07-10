@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 import { extname, isAbsolute, normalize, resolve } from "node:path";
 import { isEmailAddress, normalizeEmailAddress, normalizeEmailDomain } from "./email-addresses.js";
 import { RESERVED_PUBLIC_PATH_PREFIXES } from "./http-routes.js";
+import { clearSensitiveLogValues, registerSensitiveLogValues } from "./logging.js";
 
 export interface SmtpConfig {
   host: string;
@@ -294,9 +295,10 @@ export function isLoopbackHostname(hostname: string): boolean {
   if (normalized === "localhost") return true;
   if (isIP(normalized) === 6) {
     // WHATWG URL parsing canonicalizes expanded IPv6 spellings, including
-    // IPv4-mapped addresses, without performing DNS resolution. The helper
-    // repeats the IPv6 assertion so later callers cannot feed unchecked host
-    // text into the bracketed URL constructor.
+    // dotted IPv4-mapped addresses such as ::ffff:127.0.0.1 into hexadecimal,
+    // without performing DNS resolution. The helper repeats the IPv6 assertion
+    // so later callers cannot feed unchecked host text into the bracketed URL
+    // constructor.
     normalized = canonicalizeIpv6Hostname(normalized);
   }
   if (normalized === "::1") return true;
@@ -620,6 +622,11 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     publicVideo: resolvePublicVideoConfig(fileConfig.publicVideo),
   };
   const smtpInspection = inspectSmtpFileConfig(fileConfig.smtp, resolvedPath);
+  registerSensitiveLogValues(resolvedPath, [
+    config.qurlApiKey,
+    config.smtp?.username,
+    config.smtp?.password,
+  ]);
 
   runtimeConfigCache.set(resolvedPath, {
     environmentFingerprint,
@@ -636,6 +643,7 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
  */
 export function clearRuntimeConfigCache(): void {
   runtimeConfigCache.clear();
+  clearSensitiveLogValues();
 }
 
 function inspectSmtpFileConfig(

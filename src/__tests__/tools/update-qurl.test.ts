@@ -52,6 +52,15 @@ describe("updateQurlTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("accepts RFC 3339 timezone offsets", () => {
+      expect(
+        updateQurlSchema.safeParse({
+          resource_id: validResourceId,
+          expires_at: "2026-04-01T02:00:00+02:00",
+        }).success,
+      ).toBe(true);
+    });
+
     it("accepts tags and description", () => {
       const result = updateQurlSchema.safeParse({
         resource_id: validResourceId,

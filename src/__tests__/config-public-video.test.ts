@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadHttpServerConfig } from "../http-config.js";
+import { sanitizeLogValue } from "../logging.js";
 import {
   clearRuntimeConfigCache,
   getDefaultConfigPath,
@@ -65,6 +66,32 @@ describe("public video config", () => {
       pagePath: "/media/video",
       filePath: "/srv/videos/demo.mp4",
     });
+  });
+
+  it("registers loaded SMTP credentials with the generic log boundary", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    const username = "unique-smtp-user-4940";
+    const password = "unique-config-smtp-password-4940";
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 465,
+          secure: true,
+          username,
+          password,
+          fromEmail: "noreply@example.com",
+          allowedRecipientDomains: ["example.com"],
+        },
+      }),
+    );
+
+    loadRuntimeConfig(configPath);
+
+    expect(sanitizeLogValue(`transport rejected ${username} ${password}`)).toBe(
+      "transport rejected [REDACTED] [REDACTED]",
+    );
   });
 
   it("normalizes lexical dot segments in operator-selected video paths", () => {

@@ -71,6 +71,15 @@ describe("mintLinkTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("accepts RFC 3339 timezone offsets", () => {
+      expect(
+        mintLinkSchema.safeParse({
+          resource_id: validResourceId,
+          expires_at: "2026-04-01T02:00:00+02:00",
+        }).success,
+      ).toBe(true);
+    });
+
     it("rejects both expires_in and expires_at", () => {
       const result = mintLinkSchema.safeParse({
         resource_id: validResourceId,

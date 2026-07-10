@@ -27,22 +27,22 @@ export const listQurlsSchema = z.object({
     ),
   created_after: z
     .string()
-    .datetime()
+    .datetime({ offset: true })
     .optional()
     .describe("Filter: created after this date (RFC 3339)"),
   created_before: z
     .string()
-    .datetime()
+    .datetime({ offset: true })
     .optional()
     .describe("Filter: created before this date (RFC 3339)"),
   expires_before: z
     .string()
-    .datetime()
+    .datetime({ offset: true })
     .optional()
     .describe("Filter: expires before this date (RFC 3339)"),
   expires_after: z
     .string()
-    .datetime()
+    .datetime({ offset: true })
     .optional()
     .describe("Filter: expires after this date (RFC 3339)"),
   sort: z

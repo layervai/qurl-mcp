@@ -13,32 +13,43 @@ import {
 } from "./email-delivery.js";
 import { createQurlOutputSchema } from "./output-schemas.js";
 
+export const MAX_ACCESS_POLICY_LIST_ITEMS = 1000;
+export const MAX_ACCESS_POLICY_IP_CHARACTERS = 64;
+export const MAX_ACCESS_POLICY_GEO_CHARACTERS = 8;
+export const MAX_AI_AGENT_CATEGORY_CHARACTERS = 128;
+
+const boundedPolicyList = (item: z.ZodString) => z.array(item).max(MAX_ACCESS_POLICY_LIST_ITEMS);
+
 export const aiAgentPolicySchema = z.object({
   block_all: z.boolean().optional().describe("Block all recognized AI agents"),
-  deny_categories: z
-    .array(z.string())
+  deny_categories: boundedPolicyList(z.string().min(1).max(MAX_AI_AGENT_CATEGORY_CHARACTERS))
     .optional()
-    .describe("AI agent categories to block (e.g., gptbot, commoncrawl)"),
-  allow_categories: z
-    .array(z.string())
+    .describe(
+      `AI agent categories to block (e.g., gptbot, commoncrawl; max ${MAX_ACCESS_POLICY_LIST_ITEMS} entries, ${MAX_AI_AGENT_CATEGORY_CHARACTERS} chars each)`,
+    ),
+  allow_categories: boundedPolicyList(z.string().min(1).max(MAX_AI_AGENT_CATEGORY_CHARACTERS))
     .optional()
-    .describe("AI agent categories to permit (all others blocked)"),
+    .describe(
+      `AI agent categories to permit (all others blocked; max ${MAX_ACCESS_POLICY_LIST_ITEMS} entries, ${MAX_AI_AGENT_CATEGORY_CHARACTERS} chars each)`,
+    ),
 });
 
 export const MAX_USER_AGENT_REGEX_CHARACTERS = 256;
 const userAgentRegexSchema = z.string().max(MAX_USER_AGENT_REGEX_CHARACTERS);
 
 export const accessPolicySchema = z.object({
-  ip_allowlist: z.array(z.string()).optional().describe("Allowed IP addresses or CIDR ranges"),
-  ip_denylist: z.array(z.string()).optional().describe("Denied IP addresses or CIDR ranges"),
-  geo_allowlist: z
-    .array(z.string())
+  ip_allowlist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_IP_CHARACTERS))
     .optional()
-    .describe("Allowed country codes (ISO 3166-1 alpha-2)"),
-  geo_denylist: z
-    .array(z.string())
+    .describe("Allowed IP addresses or CIDR ranges (max 1000 entries, 64 chars each)"),
+  ip_denylist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_IP_CHARACTERS))
     .optional()
-    .describe("Denied country codes (ISO 3166-1 alpha-2)"),
+    .describe("Denied IP addresses or CIDR ranges (max 1000 entries, 64 chars each)"),
+  geo_allowlist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_GEO_CHARACTERS))
+    .optional()
+    .describe("Allowed country codes (ISO 3166-1 alpha-2; max 1000 entries, 8 chars each)"),
+  geo_denylist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_GEO_CHARACTERS))
+    .optional()
+    .describe("Denied country codes (ISO 3166-1 alpha-2; max 1000 entries, 8 chars each)"),
   user_agent_allow_regex: userAgentRegexSchema
     .optional()
     .describe(`Regex to allow matching user agents (max ${MAX_USER_AGENT_REGEX_CHARACTERS} chars)`),

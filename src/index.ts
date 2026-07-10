@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { formatErrorForLog, installTimestampedConsole, logInfo } from "./logging.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { MISSING_API_KEY_MESSAGE, QURLClient } from "./client.js";
@@ -12,7 +14,7 @@ installTimestampedConsole();
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   try {
     const runtimeConfigPath = getDefaultConfigPath();
     const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
@@ -40,4 +42,7 @@ async function main(): Promise<void> {
   }
 }
 
-await main();
+const isMainModule =
+  typeof process.argv[1] === "string" &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMainModule) await main();

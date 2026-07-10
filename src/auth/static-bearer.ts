@@ -10,7 +10,7 @@ export const PASSTHROUGH_BEARER_CLIENT_ID = "passthrough-bearer-client";
 // expiry/revocation is enforced by the downstream API, so use a distant
 // UTC epoch-seconds sentinel rather than pretending to know the key's real
 // expiry.
-const DOWNSTREAM_VALIDATED_TOKEN_EXPIRY = 4_102_444_800;
+const DOWNSTREAM_VALIDATED_TOKEN_EXPIRY = Date.UTC(2100, 0, 1) / 1000;
 
 export interface PassthroughBearerAuthConfig {
   qurlApiUrl: string;

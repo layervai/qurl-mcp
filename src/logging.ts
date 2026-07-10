@@ -10,6 +10,17 @@ const PATCH_FLAG = Symbol.for("qurl-mcp.consoleTimestampPatched");
 // keys that appear in unstructured upstream text.
 const QURL_API_KEY_PATTERN = /lv_[A-Za-z0-9_-]+/g;
 const BEARER_CREDENTIAL_PATTERN = /Bearer\s+\S+/gi;
+const sensitiveLogValuesByScope = new Map<string, Set<string>>();
+
+export function registerSensitiveLogValues(scope: string, values: Array<string | undefined>): void {
+  const sensitiveValues = new Set(values.filter((value): value is string => Boolean(value)));
+  if (sensitiveValues.size === 0) sensitiveLogValuesByScope.delete(scope);
+  else sensitiveLogValuesByScope.set(scope, sensitiveValues);
+}
+
+export function clearSensitiveLogValues(): void {
+  sensitiveLogValuesByScope.clear();
+}
 
 function formatTimestamp(date = new Date()): string {
   return date.toISOString().replace("T", " ").replace("Z", " UTC");
@@ -21,9 +32,13 @@ export function logInfo(message: string): void {
 
 function redactAndFlattenLogValue(value: string): string {
   let redacted = value;
-  const credentials = [getRequestQurlApiKey(), process.env.QURL_API_KEY].filter(
-    (credential): credential is string => Boolean(credential),
-  );
+  const credentials = [
+    ...Array.from(sensitiveLogValuesByScope.values()).flatMap((values) => [...values]),
+    getRequestQurlApiKey(),
+    process.env.QURL_API_KEY,
+    process.env.QURL_SMTP_USERNAME,
+    process.env.QURL_SMTP_PASSWORD,
+  ].filter((credential): credential is string => Boolean(credential));
   for (const credential of new Set(credentials)) {
     redacted = redacted.replaceAll(credential, "[REDACTED]");
   }

@@ -23,7 +23,7 @@ export const updateQurlTokenBaseSchema = z.object({
     ),
   expires_at: z
     .string()
-    .datetime()
+    .datetime({ offset: true })
     .optional()
     .describe("Absolute token expiration timestamp (RFC 3339). Mutually exclusive with extend_by."),
   label: z.string().max(500).optional().describe("Human-readable label for this token"),

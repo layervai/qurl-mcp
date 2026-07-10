@@ -32,7 +32,7 @@ export const mintLinkBaseSchema = z.object({
     ),
   expires_at: z
     .string()
-    .datetime()
+    .datetime({ offset: true })
     .optional()
     .describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with expires_in"),
   one_time_use: z.boolean().optional().describe("Whether this link can only be used once"),

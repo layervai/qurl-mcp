@@ -28,13 +28,6 @@ describe("createServer", () => {
   }
 
   describe("tools", () => {
-    it("registers 16 tools in stdio mode", async () => {
-      const { client } = await connectServer();
-      const { tools } = await client.listTools();
-
-      expect(tools).toHaveLength(16);
-    });
-
     it("registers stdio tools with correct names", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();
@@ -73,7 +66,6 @@ describe("createServer", () => {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
 
-      expect(tools).toHaveLength(15);
       expect(names).toEqual([
         "batch_create_qurls",
         "create_qurl",

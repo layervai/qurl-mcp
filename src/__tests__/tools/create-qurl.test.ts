@@ -4,6 +4,10 @@ import { EmailDeliverySetupError } from "../../email-types.js";
 import {
   createQurlTool as createQurlToolFactory,
   createQurlSchema,
+  MAX_ACCESS_POLICY_LIST_ITEMS,
+  MAX_ACCESS_POLICY_IP_CHARACTERS,
+  MAX_ACCESS_POLICY_GEO_CHARACTERS,
+  MAX_AI_AGENT_CATEGORY_CHARACTERS,
   MAX_USER_AGENT_REGEX_CHARACTERS,
 } from "../../tools/create-qurl.js";
 import { makeMockClient, sampleCreateQURLData } from "../helpers.js";
@@ -87,6 +91,48 @@ describe("createQurlTool", () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it.each([
+      ["ip_allowlist", MAX_ACCESS_POLICY_IP_CHARACTERS],
+      ["ip_denylist", MAX_ACCESS_POLICY_IP_CHARACTERS],
+      ["geo_allowlist", MAX_ACCESS_POLICY_GEO_CHARACTERS],
+      ["geo_denylist", MAX_ACCESS_POLICY_GEO_CHARACTERS],
+    ] as const)("bounds access_policy.%s entries and element length", (field, maxLength) => {
+      expect(
+        createQurlSchema.safeParse({
+          target_url: "https://example.com",
+          access_policy: { [field]: ["x".repeat(maxLength + 1)] },
+        }).success,
+      ).toBe(false);
+      expect(
+        createQurlSchema.safeParse({
+          target_url: "https://example.com",
+          access_policy: { [field]: Array(MAX_ACCESS_POLICY_LIST_ITEMS + 1).fill("x") },
+        }).success,
+      ).toBe(false);
+    });
+
+    it.each(["allow_categories", "deny_categories"] as const)(
+      "bounds access_policy.ai_agent_policy.%s",
+      (field) => {
+        expect(
+          createQurlSchema.safeParse({
+            target_url: "https://example.com",
+            access_policy: {
+              ai_agent_policy: { [field]: ["x".repeat(MAX_AI_AGENT_CATEGORY_CHARACTERS + 1)] },
+            },
+          }).success,
+        ).toBe(false);
+        expect(
+          createQurlSchema.safeParse({
+            target_url: "https://example.com",
+            access_policy: {
+              ai_agent_policy: { [field]: Array(MAX_ACCESS_POLICY_LIST_ITEMS + 1).fill("x") },
+            },
+          }).success,
+        ).toBe(false);
+      },
+    );
 
     it.each(["user_agent_allow_regex", "user_agent_deny_regex"] as const)(
       "bounds access_policy.%s to the API's regex limit",

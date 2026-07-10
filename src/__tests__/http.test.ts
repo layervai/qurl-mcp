@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markRequestCredentialValidated } from "../auth/request-context.js";
 import { QURLAPIError } from "../client.js";
-import { createHttpRuntime } from "../http.js";
+import { createHttpRuntime, runHttpMain } from "../http.js";
 import type { HttpServerConfig } from "../http-config.js";
 import { makeMockClient, sampleCreateQURLData } from "./helpers.js";
 
@@ -1708,6 +1708,13 @@ describe("HTTP MCP server", () => {
     expect((await fetch(`${baseUrl}/healthz`)).status).toBe(200);
     expect(
       (
+        await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
         await fetch(`${baseUrl}/healthz`, {
           headers: { origin: "https://attacker.example" },
         })
@@ -1918,6 +1925,22 @@ describe("public video range streaming", () => {
       expect((await fetch(`${baseUrl}/file`)).status).toBe(404);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reports HTTP bootstrap failures with a failing process status", () => {
+    const originalExitCode = process.exitCode;
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      runHttpMain(() => {
+        throw new Error("bootstrap failed");
+      });
+
+      expect(process.exitCode).toBe(1);
+      expect(error).toHaveBeenCalledWith(expect.stringContaining("HTTP startup failed"));
+    } finally {
+      process.exitCode = originalExitCode;
     }
   });
 

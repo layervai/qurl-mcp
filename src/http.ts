@@ -1030,13 +1030,17 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 const isMainModule =
   typeof process.argv[1] === "string" &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMainModule) {
-  try {
+export function runHttpMain(
+  start = (): void => {
     const require = createRequire(import.meta.url);
     const { version } = require("../package.json") as { version: string };
     const runtimeConfigPath = getDefaultConfigPath();
     const config = loadHttpServerConfig(getDefaultHttpConfigPath());
     createHttpRuntime(config, { runtimeConfigPath, version }).startHttpServer();
+  },
+): void {
+  try {
+    start();
   } catch (error) {
     installTimestampedConsole();
     console.error(`qURL MCP HTTP startup failed (${formatErrorForLog(error)})`);
@@ -1045,3 +1049,5 @@ if (isMainModule) {
     process.exitCode = 1;
   }
 }
+
+if (isMainModule) runHttpMain();
