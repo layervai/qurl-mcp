@@ -1,10 +1,12 @@
+import { getRequestQurlApiKey } from "./auth/request-context.js";
+
 type ConsoleMethodName = "log" | "info" | "debug" | "warn" | "error";
 
 const PATCH_FLAG = Symbol.for("qurl-mcp.consoleTimestampPatched");
 // Keep this aligned with the qURL API-key format. Bearer-form credentials are
-// redacted independently, but a bare key in an upstream error depends on this
-// prefix-aware pattern. Supported qURL keys always use `lv_`; an arbitrary
-// non-prefixed secret cannot be identified safely from unstructured text.
+// redacted independently. Exact active/environment credentials are removed
+// first; this prefix-aware pattern catches other documented qURL keys that
+// appear in unstructured upstream text.
 const QURL_API_KEY_PATTERN = /lv_[A-Za-z0-9_-]+/g;
 const BEARER_CREDENTIAL_PATTERN = /Bearer\s+\S+/gi;
 
@@ -17,7 +19,11 @@ export function logInfo(message: string): void {
 }
 
 function redactAndFlattenLogValue(value: string): string {
-  return value
+  let redacted = value;
+  for (const credential of new Set([getRequestQurlApiKey(), process.env.QURL_API_KEY])) {
+    if (credential) redacted = redacted.replaceAll(credential, "[REDACTED]");
+  }
+  return redacted
     .replace(BEARER_CREDENTIAL_PATTERN, "Bearer [REDACTED]")
     .replace(QURL_API_KEY_PATTERN, "[REDACTED]")
     .replace(/[\r\n\u2028\u2029]/g, " ");

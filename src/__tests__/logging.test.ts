@@ -5,6 +5,7 @@ import {
   logInfo,
   sanitizeLogValue,
 } from "../logging.js";
+import { runWithRequestAuthContext } from "../auth/request-context.js";
 
 describe("logging", () => {
   afterEach(() => {
@@ -46,6 +47,14 @@ describe("logging", () => {
     for (const documentedKey of ["lv_live_AbC123_-", "lv_test_987zyx-_"]) {
       expect(sanitizeLogValue(`SDK-format key ${documentedKey}`)).toBe("SDK-format key [REDACTED]");
     }
+  });
+
+  it("redacts the exact request credential when its format does not use the documented prefix", async () => {
+    await runWithRequestAuthContext({ qurlApiKey: "future.secret+format" }, async () => {
+      expect(sanitizeLogValue("upstream rejected future.secret+format")).toBe(
+        "upstream rejected [REDACTED]",
+      );
+    });
   });
 
   it("bounds every untrusted string log value to 512 characters", () => {
