@@ -404,6 +404,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     try {
       // Refuse a final-component symlink so a public video path cannot be
       // retargeted to a different local file after operator configuration.
+      // Intermediate directory symlinks retain normal resolution because this
+      // absolute path is trusted operator config, never request-derived input.
       stats = await lstat(filePath);
     } catch (error) {
       console.error(`[public-video] file inspection failed (${formatErrorForLog(error)})`);
@@ -936,6 +938,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       logInfo(`Public legal pages enabled: ${legalDocuments.length}`);
       if (config.publicVideo) {
         logInfo("Public video page enabled.");
+        // The video is an optional public asset, not an MCP readiness
+        // dependency. Warn at boot but keep /healthz and MCP available; the
+        // request path independently fails closed until the asset is usable.
         void lstat(config.publicVideo.filePath)
           .then((stats) => {
             if (stats.isSymbolicLink() || !stats.isFile()) {

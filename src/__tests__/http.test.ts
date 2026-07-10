@@ -566,7 +566,7 @@ describe("HTTP MCP server", () => {
     expect((await fetch(`${baseUrl}/legal/privacy`)).status).toBe(429);
   });
 
-  it("wires the configured public video routes with matching CSP and media headers", async () => {
+  it("derives the served video-page CSP hash from its served inline style", async () => {
     const fixturePath = fileURLToPath(new URL("./fixtures/sample.pdf", import.meta.url));
     const publicRuntime = createHttpRuntime(
       {
@@ -1772,7 +1772,7 @@ describe("HTTP MCP server", () => {
     ).toBe(403);
   });
 
-  it("adds defensive headers to public legal pages", async () => {
+  it("derives the served legal-page CSP hash from its served inline style", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/legal/privacy`);
     const html = await response.text();

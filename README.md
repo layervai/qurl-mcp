@@ -325,6 +325,13 @@ When configured, the HTTP server additionally exposes:
 - a public video playback page
 - a streaming endpoint for the MP4 file
 
+`publicVideo.filePath` is trusted operator configuration. The final component
+must be a non-symlink regular `.mp4` file; intermediate directory symlinks keep
+normal filesystem resolution and must therefore remain under operator control.
+Startup probes this optional asset and warns when it is missing, empty, or not
+regular, but intentionally keeps the MCP service and `/healthz` available. The
+video-file route still fails closed with `404` until the asset is corrected.
+
 ## qurl-mcp.http.json Reference
 
 | Field                          | Purpose                                                                             |
