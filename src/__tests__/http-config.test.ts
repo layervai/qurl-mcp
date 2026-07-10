@@ -107,6 +107,9 @@ describe("HTTP listener config", () => {
     );
 
     expect(() => loadHttpServerConfig(configPath)).toThrow("at most 1000 entries");
+
+    writeFileSync(configPath, JSON.stringify({ allowedHosts: ["bad_host.example.com"] }));
+    expect(() => loadHttpServerConfig(configPath)).toThrow("hostnames or IPs without ports");
   });
 
   it("parses bounded proxy, session, and rate-limit values", () => {

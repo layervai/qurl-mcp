@@ -108,6 +108,13 @@ describe("logging", () => {
         "2026-07-10 06:30:45.123 UTC request failed [object Object]",
       );
       expect(sink.mock.calls.flat().join(" ")).not.toContain("lv_live_nested_secret");
+
+      console.error({
+        toString() {
+          throw new Error("unprintable object");
+        },
+      });
+      expect(sink).toHaveBeenLastCalledWith("2026-07-10 06:30:45.123 UTC [unprintable]");
     } finally {
       for (const method of methods) {
         const descriptor = descriptors.get(method);

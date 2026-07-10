@@ -40,6 +40,13 @@ describe("createTextPdfTempFile", () => {
     await result.cleanup();
   });
 
+  it("normalizes an uppercase PDF extension with one original-string slice", async () => {
+    const result = await createTextPdfTempFile({ content: "safe", fileName: "REPORT.PDF" });
+
+    expect(result.fileName).toBe("REPORT.pdf");
+    await result.cleanup();
+  });
+
   it("enforces the renderer content bound at the service boundary", async () => {
     await expect(createTextPdfTempFile({ content: "x".repeat(100_001) })).rejects.toThrow(
       "must not exceed 100,000 characters",

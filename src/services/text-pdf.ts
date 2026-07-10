@@ -30,11 +30,11 @@ function sanitizePdfText(input: string, fallback: string): string {
 function ensurePdfFileName(input: string | undefined): string {
   const baseName = basename(sanitizePdfText(input ?? "content", "content")) || "content";
   const sourceExtension = extname(baseName);
-  const withoutExt = baseName.toLowerCase().endsWith(".pdf")
-    ? baseName.slice(0, -4)
-    : sourceExtension
-      ? baseName.slice(0, -sourceExtension.length)
-      : baseName;
+  // extname(".pdf") is empty because it treats the value as a dotfile. Keep
+  // that one explicit fallback, then use a single original-string slice.
+  const extensionLength =
+    sourceExtension.length || (baseName.toLowerCase().endsWith(".pdf") ? 4 : 0);
+  const withoutExt = extensionLength ? baseName.slice(0, -extensionLength) : baseName;
   const normalizedStem = withoutExt.replace(/\.+$/, "");
   const safeStem = normalizedStem || "content";
   return `${safeStem}.pdf`;

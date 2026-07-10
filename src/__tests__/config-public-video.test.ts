@@ -311,6 +311,57 @@ describe("public video config", () => {
     expect(() => loadRuntimeConfig(configPath)).toThrow("at most 1000 entries");
   });
 
+  it.each(["localhost", "bad_domain.example.com", "-bad.example.com", "example..com"])(
+    "rejects malformed SMTP recipient domain %s",
+    (domain) => {
+      const configPath = join(tempDir!, "qurl-mcp.config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          smtp: {
+            host: "smtp.example.com",
+            port: 587,
+            secure: false,
+            username: "mailer",
+            password: "secret",
+            fromEmail: "noreply@example.com",
+            allowedRecipientDomains: [domain],
+          },
+        }),
+      );
+
+      expect(() => loadRuntimeConfig(configPath)).toThrow(
+        "allowedRecipientDomains must contain valid domain names",
+      );
+      clearRuntimeConfigCache();
+    },
+  );
+
+  it.each([
+    ["maxRecipientsPerMessage", 101],
+    ["maxRecipientsPerHour", 100_001],
+  ])("rejects over-cap SMTP recipient limit %s", (field, value) => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+          allowedRecipientDomains: ["example.com"],
+          [field]: value,
+        },
+      }),
+    );
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow("recipient limits are unreasonably high");
+    clearRuntimeConfigCache();
+  });
+
   it("allows environment variables to override shared public video config", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
