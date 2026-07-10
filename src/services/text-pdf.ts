@@ -45,6 +45,9 @@ export function resolveFontPath(candidatePath = bundledFontPath): string | undef
   return undefined;
 }
 
+// Published package/container assets are immutable for the process lifetime,
+// so cache both the resolved path and fallback decision. A deployment that
+// changes bundled assets must restart before serving requests from that build.
 const resolvedBundledFontPath = resolveFontPath();
 
 export async function createTextPdfTempFile(input: {

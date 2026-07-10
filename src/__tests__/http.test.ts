@@ -1613,7 +1613,9 @@ describe("public video range streaming", () => {
 
   it("returns 404 when the configured path is not a regular file", async () => {
     const videoApp = express();
-    videoApp.get("/file", (req, res) => streamPublicVideo(req, res, process.cwd()));
+    videoApp.get("/file", rateLimit({ windowMs: 60_000, limit: 100 }), (req, res) =>
+      streamPublicVideo(req, res, process.cwd()),
+    );
     const baseUrl = await start(videoApp);
 
     expect((await fetch(`${baseUrl}/file`)).status).toBe(404);
@@ -1624,7 +1626,9 @@ describe("public video range streaming", () => {
     const emptyFile = join(tempDir, "empty.mp4");
     writeFileSync(emptyFile, "");
     const videoApp = express();
-    videoApp.get("/file", (req, res) => streamPublicVideo(req, res, emptyFile));
+    videoApp.get("/file", rateLimit({ windowMs: 60_000, limit: 100 }), (req, res) =>
+      streamPublicVideo(req, res, emptyFile),
+    );
 
     try {
       const baseUrl = await start(videoApp);
@@ -1644,7 +1648,7 @@ describe("public video range streaming", () => {
       },
     });
     const videoApp = express();
-    videoApp.get("/file", (req, res) =>
+    videoApp.get("/file", rateLimit({ windowMs: 60_000, limit: 100 }), (req, res) =>
       streamErrorRuntime.streamPublicVideo(req, res, fixturePath),
     );
     const baseUrl = await start(videoApp);
