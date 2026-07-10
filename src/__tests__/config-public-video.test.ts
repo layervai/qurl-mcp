@@ -231,6 +231,22 @@ describe("public video config", () => {
     expect(() => loadRuntimeConfig(configPath)).toThrow("non-reserved absolute URL path");
   });
 
+  it("bounds the public video title", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        publicVideo: {
+          title: "x".repeat(201),
+          pagePath: "/media/video",
+          filePath: "/srv/video.mp4",
+        },
+      }),
+    );
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow("title must be at most 200 characters");
+  });
+
   it("requires an absolute public video file path", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(

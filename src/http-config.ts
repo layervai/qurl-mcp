@@ -1,12 +1,12 @@
 import {
   DEFAULT_PUBLIC_VIDEO_PAGE_PATH,
-  DEFAULT_PUBLIC_VIDEO_TITLE,
   MAX_CONFIG_ALLOWLIST_ENTRIES,
   getDefaultConfigPath,
   isLoopbackHostname,
   loadRuntimeConfig,
   normalizeAbsoluteFilePath,
   normalizePublicPath,
+  normalizePublicVideoTitle,
   parseConfigFile,
   trimString,
   type PublicVideoConfig,
@@ -131,7 +131,7 @@ function resolvePublicVideoFromHttpConfig(
   if (!filePath) return undefined;
 
   return {
-    title: trimString(fileConfig.publicVideo?.title) ?? DEFAULT_PUBLIC_VIDEO_TITLE,
+    title: normalizePublicVideoTitle(trimString(fileConfig.publicVideo?.title)),
     pagePath: normalizePublicPath(fileConfig.publicVideo?.pagePath, DEFAULT_PUBLIC_VIDEO_PAGE_PATH),
     filePath,
   };

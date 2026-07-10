@@ -69,6 +69,7 @@ const DEFAULT_CONFIG_PATH = "qurl-mcp.config.json";
 export const DEFAULT_QURL_API_URL = "https://api.layerv.ai";
 export const DEFAULT_PUBLIC_VIDEO_TITLE = "Video Showcase";
 export const DEFAULT_PUBLIC_VIDEO_PAGE_PATH = "/media/video";
+export const MAX_PUBLIC_VIDEO_TITLE_CHARACTERS = 200;
 export const DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES = 10 * 1024 * 1024;
 export const MAX_UPLOAD_FILE_DATA_BYTES = 100 * 1024 * 1024;
 export const MAX_CONFIG_ALLOWLIST_ENTRIES = 1_000;
@@ -376,6 +377,16 @@ export function normalizeAbsoluteFilePath(value: unknown, fieldName: string): st
   return filePath;
 }
 
+export function normalizePublicVideoTitle(value: string | undefined): string {
+  const title = trimString(value) ?? DEFAULT_PUBLIC_VIDEO_TITLE;
+  if (title.length > MAX_PUBLIC_VIDEO_TITLE_CHARACTERS) {
+    throw new Error(
+      `publicVideo.title must be at most ${MAX_PUBLIC_VIDEO_TITLE_CHARACTERS} characters.`,
+    );
+  }
+  return title;
+}
+
 function resolvePublicVideoConfig(
   fileConfig: Partial<PublicVideoConfig> | undefined,
 ): PublicVideoConfig | undefined {
@@ -388,10 +399,9 @@ function resolvePublicVideoConfig(
   }
 
   return {
-    title:
-      trimString(process.env.QURL_PUBLIC_VIDEO_TITLE) ??
-      trimString(fileConfig?.title) ??
-      DEFAULT_PUBLIC_VIDEO_TITLE,
+    title: normalizePublicVideoTitle(
+      trimString(process.env.QURL_PUBLIC_VIDEO_TITLE) ?? trimString(fileConfig?.title),
+    ),
     pagePath: normalizePublicPath(
       trimString(process.env.QURL_PUBLIC_VIDEO_PAGE_PATH) ?? trimString(fileConfig?.pagePath),
       DEFAULT_PUBLIC_VIDEO_PAGE_PATH,
