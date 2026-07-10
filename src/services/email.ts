@@ -277,6 +277,10 @@ export async function sendEmailMessage(
 
   const results = blockedRecipientResults(blockedRecipients);
   try {
+    // Send sequentially to apply backpressure to the SMTP server and preserve
+    // deterministic per-recipient outcomes. maxRecipientsPerMessage bounds
+    // the resulting latency; operators needing bulk throughput should use a
+    // provider-side queue rather than increasing in-process concurrency.
     for (const recipient of allowedRecipients) {
       try {
         const sent = await transporter.sendMail({

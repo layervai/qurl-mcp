@@ -3,10 +3,11 @@ import { getRequestQurlApiKey } from "./auth/request-context.js";
 type ConsoleMethodName = "log" | "info" | "debug" | "warn" | "error";
 
 const PATCH_FLAG = Symbol.for("qurl-mcp.consoleTimestampPatched");
-// Keep this aligned with the qURL API-key format. Bearer-form credentials are
-// redacted independently. Exact active/environment credentials are removed
-// first; this prefix-aware pattern catches other documented qURL keys that
-// appear in unstructured upstream text.
+// Keep this aligned with the qURL API credential contract when its documented
+// key format changes. Bearer-form credentials are redacted independently.
+// Exact active/environment credentials are removed first as the
+// format-independent backstop; this prefix pattern catches other current qURL
+// keys that appear in unstructured upstream text.
 const QURL_API_KEY_PATTERN = /lv_[A-Za-z0-9_-]+/g;
 const BEARER_CREDENTIAL_PATTERN = /Bearer\s+\S+/gi;
 

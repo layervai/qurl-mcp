@@ -64,9 +64,11 @@ type AuthorizedSession = {
 const DISCONNECTED_SESSION_GRACE_MS = 30_000;
 
 function getJsonBodyLimitBytes(maxUploadFileDataBytes: number): number {
-  // Coarse outer bound: base64 inflates payloads by roughly 4/3, with extra
-  // headroom for the JSON-RPC envelope. decodeBase64File applies the exact
-  // decoded-byte limit after parsing.
+  // This limits raw request bytes, so JSON escaping can only consume the
+  // allowance faster; it cannot expand memory beyond this parser ceiling.
+  // Base64 itself needs no JSON escaping and inflates decoded bytes by 4/3,
+  // leaving the remainder of this 1.5x bound for the JSON-RPC envelope.
+  // decodeBase64File still applies the exact decoded-byte limit after parsing.
   return Math.ceil(maxUploadFileDataBytes * 1.5) + 64 * 1024;
 }
 
@@ -778,10 +780,15 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     );
   }
 
-  function setPublicPageSecurityHeaders(res: express.Response, styleSources: string[] = []): void {
+  function setPublicPageSecurityHeaders(
+    res: express.Response,
+    styleSources: string[] = [],
+    allowSameOriginMedia = false,
+  ): void {
     const stylePolicy = styleSources.length > 0 ? styleSources.join(" ") : "'none'";
+    const mediaPolicy = allowSameOriginMedia ? "'self'" : "'none'";
     res.set({
-      "Content-Security-Policy": `default-src 'none'; style-src ${stylePolicy}; img-src 'none'; media-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      "Content-Security-Policy": `default-src 'none'; style-src ${stylePolicy}; img-src 'none'; media-src ${mediaPolicy}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
@@ -807,7 +814,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     const videoStyleSources = getInlineStyleSources(videoPageHtml);
 
     app.get(videoPagePath, publicRouteRateLimiter, (_req, res) => {
-      setPublicPageSecurityHeaders(res, videoStyleSources);
+      setPublicPageSecurityHeaders(res, videoStyleSources, true);
       res.type("html").send(videoPageHtml);
     });
 

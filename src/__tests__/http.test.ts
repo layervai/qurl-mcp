@@ -508,6 +508,7 @@ describe("HTTP MCP server", () => {
     expect(pageResponse.status).toBe(200);
     expect(pageResponse.headers.get("content-security-policy")).toContain(`'sha256-${styleHash}'`);
     expect(pageResponse.headers.get("content-security-policy")).not.toContain("'unsafe-inline'");
+    expect(pageResponse.headers.get("content-security-policy")).toContain("media-src 'self'");
     expect(pageResponse.headers.get("x-content-type-options")).toBe("nosniff");
     expect(html).toContain('src="http://127.0.0.1:3000/custom/video/file"');
 
@@ -1523,6 +1524,7 @@ describe("HTTP MCP server", () => {
     expect(response.headers.get("content-security-policy")).toContain(`'sha256-${styleHash}'`);
     expect(response.headers.get("content-security-policy")).not.toContain("'unsafe-inline'");
     expect(response.headers.get("content-security-policy")).toContain("img-src 'none'");
+    expect(response.headers.get("content-security-policy")).toContain("media-src 'none'");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
