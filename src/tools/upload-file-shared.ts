@@ -13,7 +13,7 @@ import {
 } from "../client.js";
 import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
-import { isControlCodePoint } from "../text.js";
+import { flattenControlCharacters, isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN } from "./_shared.js";
 
 export const supportedMimeTypes = [
@@ -236,13 +236,7 @@ function extractConnectorError(parsed: unknown): {
 function throwConnectorError(response: Response, parsed: unknown, requestId?: string): never {
   const { code, detail, type, instance } = extractConnectorError(parsed);
   const safeDetail = detail
-    ? Array.from(detail, (character) =>
-        isControlCodePoint(character.codePointAt(0) ?? 0) ? " " : character,
-      )
-        .join("")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 1024)
+    ? flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024)
     : undefined;
   throw new QURLAPIError(
     response.status,

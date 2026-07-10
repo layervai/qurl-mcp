@@ -33,13 +33,15 @@ import { uploadMintOptionsShape } from "./upload-mint-options.js";
 // tools advertise the operator's configured decoded-byte limit. HTTP only opens
 // a parser ceiling above the 10 MB default for a session already validated by a
 // successful downstream qURL API call (see createHttpRuntime).
-export const MAX_UPLOAD_FILE_BASE64_CHARACTERS =
-  Math.ceil((MAX_UPLOAD_FILE_DATA_BYTES * 4) / 3) + 1024;
 const MAX_DATA_URL_PREFIX_CHARACTERS = 1024;
 
 export function maxBase64CharactersForBytes(maxBytes: number): number {
   return Math.ceil((maxBytes * 4) / 3) + MAX_DATA_URL_PREFIX_CHARACTERS;
 }
+
+export const MAX_UPLOAD_FILE_BASE64_CHARACTERS = maxBase64CharactersForBytes(
+  MAX_UPLOAD_FILE_DATA_BYTES,
+);
 
 export function createUploadFileDataQurlSchema(
   maxBase64Characters = MAX_UPLOAD_FILE_BASE64_CHARACTERS,
