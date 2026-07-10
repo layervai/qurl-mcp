@@ -26,6 +26,19 @@ describe("createTextPdfTempFile", () => {
     expect(existsSync(result.filePath)).toBe(false);
   });
 
+  it.each([".pdf", "..pdf"])("normalizes empty-stem PDF filename %s", async (fileName) => {
+    const result = await createTextPdfTempFile({ content: "safe", fileName });
+
+    expect(result.fileName).toBe("content.pdf");
+    await result.cleanup();
+  });
+
+  it("enforces the renderer content bound at the service boundary", async () => {
+    await expect(createTextPdfTempFile({ content: "x".repeat(100_001) })).rejects.toThrow(
+      "must not exceed 100,000 characters",
+    );
+  });
+
   it("removes control characters from filenames and PDF title metadata", async () => {
     const end = vi.spyOn(PDFDocument.prototype, "end");
     const result = await createTextPdfTempFile({

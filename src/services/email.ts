@@ -140,6 +140,9 @@ export async function sendEmailMessage(
   }
 
   if (recipients.length > smtp.maxRecipientsPerMessage) {
+    // Cap the complete requested fan-out before allowlist filtering. This is
+    // intentionally stricter than the hourly quota's delivered-recipient
+    // count so blocked addresses cannot be used to submit oversized batches.
     return {
       attempted: false,
       enabled: true,
@@ -205,9 +208,10 @@ export async function sendEmailMessage(
     skipped_reason: skippedReason,
   });
   const principal = await deriveEmailQuotaPrincipal(principalKey);
+  // Promise continuations resume one at a time on the JavaScript event loop.
   // From this await through quota increment/map update there are no further
-  // await points. Same-process requests therefore cannot both observe and
-  // reserve the same stale quota value on the JavaScript event loop.
+  // await points, so even concurrent first requests for one principal cannot
+  // both observe and reserve the same empty quota bucket.
   const now = Date.now();
   for (const [key, quota] of emailQuotaByPrincipal) {
     if (now - quota.windowStartedAt >= EMAIL_QUOTA_WINDOW_MS) emailQuotaByPrincipal.delete(key);

@@ -83,6 +83,18 @@ describe("HTTP listener config", () => {
     expect(loadHttpServerConfig(configPath).allowedHosts).toEqual(["[::1]"]);
   });
 
+  it("rejects pathological Host allowlists", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        allowedHosts: Array.from({ length: 1_001 }, (_, index) => `host-${index}.example.com`),
+      }),
+    );
+
+    expect(() => loadHttpServerConfig(configPath)).toThrow("at most 1000 entries");
+  });
+
   it("parses bounded proxy, session, and rate-limit values", () => {
     const configPath = join(tempDir, "http.json");
     writeFileSync(

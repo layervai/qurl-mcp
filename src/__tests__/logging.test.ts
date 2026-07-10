@@ -42,6 +42,7 @@ describe("logging", () => {
     expect(formatErrorForLog(new Error("failed with lv_live_secret\r\nnext"))).toBe(
       "Error: failed with [REDACTED]  next",
     );
+    expect(sanitizeLogValue("Bearer opaque:token;tail next")).toBe("Bearer [REDACTED] next");
     expect(sanitizeLogValue("prefixlv_live_secret suffix")).toBe("prefix[REDACTED] suffix");
     expect(sanitizeConsoleArgument({ token: "lv_live_secret" })).toBe("[object Object]");
   });

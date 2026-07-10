@@ -466,7 +466,9 @@ export class QURLClient implements IQURLClient {
       const result = await fn(this.sdk);
       // Only a successful API response conclusively validates the request
       // credential. Any error status may have originated from an intermediary
-      // before the qURL API authenticated the bearer token.
+      // before the qURL API authenticated the bearer token. This trust boundary
+      // assumes the operator-configured HTTPS endpoint and its intermediaries
+      // neither synthesize nor cache authenticated success responses.
       markRequestCredentialValidated();
       return result;
     } catch (err) {

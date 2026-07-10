@@ -18,7 +18,9 @@ export const uploadMintOptionsShape = {
     .min(0)
     .max(1000)
     .optional()
-    .describe("Maximum concurrent sessions for this qURL token (0 = unlimited, max 1000)"),
+    .describe(
+      "Maximum concurrent sessions for this qURL token (max 1000). Set one_time_use to false explicitly for 0 to mean unlimited visitors.",
+    ),
   session_duration: z
     .string()
     .min(1)

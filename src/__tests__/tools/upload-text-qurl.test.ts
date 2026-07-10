@@ -23,6 +23,7 @@ const fixturePath = resolve("src/__tests__/fixtures/sample.pdf");
 const fixtureSize = statSync(fixturePath).size;
 
 vi.mock("../../services/text-pdf.js", () => ({
+  MAX_TEXT_PDF_CONTENT_CHARACTERS: 100_000,
   createTextPdfTempFile: vi
     .fn()
     .mockImplementation(async ({ fileName }: { fileName?: string }) => ({
@@ -123,6 +124,11 @@ describe("uploadTextQurlTool", () => {
         content: "hello world",
         file_name: "hello.json",
         label: "Text Share",
+        expires_in: "2h",
+        one_time_use: false,
+        max_sessions: 3,
+        session_duration: "1h",
+        access_policy: { geo_denylist: ["US"] },
       });
 
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
@@ -148,7 +154,11 @@ describe("uploadTextQurlTool", () => {
         "r_upload12345",
         expect.objectContaining({
           label: "Text Share",
-          one_time_use: true,
+          expires_in: "2h",
+          one_time_use: false,
+          max_sessions: 3,
+          session_duration: "1h",
+          access_policy: { geo_denylist: ["US"] },
         }),
       );
       expect(getQURL).toHaveBeenCalledWith("r_upload12345");

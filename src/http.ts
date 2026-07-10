@@ -78,6 +78,10 @@ export interface HttpRuntimeOptions {
   version: string;
 }
 
+interface McpResponseLocals {
+  usingUnvalidatedBodyLimit?: boolean;
+}
+
 export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntimeOptions) {
   const runtimeConfigPath = options.runtimeConfigPath ?? getDefaultConfigPath();
   const version = options.version;
@@ -189,7 +193,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       session?.credentialValidated === true &&
       bearerToken !== undefined &&
       bearerTokenMatches(bearerToken, session.bearerTokenDigest);
-    res.locals.usingUnvalidatedBodyLimit = !mayUseConfiguredLimit;
+    const locals = res.locals as McpResponseLocals;
+    locals.usingUnvalidatedBodyLimit = !mayUseConfiguredLimit;
     const parser = mayUseConfiguredLimit ? parseConfiguredMcpJsonBody : parseUnvalidatedMcpJsonBody;
     parser(req, res, next);
   };
@@ -710,15 +715,26 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       next(error);
       return;
     }
-    const bodyError =
-      typeof error === "object" && error !== null
-        ? (error as { status?: number; type?: string })
-        : {};
-    if (bodyError.status === 413 || bodyError.type === "entity.too.large") {
+    const bodyErrorStatus =
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      typeof error.status === "number"
+        ? error.status
+        : undefined;
+    const bodyErrorType =
+      typeof error === "object" &&
+      error !== null &&
+      "type" in error &&
+      typeof error.type === "string"
+        ? error.type
+        : undefined;
+    if (bodyErrorStatus === 413 || bodyErrorType === "entity.too.large") {
+      const locals = res.locals as McpResponseLocals;
       rejectJsonRpc(
         res,
         413,
-        res.locals.usingUnvalidatedBodyLimit &&
+        locals.usingUnvalidatedBodyLimit &&
           config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES
           ? "Request body is too large for an unvalidated session. Complete a smaller qURL API call first."
           : "Request body is too large.",
@@ -729,8 +745,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       rejectJsonRpc(res, 400, "Request body must be valid JSON.", -32700);
       return;
     }
-    if (typeof bodyError.status === "number" && bodyError.status >= 400 && bodyError.status < 500) {
-      rejectJsonRpc(res, bodyError.status, "Request body could not be processed.");
+    if (bodyErrorStatus !== undefined && bodyErrorStatus >= 400 && bodyErrorStatus < 500) {
+      rejectJsonRpc(res, bodyErrorStatus, "Request body could not be processed.");
       return;
     }
     console.error(`HTTP middleware failed (${formatErrorForLog(error)})`);
@@ -787,7 +803,18 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     res.json({ ok: true });
   });
 
-  app.use(jsonBodyErrorHandler);
+  // Keep JSON-RPC error envelopes scoped to the protocol route. Public pages
+  // use a plain-text fallback so an unrelated handler failure cannot return a
+  // misleading JSON-RPC response (or Express's default stack-bearing HTML).
+  app.use("/mcp", jsonBodyErrorHandler);
+  app.use(((error, _req, res, next) => {
+    if (res.headersSent) {
+      next(error);
+      return;
+    }
+    console.error(`Public HTTP middleware failed (${formatErrorForLog(error)})`);
+    res.status(500).type("text").send("Internal server error.");
+  }) satisfies express.ErrorRequestHandler);
 
   function startHttpServer(): Server {
     installTimestampedConsole();

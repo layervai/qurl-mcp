@@ -317,7 +317,7 @@ describe("uploadFileDataQurlTool", () => {
       expect(parsed.file_name).toBe("sample.pdf");
     });
 
-    it("normalizes mixed standard and URL-safe base64 alphabets", async () => {
+    it("rejects mixed standard and URL-safe base64 alphabets", async () => {
       globalThis.fetch = vi.fn();
       const tool = uploadFileDataQurlTool(makeMockClient());
 
@@ -327,7 +327,7 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toThrow("does not match declared content_type");
+      ).rejects.toThrow("valid base64-encoded content");
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 

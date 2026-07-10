@@ -34,12 +34,11 @@ describe("published stdio environment manifests", () => {
     const serverDefault = publishedVariables.find(
       (variable) => variable.name === "QURL_API_URL",
     )?.default;
-    const runtimeDefault = /fileConfig\.defaultQurlApiUrl\s*\|\|\s*"([^"]+)"/.exec(
-      runtimeConfigSource,
-    )?.[1];
+    const runtimeDefault = /DEFAULT_QURL_API_URL\s*=\s*"([^"]+)"/.exec(runtimeConfigSource)?.[1];
 
     expect([smitherySchemaDefault, smitheryCommandDefault, serverDefault, runtimeDefault]).toEqual(
       Array(4).fill("https://api.layerv.ai"),
     );
+    expect(runtimeConfigSource).toContain("fileConfig.defaultQurlApiUrl || DEFAULT_QURL_API_URL");
   });
 });

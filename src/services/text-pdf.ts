@@ -9,6 +9,7 @@ import { isControlCodePoint } from "../text.js";
 const bundledFontPath = fileURLToPath(
   new URL("../../assets/fonts/NotoSansSC-VF.ttf", import.meta.url),
 );
+export const MAX_TEXT_PDF_CONTENT_CHARACTERS = 100_000;
 
 function sanitizePdfText(input: string, fallback: string): string {
   let sanitized = "";
@@ -28,9 +29,11 @@ function sanitizePdfText(input: string, fallback: string): string {
 
 function ensurePdfFileName(input: string | undefined): string {
   const baseName = basename(sanitizePdfText(input ?? "content", "content")) || "content";
-  if (baseName.toLowerCase().endsWith(".pdf")) return baseName;
-  const withoutExt = baseName.replace(/\.[^.]+$/, "");
-  return `${withoutExt || "content"}.pdf`;
+  const withoutExt = baseName.toLowerCase().endsWith(".pdf")
+    ? baseName.slice(0, -4)
+    : baseName.replace(/\.[^.]+$/, "");
+  const safeStem = withoutExt && !/^\.+$/.test(withoutExt) ? withoutExt : "content";
+  return `${safeStem}.pdf`;
 }
 
 export function resolveFontPath(candidatePath = bundledFontPath): string | undefined {
@@ -51,6 +54,11 @@ export async function createTextPdfTempFile(input: {
   filePath: string;
   sizeBytes: number;
 }> {
+  if (input.content.length > MAX_TEXT_PDF_CONTENT_CHARACTERS) {
+    throw new Error(
+      `PDF content must not exceed ${MAX_TEXT_PDF_CONTENT_CHARACTERS.toLocaleString("en-US")} characters.`,
+    );
+  }
   const tempDir = await mkdtemp(join(tmpdir(), "qurl-text-pdf-"));
   const fileName = ensurePdfFileName(input.fileName);
   const filePath = join(tempDir, fileName);

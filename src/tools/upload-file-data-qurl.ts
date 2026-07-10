@@ -99,10 +99,11 @@ function normalizeBase64Input(input: string): {
     throw new Error("file_base64 must not be empty");
   }
 
-  // Step 3: Validate the union of standard and URL-safe alphabets. Their
-  // differing symbols map unambiguously to the same values, so mixed input can
-  // be normalized safely instead of rejected.
-  if (!/^[A-Za-z0-9+/_-]*={0,2}$/.test(withoutWhitespace)) {
+  // Step 3: Accept either the standard or URL-safe alphabet, but reject a
+  // mixed alphabet because no conforming encoder emits that representation.
+  const usesStandardAlphabet = /^[A-Za-z0-9+/]*={0,2}$/.test(withoutWhitespace);
+  const usesUrlSafeAlphabet = /^[A-Za-z0-9_-]*={0,2}$/.test(withoutWhitespace);
+  if (!usesStandardAlphabet && !usesUrlSafeAlphabet) {
     throw new Error("file_base64 must be valid base64-encoded content");
   }
 

@@ -6,6 +6,7 @@ const PATCH_FLAG = Symbol.for("qurl-mcp.consoleTimestampPatched");
 // prefix-aware pattern. Supported qURL keys always use `lv_`; an arbitrary
 // non-prefixed secret cannot be identified safely from unstructured text.
 const QURL_API_KEY_PATTERN = /lv_[A-Za-z0-9_-]+/g;
+const BEARER_CREDENTIAL_PATTERN = /Bearer\s+\S+/gi;
 
 function formatTimestamp(date = new Date()): string {
   return date.toISOString().replace("T", " ").replace("Z", " UTC");
@@ -15,12 +16,15 @@ export function logInfo(message: string): void {
   process.stderr.write(`${formatTimestamp()} ${sanitizeLogValue(message)}\n`);
 }
 
-export function sanitizeLogValue(value: string): string {
+function redactAndFlattenLogValue(value: string): string {
   return value
-    .replace(/Bearer\s+[^\s,;]+/gi, "Bearer [REDACTED]")
+    .replace(BEARER_CREDENTIAL_PATTERN, "Bearer [REDACTED]")
     .replace(QURL_API_KEY_PATTERN, "[REDACTED]")
-    .replace(/[\r\n\u2028\u2029]/g, " ")
-    .slice(0, 512);
+    .replace(/[\r\n\u2028\u2029]/g, " ");
+}
+
+export function sanitizeLogValue(value: string): string {
+  return redactAndFlattenLogValue(value).slice(0, 512);
 }
 
 export function formatErrorForLog(error: unknown): string {
@@ -44,6 +48,21 @@ export function sanitizeConsoleArgument(arg: unknown): unknown {
   }
 }
 
+function sanitizeConsoleArgumentWithoutTruncation(arg: unknown): string {
+  if (typeof arg === "string") return redactAndFlattenLogValue(arg);
+  if (arg instanceof Error) {
+    const name = redactAndFlattenLogValue(arg.name || "Error");
+    const message = redactAndFlattenLogValue(arg.message || "no message");
+    return `${name}: ${message}`;
+  }
+  if (arg === null || ["number", "boolean", "bigint"].includes(typeof arg)) return String(arg);
+  try {
+    return redactAndFlattenLogValue(String(arg));
+  } catch {
+    return "[unprintable]";
+  }
+}
+
 function prefixArgs(args: unknown[]): unknown[] {
   const prefix = `${formatTimestamp()} `;
   if (args.length === 0) {
@@ -56,7 +75,7 @@ function prefixArgs(args: unknown[]): unknown[] {
   // Collapse the complete call before applying the final bound. Limiting each
   // argument independently would still allow an unbounded line when a caller
   // supplies many arguments.
-  const message = args.map((arg) => String(sanitizeConsoleArgument(arg))).join(" ");
+  const message = args.map(sanitizeConsoleArgumentWithoutTruncation).join(" ");
   return [`${prefix}${sanitizeLogValue(message)}`];
 }
 

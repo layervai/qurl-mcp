@@ -618,7 +618,7 @@ describe("sendEmailMessage", () => {
     expect(nodemailerMocks.sendMail).toHaveBeenCalledTimes(2);
   });
 
-  it("reserves same-principal quota atomically across concurrent calls", async () => {
+  it("reserves a brand-new same-principal quota atomically across concurrent calls", async () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
       configPath,

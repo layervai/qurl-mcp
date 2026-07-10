@@ -128,6 +128,13 @@ describe("public video config", () => {
     expect(() => loadRuntimeConfig(configPath)).toThrow("publicVideo must be a JSON object");
   });
 
+  it("names the offending file when configuration JSON is malformed", () => {
+    const configPath = join(tempDir!, "broken-config.json");
+    writeFileSync(configPath, '{"smtp":');
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow(configPath);
+  });
+
   it("rejects invalid SMTP quota values instead of silently using defaults", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
@@ -148,6 +155,29 @@ describe("public video config", () => {
     expect(() => loadRuntimeConfig(configPath)).toThrow(
       "SMTP maxRecipientsPerMessage must be a positive integer",
     );
+  });
+
+  it("rejects pathological SMTP recipient allowlists", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+          allowedRecipients: Array.from(
+            { length: 1_001 },
+            (_, index) => `user-${index}@example.com`,
+          ),
+        },
+      }),
+    );
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow("at most 1000 entries");
   });
 
   it("allows environment variables to override shared public video config", () => {

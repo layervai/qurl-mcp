@@ -66,8 +66,12 @@ export type ConfigFileShape = Partial<{
 }>;
 
 const DEFAULT_CONFIG_PATH = "qurl-mcp.config.json";
+export const DEFAULT_QURL_API_URL = "https://api.layerv.ai";
+export const DEFAULT_PUBLIC_VIDEO_TITLE = "Video Showcase";
+export const DEFAULT_PUBLIC_VIDEO_PAGE_PATH = "/media/video";
 export const DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES = 10 * 1024 * 1024;
 export const MAX_UPLOAD_FILE_DATA_BYTES = 100 * 1024 * 1024;
+export const MAX_CONFIG_ALLOWLIST_ENTRIES = 1_000;
 
 /**
  * Module-level cache for runtime config. Keyed by resolved config path and
@@ -97,7 +101,12 @@ const RUNTIME_CONFIG_ENV_KEYS = [
 
 const runtimeConfigCache = new Map<
   string,
-  { environmentFingerprint: string; fileFingerprint: string; config: RuntimeConfig }
+  {
+    environmentFingerprint: string;
+    fileFingerprint: string;
+    config: RuntimeConfig;
+    smtpInspection: SmtpConfigInspection;
+  }
 >();
 
 function getRuntimeConfigEnvironmentFingerprint(): string {
@@ -148,11 +157,13 @@ export function parseConfigFile(configPath: string): ConfigFileShape {
     }
     return parsed as ConfigFileShape;
   } catch (error) {
-    const err = error as { code?: string };
-    if (error instanceof Error && err.code === "ENOENT") {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return {};
     }
-    throw error;
+    const detail = error instanceof Error ? error.message : "unknown configuration error";
+    throw new Error(`Failed to parse configuration file ${configPath}: ${detail}`, {
+      cause: error,
+    });
   }
 }
 
@@ -162,6 +173,9 @@ export function parseAllowedHosts(value: string | undefined): string[] | undefin
     .split(",")
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+  if (hosts.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
+    throw new Error(`allowedHosts must contain at most ${MAX_CONFIG_ALLOWLIST_ENTRIES} entries.`);
+  }
   return hosts.length > 0 ? hosts : undefined;
 }
 
@@ -332,9 +346,13 @@ function parseCsvList(value: unknown): string[] | undefined {
   ) {
     throw new Error("SMTP recipient allowlists must be strings or arrays of strings.");
   }
-  const items = (Array.isArray(value) ? value : value.split(","))
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
+  const rawItems = Array.isArray(value) ? value : value.split(",");
+  if (rawItems.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
+    throw new Error(
+      `SMTP recipient allowlists must contain at most ${MAX_CONFIG_ALLOWLIST_ENTRIES} entries.`,
+    );
+  }
+  const items = rawItems.map((item) => item.trim().toLowerCase()).filter(Boolean);
   const unique = Array.from(new Set(items));
   return unique.length > 0 ? unique : undefined;
 }
@@ -385,10 +403,10 @@ function resolvePublicVideoConfig(
     title:
       trimString(process.env.QURL_PUBLIC_VIDEO_TITLE) ??
       trimString(fileConfig?.title) ??
-      "Video Showcase",
+      DEFAULT_PUBLIC_VIDEO_TITLE,
     pagePath: normalizePublicPath(
       trimString(process.env.QURL_PUBLIC_VIDEO_PAGE_PATH) ?? trimString(fileConfig?.pagePath),
-      "/media/video",
+      DEFAULT_PUBLIC_VIDEO_PAGE_PATH,
     ),
     filePath,
   };
@@ -417,7 +435,9 @@ function resolveSmtpConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpCon
   const allowedRecipients = allowedRecipientValues
     ? Array.from(new Set(allowedRecipientValues.map(normalizeEmailAddress)))
     : undefined;
-  if (allowedRecipients?.some((recipient) => !isEmailAddress(recipient))) {
+  if (
+    allowedRecipients?.some((recipient) => recipient.length > 254 || !isEmailAddress(recipient))
+  ) {
     throw new Error("SMTP allowedRecipients must contain valid email addresses.");
   }
   const allowedRecipientDomainValues = parseCsvList(
@@ -507,7 +527,7 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     throw new Error("maxUploadFileDataBytes must not exceed 100mb.");
   }
   const defaultQurlApiUrl = normalizeServiceBaseUrl(
-    trimString(process.env.QURL_API_URL) || fileConfig.defaultQurlApiUrl || "https://api.layerv.ai",
+    trimString(process.env.QURL_API_URL) || fileConfig.defaultQurlApiUrl || DEFAULT_QURL_API_URL,
     "QURL_API_URL/defaultQurlApiUrl",
     true,
   );
@@ -525,8 +545,14 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     smtp: resolveSmtpConfig(fileConfig.smtp),
     publicVideo: resolvePublicVideoConfig(fileConfig.publicVideo),
   };
+  const smtpInspection = inspectSmtpFileConfig(fileConfig.smtp);
 
-  runtimeConfigCache.set(resolvedPath, { environmentFingerprint, fileFingerprint, config });
+  runtimeConfigCache.set(resolvedPath, {
+    environmentFingerprint,
+    fileFingerprint,
+    config,
+    smtpInspection,
+  });
   return config;
 }
 
@@ -538,11 +564,9 @@ export function clearRuntimeConfigCache(): void {
   runtimeConfigCache.clear();
 }
 
-export function inspectSmtpConfig(configPath = getDefaultConfigPath()): SmtpConfigInspection {
-  const fileConfig = parseConfigFile(configPath);
-  const { host, port, secure, username, password, fromEmail, fromName } = resolveSmtpFieldValues(
-    fileConfig.smtp,
-  );
+function inspectSmtpFileConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpConfigInspection {
+  const { host, port, secure, username, password, fromEmail, fromName } =
+    resolveSmtpFieldValues(fileConfig);
   const missingFields = [
     !host ? "host" : undefined,
     !port ? "port" : undefined,
@@ -562,4 +586,14 @@ export function inspectSmtpConfig(configPath = getDefaultConfigPath()): SmtpConf
     fromEmail,
     fromName,
   };
+}
+
+export function inspectSmtpConfig(configPath = getDefaultConfigPath()): SmtpConfigInspection {
+  const resolvedPath = resolve(configPath);
+  loadRuntimeConfig(resolvedPath);
+  const inspection = runtimeConfigCache.get(resolvedPath)?.smtpInspection;
+  if (!inspection) {
+    throw new Error(`SMTP configuration inspection failed for ${resolvedPath}.`);
+  }
+  return { ...inspection, missingFields: [...inspection.missingFields] };
 }

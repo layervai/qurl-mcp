@@ -1,4 +1,7 @@
 import {
+  DEFAULT_PUBLIC_VIDEO_PAGE_PATH,
+  DEFAULT_PUBLIC_VIDEO_TITLE,
+  MAX_CONFIG_ALLOWLIST_ENTRIES,
   getDefaultConfigPath,
   isLoopbackHostname,
   loadRuntimeConfig,
@@ -68,6 +71,9 @@ function normalizeAllowedHosts(hosts: unknown): string[] | undefined {
   if (!Array.isArray(hosts) || hosts.some((host) => typeof host !== "string")) {
     throw new Error("allowedHosts must be an array of hostnames or IPs.");
   }
+  if (hosts.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
+    throw new Error(`allowedHosts must contain at most ${MAX_CONFIG_ALLOWLIST_ENTRIES} entries.`);
+  }
   const normalized = Array.from(
     new Set(hosts.map((host) => host.trim().toLowerCase()).filter(Boolean)),
   );
@@ -124,8 +130,8 @@ function resolvePublicVideoFromHttpConfig(
   if (!filePath) return undefined;
 
   return {
-    title: trimString(fileConfig.publicVideo?.title) ?? "Video Showcase",
-    pagePath: normalizePublicPath(fileConfig.publicVideo?.pagePath, "/media/video"),
+    title: trimString(fileConfig.publicVideo?.title) ?? DEFAULT_PUBLIC_VIDEO_TITLE,
+    pagePath: normalizePublicPath(fileConfig.publicVideo?.pagePath, DEFAULT_PUBLIC_VIDEO_PAGE_PATH),
     filePath,
   };
 }

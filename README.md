@@ -249,6 +249,10 @@ Domain entries are exact: `example.com` does not implicitly allow
 `mail.example.com`; list each permitted subdomain explicitly.
 Addresses and domains are normalized to lowercase NFC/IDNA ASCII form and a
 trailing DNS root dot is removed before comparison and delivery.
+Each recipient allowlist is limited to 1,000 configured entries. The
+per-message recipient cap applies to the complete unique requested fan-out
+before allowlist filtering, so blocked addresses cannot be used to submit an
+oversized batch.
 In HTTP mode, any caller with a valid qURL API key can request a server-side
 SMTP delivery. Configure `allowedRecipients` or `allowedRecipientDomains`
 before enabling SMTP on an Internet-facing HTTP deployment; empty allowlists
@@ -261,6 +265,9 @@ while `smtp.secure: false` requires a successful STARTTLS upgrade.
 Hourly quota state is maintained per server process: it resets on restart and
 is not shared across replicas. Operators running multiple instances should
 enforce a corresponding aggregate limit at the SMTP provider or gateway.
+Tracking fails closed for new principals after 10,000 principals are retained
+in one process; existing principals continue to use their current buckets until
+expired entries are pruned.
 The quota uses a fixed one-hour window that starts with the first attempted
 delivery after the prior window expires.
 As with any fixed window, traffic immediately before and after a boundary can
@@ -301,7 +308,7 @@ When configured, the HTTP server additionally exposes:
 | `maxSessions`                  | Hard cap on live MCP sessions (default `1000`)                                      |
 | `maxSessionsPerCredential`     | Per-bearer live and initializing session cap (default `20`)                         |
 | `maxUnvalidatedSessions`       | Cap on sessions that have not completed a downstream qURL API call (default `100`)  |
-| `sessionIdleTtlMs`             | Idle session eviction window (default 15 minutes)                                   |
+| `sessionIdleTtlMs`             | Connected-session idle eviction window (default 15 minutes)                         |
 | `sessionAbsoluteTtlMs`         | Absolute session lifetime, including active SSE/tool requests (default 24 hours)    |
 | `unvalidatedSessionTtlMs`      | Absolute validation deadline for never-validated bearer sessions (default 1 minute) |
 | `mcpRateLimitPerMinute`        | Per-client `/mcp` request limit (default `120`)                                     |
@@ -330,6 +337,8 @@ The listener defaults to `127.0.0.1`. A non-loopback `host` is rejected unless
 `allowedHosts` is explicitly configured. Set `trustProxyHops` (or
 `MCP_TRUST_PROXY_HOPS`) to the exact number of trusted proxy hops; leave it at
 `0` for direct connections so forwarded IP headers cannot spoof rate-limit keys.
+The Host allowlist is limited to 1,000 entries so request-time validation stays
+bounded even under pathological operator configuration.
 `/mcp` applies the configured request allowance independently to both the
 client IP and the SHA-256 digest of the authenticated bearer. Reverse-proxy
 deployments must set the correct hop count or all callers behind the proxy will
@@ -366,6 +375,10 @@ API response promotes the session.
 Downstream errors, including non-2xx responses that appear authenticated, do
 not promote it because an intermediary may have generated them before the qURL
 API authenticated the bearer.
+Promotion therefore assumes the configured HTTPS qURL API endpoint and every
+trusted intermediary neither cache nor synthesize authenticated success
+responses. Reverse proxies in that path must forward authorization and disable
+response caching for qURL API traffic.
 Consequently, any caller with a non-empty bearer can enumerate the public
 tool/resource/prompt catalog and briefly hold bounded pending-session state. On
 hostile networks, place non-loopback deployments behind an identity-aware proxy

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { formatErrorForLog } from "../logging.js";
-import { createTextPdfTempFile } from "../services/text-pdf.js";
+import { createTextPdfTempFile, MAX_TEXT_PDF_CONTENT_CHARACTERS } from "../services/text-pdf.js";
 import {
   allowsServerApiKeyFallback,
   withMissingApiKeyHandler,
@@ -30,7 +30,7 @@ export const uploadTextQurlSchema = z
     content: z
       .string()
       .min(1)
-      .max(100_000)
+      .max(MAX_TEXT_PDF_CONTENT_CHARACTERS)
       .describe(
         "Text content to render into a temporary PDF before uploading to the qURL connector.",
       ),
@@ -72,15 +72,22 @@ export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof uploadTextQurlSchema>) => {
+      const {
+        type,
+        content,
+        file_name: fileName,
+        email_delivery: emailDelivery,
+        ...mintOptions
+      } = input;
       const allowServerApiKeyFallback = allowsServerApiKeyFallback(runtime);
-      const requestedFileName = input.file_name ?? "content.pdf";
+      const requestedFileName = fileName ?? "content.pdf";
 
       const connectorConfig = getConnectorConfig(allowServerApiKeyFallback);
 
       const pdfFile = await createTextPdfTempFile({
-        content: input.content,
+        content,
         fileName: requestedFileName,
-        title: input.label ?? requestedFileName,
+        title: mintOptions.label ?? requestedFileName,
       });
 
       try {
@@ -90,19 +97,14 @@ export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
             file_path: pdfFile.filePath,
             file_name: pdfFile.fileName,
             content_type: "application/pdf",
-            label: input.label,
-            expires_in: input.expires_in,
-            one_time_use: input.one_time_use,
-            max_sessions: input.max_sessions,
-            session_duration: input.session_duration,
-            access_policy: input.access_policy,
+            ...mintOptions,
           },
           connectorConfig,
         );
 
         const emailResult = await maybeDeliverToolEmail({
           allowServerApiKeyFallback,
-          delivery: input.email_delivery,
+          delivery: emailDelivery,
           defaultSubject: "Your secure text access link is ready",
           detailLines: uploadEmailDetailLines({
             intro: "A secure qURL text link has been created for you.",
@@ -111,8 +113,8 @@ export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
             qurlLink: result.qurl_link,
             expiresAt: result.expires_at,
             qurlSite: result.qurl_site,
-            label: input.label,
-            extraLines: [`Payload Type: ${input.type}`],
+            label: mintOptions.label,
+            extraLines: [`Payload Type: ${type}`],
           }),
         });
 
