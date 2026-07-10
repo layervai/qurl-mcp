@@ -125,6 +125,8 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
           "A secure qURL link has been created for you.",
           `Target URL: ${createInput.target_url}`,
           `Secure Link: ${result.data.qurl_link}`,
+          // The SDK type requires expires_at; keep the guard so upstream
+          // response drift cannot render "undefined" into a customer email.
           ...(result.data.expires_at ? [`Expires At: ${result.data.expires_at}`] : []),
           ...(result.data.qurl_site ? [`qURL Site: ${result.data.qurl_site}`] : []),
           ...(result.data.label ? [`Label: ${result.data.label}`] : []),

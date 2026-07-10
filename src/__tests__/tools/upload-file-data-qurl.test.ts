@@ -498,6 +498,29 @@ describe("uploadFileDataQurlTool", () => {
       ).rejects.toMatchObject<QURLAPIError>({ code, statusCode: 0 });
     });
 
+    it("maps a timeout while reading connector response bytes", async () => {
+      const abortError = Object.assign(new Error("response stalled"), { name: "AbortError" });
+      globalThis.fetch = vi.fn().mockResolvedValue(
+        new Response(
+          new globalThis.ReadableStream({
+            pull(controller) {
+              controller.error(abortError);
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+      const tool = uploadFileDataQurlTool(makeMockClient());
+
+      await expect(
+        tool.handler({
+          file_base64: fixtureBase64,
+          file_name: "sample.pdf",
+          content_type: "application/pdf",
+        }),
+      ).rejects.toMatchObject<QURLAPIError>({ code: "connector_timeout", statusCode: 0 });
+    });
+
     it("throws a typed error when the connector upload fails", async () => {
       globalThis.fetch = vi.fn().mockResolvedValue(
         new Response(

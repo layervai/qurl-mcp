@@ -76,6 +76,13 @@ describe("HTTP listener config", () => {
     );
   });
 
+  it("accepts a bracketed IPv6 literal in the Host allowlist", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(configPath, JSON.stringify({ allowedHosts: ["[::1]"] }));
+
+    expect(loadHttpServerConfig(configPath).allowedHosts).toEqual(["[::1]"]);
+  });
+
   it("parses bounded proxy, session, and rate-limit values", () => {
     const configPath = join(tempDir, "http.json");
     writeFileSync(

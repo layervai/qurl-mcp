@@ -141,16 +141,21 @@ function decodeBase64File(input: string, maxBytes: number, contentType: string):
     : normalized.base64.endsWith("=")
       ? 1
       : 0;
+  const tooLargeMessage =
+    "Decoded file exceeds the allowed upload size. Reduce the file size and try again.";
   const decodedByteLength = (normalized.base64.length / 4) * 3 - paddingBytes;
   if (decodedByteLength > maxBytes) {
-    throw new Error(
-      "Decoded file exceeds the allowed upload size. Reduce the file size and try again.",
-    );
+    throw new Error(tooLargeMessage);
   }
   const fileData = Buffer.from(normalized.base64, "base64");
 
   if (fileData.byteLength === 0) {
     throw new Error("file_base64 decoded to an empty file");
+  }
+  // Keep an actual-byte check after the pre-allocation estimate so decoder or
+  // normalization behavior cannot silently weaken the configured limit.
+  if (fileData.byteLength > maxBytes) {
+    throw new Error(tooLargeMessage);
   }
 
   validateFileSignature(fileData, contentType);
@@ -168,6 +173,7 @@ export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntime
       "Use this when you have the file data available but cannot provide a server-local file path. " +
       "Use `upload_file_qurl` when the file already exists on the MCP server host, use `create_qurl` when you already have a URL, and use `mint_link` when the file has already been uploaded and you only need another token. " +
       "For compressible images, compress them before converting to base64 so the request is smaller and more reliable. " +
+      "When the server upload limit is configured above 10 MB, a fresh HTTP session must complete a smaller qURL API call before its first larger upload. " +
       "The tool decodes `file_base64`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints a qURL from the returned `resource_id`. " +
       "Supported MIME types are application/pdf, image/png, image/jpeg, image/webp, and image/gif. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +

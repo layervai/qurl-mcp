@@ -98,7 +98,7 @@ export function mintLinkTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
           "A new qURL access link has been minted for you.",
           `Resource ID: ${resource_id}`,
           `Secure Link: ${result.data.qurl_link}`,
-          `Expires At: ${result.data.expires_at}`,
+          ...(result.data.expires_at ? [`Expires At: ${result.data.expires_at}`] : []),
           ...(body.label ? [`Label: ${body.label}`] : []),
           ...(result.data.type ? [`Type: ${result.data.type}`] : []),
         ],

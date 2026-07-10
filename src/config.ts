@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
-import { isAbsolute, resolve, win32 } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { isEmailAddress, normalizeEmailAddress, normalizeEmailDomain } from "./email-addresses.js";
 
 export interface SmtpConfig {
@@ -276,7 +276,7 @@ export function isLoopbackHostname(hostname: string): boolean {
   return isIP(normalized) === 4 && Number(normalized.split(".", 1)[0]) === 127;
 }
 
-export function hasDotPathSegment(value: string): boolean {
+function hasDotPathSegment(value: string): boolean {
   const rawPath = /^[a-z][a-z\d+.-]*:\/\/[^/?#]*(\/[^?#]*)?/i.exec(value.trim())?.[1];
   if (!rawPath) return false;
   try {
@@ -288,7 +288,11 @@ export function hasDotPathSegment(value: string): boolean {
   }
 }
 
-function normalizeServiceBaseUrl(value: string, fieldName: string, requireHttps: boolean): string {
+export function normalizeServiceBaseUrl(
+  value: string,
+  fieldName: string,
+  requireHttps: boolean,
+): string {
   if (hasDotPathSegment(value)) {
     throw new Error(`${fieldName} must not contain dot path segments or malformed escapes.`);
   }
@@ -360,7 +364,7 @@ export function normalizePublicPath(
 export function normalizeAbsoluteFilePath(value: unknown, fieldName: string): string | undefined {
   const filePath = trimString(value);
   if (!filePath) return undefined;
-  if (!isAbsolute(filePath) && !win32.isAbsolute(filePath)) {
+  if (!isAbsolute(filePath)) {
     throw new Error(`${fieldName} must be an absolute filesystem path.`);
   }
   return filePath;

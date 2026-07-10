@@ -183,6 +183,35 @@ describe("HTTP MCP server", () => {
     );
   });
 
+  it("keeps a fresh session at the default body ceiling before credential validation", async () => {
+    const raisedLimitRuntime = createHttpRuntime(
+      { ...testConfig, maxUploadFileDataBytes: 20 * 1024 * 1024 },
+      { version: "0.0.0-test" },
+    );
+    const baseUrl = await start(raisedLimitRuntime.app);
+    const token = "lv_live_large_first_request";
+
+    try {
+      const sessionId = await initialize(baseUrl, token);
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "mcp-session-id": sessionId },
+        body: JSON.stringify({ payload: "x".repeat(16 * 1024 * 1024) }),
+      });
+
+      expect(response.status).toBe(413);
+      expect(await response.json()).toEqual(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            message: expect.stringContaining("Complete a smaller qURL API call first"),
+          }),
+        }),
+      );
+    } finally {
+      await raisedLimitRuntime.closeAllSessions();
+    }
+  });
+
   it("initializes from a single-message JSON-RPC batch", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/mcp`, {
@@ -1222,6 +1251,13 @@ describe("public video range streaming", () => {
       `bytes ${fixtureSize - 5}-${fixtureSize - 1}/${fixtureSize}`,
     );
     expect((await suffix.arrayBuffer()).byteLength).toBe(5);
+
+    const openEnded = await fetch(`${baseUrl}/file`, { headers: { range: "bytes=0-" } });
+    expect(openEnded.status).toBe(206);
+    expect(openEnded.headers.get("content-range")).toBe(
+      `bytes 0-${fixtureSize - 1}/${fixtureSize}`,
+    );
+    expect((await openEnded.arrayBuffer()).byteLength).toBe(fixtureSize);
 
     const overlong = await fetch(`${baseUrl}/file`, {
       headers: { range: `bytes=0-${fixtureSize + 100}` },

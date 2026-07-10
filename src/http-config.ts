@@ -75,7 +75,10 @@ function normalizeAllowedHosts(hosts: unknown): string[] | undefined {
     if (!/^[a-z0-9.:[\]-]+$/.test(host)) return true;
     try {
       const parsed = new URL(`http://${host}`);
-      return parsed.hostname !== host || parsed.host !== host;
+      return (
+        parsed.hostname.replace(/^\[(.*)\]$/, "$1") !== host.replace(/^\[(.*)\]$/, "$1") ||
+        parsed.port !== ""
+      );
     } catch {
       return true;
     }

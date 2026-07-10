@@ -227,5 +227,30 @@ describe("mintLinkTool", () => {
       expect(parsed.email_delivery?.sent).toBe(2);
       expect(parsed.qurl_link).toBe("https://qurl.link/at_newtoken123");
     });
+
+    it("omits an absent expiration from the email body", async () => {
+      const mockMint = vi.fn().mockResolvedValue({
+        data: { ...fixture, expires_at: undefined },
+      });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com"],
+        sent: 1,
+        failed: 0,
+        results: [{ email: "alice@example.com", success: true, message_id: "msg-1" }],
+      });
+      const tool = mintLinkTool(makeMockClient({ mintLink: mockMint }));
+
+      await tool.handler({
+        resource_id: validResourceId,
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledWith(
+        expect.objectContaining({ text: expect.not.stringContaining("Expires At: undefined") }),
+        expect.anything(),
+      );
+    });
   });
 });

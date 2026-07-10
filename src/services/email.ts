@@ -94,6 +94,8 @@ export async function sendEmailMessage(
   if (!input.subject.trim() || input.subject.length > 200 || /[\r\n]/.test(input.subject)) {
     throw new EmailDeliverySetupError("input", "Email subject must be a non-empty single line.");
   }
+  // Defense at the exported service boundary; tool assembly also checks this
+  // limit so it can return a structured skipped-delivery result.
   if (input.text.length > 10_000) {
     throw new EmailDeliverySetupError("input", "Email text exceeds the 10,000 character limit.");
   }

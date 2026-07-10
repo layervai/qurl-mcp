@@ -257,6 +257,9 @@ is not shared across replicas. Operators running multiple instances should
 enforce a corresponding aggregate limit at the SMTP provider or gateway.
 The quota uses a fixed one-hour window that starts with the first attempted
 delivery after the prior window expires.
+As with any fixed window, traffic immediately before and after a boundary can
+total nearly twice the configured hourly value; use a provider-side sliding or
+rolling limit when that boundary burst must be prevented across replicas.
 Generated qURL links are included in the plain-text email body. Restrict
 recipients with the SMTP allowlists and configure transport encryption at the
 SMTP server/provider when link confidentiality matters.

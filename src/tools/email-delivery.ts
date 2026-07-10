@@ -119,6 +119,8 @@ export async function maybeDeliverToolEmail(
   ].filter((section): section is string => typeof section === "string" && section.length > 0);
   const text = sections.join("\n\n");
   const recipients = uniqueRecipients(input.delivery.to);
+  // Fail with a structured skipped result here for tool callers. The service
+  // repeats this boundary check because it is also exported for direct use.
   if (text.length > 10_000) {
     return skippedDeliveryResult(
       recipients,

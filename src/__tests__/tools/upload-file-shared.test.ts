@@ -50,7 +50,7 @@ describe("getConnectorUploadUrl", () => {
 
   it("rejects connector URLs with embedded credentials", () => {
     expect(() => getConnectorUploadUrl("https://user:pass@connector.example.com")).toThrow(
-      "must not contain embedded credentials",
+      "must not contain credentials",
     );
   });
 
@@ -59,7 +59,7 @@ describe("getConnectorUploadUrl", () => {
       "https://connector.example.com/qurl/api/upload",
     );
     expect(() => getConnectorUploadUrl("https://connector.example.com?target=other")).toThrow(
-      "must not contain a query string",
+      "must not contain a query",
     );
     expect(() => getConnectorUploadUrl("https://connector.example.com/#other")).toThrow(
       "must not contain a fragment",
@@ -98,6 +98,9 @@ describe("file name validation", () => {
     ).toThrow("does not match");
     expect(() =>
       validateFileSignature(Buffer.from("%PDF-1.7\n%%EOF\n"), "application/pdf"),
+    ).not.toThrow();
+    expect(() =>
+      validateFileSignature(Buffer.from(`%PDF-1.7\n%%EOF\n${" ".repeat(2048)}`), "application/pdf"),
     ).not.toThrow();
     expect(() =>
       validateFileSignature(Buffer.from("%PDF-1.7\n%%EOF\ntrailing"), "application/pdf"),

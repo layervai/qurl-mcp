@@ -48,7 +48,7 @@ describe("public video config", () => {
         publicVideo: {
           title: "Launch Demo",
           pagePath: "/media/video",
-          filePath: "D:/videos/demo.mp4",
+          filePath: "/srv/videos/demo.mp4",
         },
       }),
     );
@@ -58,7 +58,7 @@ describe("public video config", () => {
     expect(config.publicVideo).toEqual({
       title: "Launch Demo",
       pagePath: "/media/video",
-      filePath: "D:/videos/demo.mp4",
+      filePath: "/srv/videos/demo.mp4",
     });
   });
 
@@ -159,12 +159,12 @@ describe("public video config", () => {
         publicVideo: {
           title: "Config Video",
           pagePath: "/media/video",
-          filePath: "D:/videos/config.mp4",
+          filePath: "/srv/videos/config.mp4",
         },
       }),
     );
 
-    process.env.QURL_PUBLIC_VIDEO_FILE_PATH = "D:/videos/env.mp4";
+    process.env.QURL_PUBLIC_VIDEO_FILE_PATH = "/srv/videos/env.mp4";
     process.env.QURL_PUBLIC_VIDEO_TITLE = "Env Video";
     process.env.QURL_PUBLIC_VIDEO_PAGE_PATH = "public/watch";
 
@@ -173,7 +173,7 @@ describe("public video config", () => {
     expect(config.publicVideo).toEqual({
       title: "Env Video",
       pagePath: "/public/watch",
-      filePath: "D:/videos/env.mp4",
+      filePath: "/srv/videos/env.mp4",
     });
   });
 

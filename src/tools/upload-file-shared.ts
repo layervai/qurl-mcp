@@ -11,7 +11,7 @@ import {
   type IQURLClient,
   type MintLinkInput,
 } from "../client.js";
-import { hasDotPathSegment, isLoopbackHostname, loadRuntimeConfig } from "../config.js";
+import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN } from "./_shared.js";
@@ -26,6 +26,7 @@ export const supportedMimeTypes = [
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const PNG_IEND_CHUNK = Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);
+const PDF_EOF_MARKER = Buffer.from("%%EOF", "ascii");
 
 export const mimeTypeByExtension = new Map<string, (typeof supportedMimeTypes)[number]>([
   [".gif", "image/gif"],
@@ -46,8 +47,9 @@ export type ConnectorConfig = {
 };
 
 export function getConnectorConfig(allowServerApiKeyFallback = true): ConnectorConfig {
+  const runtimeConfig = loadRuntimeConfig();
   const serverApiKey = allowServerApiKeyFallback
-    ? (process.env.QURL_API_KEY?.trim() ?? loadRuntimeConfig().qurlApiKey)
+    ? (process.env.QURL_API_KEY?.trim() ?? runtimeConfig.qurlApiKey)
     : undefined;
   const apiKey = getRequestQurlApiKey() ?? serverApiKey ?? "";
   if (!apiKey) {
@@ -57,7 +59,7 @@ export function getConnectorConfig(allowServerApiKeyFallback = true): ConnectorC
   const connectorURL =
     getRequestQurlConnectorUrl() ??
     process.env.QURL_CONNECTOR_URL?.trim() ??
-    loadRuntimeConfig().defaultQurlConnectorUrl ??
+    runtimeConfig.defaultQurlConnectorUrl ??
     "";
   if (!connectorURL) {
     throw new QURLAPIError(
@@ -76,55 +78,14 @@ export function getConnectorConfig(allowServerApiKeyFallback = true): ConnectorC
 }
 
 export function getConnectorUploadUrl(connectorURL: string): string {
-  if (hasDotPathSegment(connectorURL)) {
-    throw new QURLAPIError(
-      0,
-      "invalid_connector_url",
-      "QURL_CONNECTOR_URL must not contain dot path segments or malformed escapes.",
-    );
-  }
   let connectorBaseUrl: URL;
   try {
-    connectorBaseUrl = new URL(connectorURL);
-  } catch {
+    connectorBaseUrl = new URL(normalizeServiceBaseUrl(connectorURL, "QURL_CONNECTOR_URL", true));
+  } catch (error) {
     throw new QURLAPIError(
       0,
       "invalid_connector_url",
-      "QURL_CONNECTOR_URL must be a valid absolute URL.",
-    );
-  }
-
-  if (connectorBaseUrl.username || connectorBaseUrl.password) {
-    throw new QURLAPIError(
-      0,
-      "invalid_connector_url",
-      "QURL_CONNECTOR_URL must not contain embedded credentials.",
-    );
-  }
-  if (connectorBaseUrl.search) {
-    throw new QURLAPIError(
-      0,
-      "invalid_connector_url",
-      "QURL_CONNECTOR_URL must not contain a query string.",
-    );
-  }
-  if (connectorBaseUrl.hash) {
-    throw new QURLAPIError(
-      0,
-      "invalid_connector_url",
-      "QURL_CONNECTOR_URL must not contain a fragment.",
-    );
-  }
-  if (
-    connectorBaseUrl.protocol !== "https:" &&
-    // The connector URL is operator-configured, never caller-controlled.
-    // Literal loopback HTTP is supported only for local development.
-    !(connectorBaseUrl.protocol === "http:" && isLoopbackHostname(connectorBaseUrl.hostname))
-  ) {
-    throw new QURLAPIError(
-      0,
-      "invalid_connector_url",
-      "QURL_CONNECTOR_URL must use HTTPS, except for loopback development endpoints.",
+      error instanceof Error ? error.message : "QURL_CONNECTOR_URL must be a valid absolute URL.",
     );
   }
 
@@ -178,11 +139,14 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
   // supported formats must also end at their defined trailer/container marker
   // so an otherwise-valid prefix cannot bless arbitrary appended content.
   const ascii = (start: number, end: number) => bytes.subarray(start, end).toString("latin1");
-  const pdfTail = ascii(Math.max(0, bytes.length - 1024), bytes.length);
+  const pdfEofIndex = bytes.lastIndexOf(PDF_EOF_MARKER);
+  const hasPdfTrailer =
+    pdfEofIndex >= 0 &&
+    bytes
+      .subarray(pdfEofIndex + PDF_EOF_MARKER.length)
+      .every((byte) => byte === 9 || byte === 10 || byte === 12 || byte === 13 || byte === 32);
   const valid =
-    (contentType === "application/pdf" &&
-      ascii(0, 5) === "%PDF-" &&
-      /%%EOF[\t\n\f\r ]*$/.test(pdfTail)) ||
+    (contentType === "application/pdf" && ascii(0, 5) === "%PDF-" && hasPdfTrailer) ||
     (contentType === "image/png" &&
       bytes.length >= PNG_SIGNATURE.length + PNG_IEND_CHUNK.length &&
       bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) &&
@@ -401,6 +365,20 @@ export async function mintUploadedFile(
   };
 }
 
+function connectorTransportError(error: unknown): QURLAPIError {
+  const code =
+    error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)
+      ? "connector_timeout"
+      : "connector_unreachable";
+  return new QURLAPIError(
+    0,
+    code,
+    code === "connector_timeout"
+      ? "Connector upload timed out."
+      : "Connector upload request failed.",
+  );
+}
+
 async function fetchConnector(
   uploadUrl: string,
   init: NonNullable<Parameters<typeof fetch>[1]>,
@@ -412,17 +390,7 @@ async function fetchConnector(
       signal: globalThis.AbortSignal.timeout(60_000),
     });
   } catch (error) {
-    const code =
-      error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)
-        ? "connector_timeout"
-        : "connector_unreachable";
-    throw new QURLAPIError(
-      0,
-      code,
-      code === "connector_timeout"
-        ? "Connector upload timed out."
-        : "Connector upload request failed.",
-    );
+    throw connectorTransportError(error);
   }
 }
 
@@ -460,5 +428,10 @@ export async function uploadToConnector(
 
   // fetchConnector's signal remains attached while this reads the response
   // body, so a connector that stalls after sending headers is still bounded.
-  return processConnectorResponse(response);
+  try {
+    return await processConnectorResponse(response);
+  } catch (error) {
+    if (error instanceof QURLAPIError) throw error;
+    throw connectorTransportError(error);
+  }
 }

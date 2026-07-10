@@ -129,7 +129,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     verifier: createPassthroughBearerVerifier(),
     requiredScopes: ["mcp:tools"],
   });
-  const authenticatedMcpMiddleware = [bearerAuthMiddleware, credentialRateLimiter] as const;
+  const authenticatedMcpMiddleware = [bearerAuthMiddleware, credentialRateLimiter];
 
   if (config.allowedHosts?.length) {
     app.use(hostHeaderValidation(config.allowedHosts));
@@ -183,6 +183,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       session?.credentialValidated === true &&
       bearerToken !== undefined &&
       bearerTokenMatches(bearerToken, session.bearerTokenDigest);
+    res.locals.usingUnvalidatedBodyLimit = !mayUseConfiguredLimit;
     const parser = mayUseConfiguredLimit ? parseConfiguredMcpJsonBody : parseUnvalidatedMcpJsonBody;
     parser(req, res, next);
   };
@@ -693,7 +694,14 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         ? (error as { status?: number; type?: string })
         : {};
     if (bodyError.status === 413 || bodyError.type === "entity.too.large") {
-      rejectJsonRpc(res, 413, "Request body is too large.");
+      rejectJsonRpc(
+        res,
+        413,
+        res.locals.usingUnvalidatedBodyLimit &&
+          config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES
+          ? "Request body is too large for an unvalidated session. Complete a smaller qURL API call first."
+          : "Request body is too large.",
+      );
       return;
     }
     if (error instanceof SyntaxError) {

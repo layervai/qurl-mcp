@@ -50,7 +50,7 @@ export type ToolFactory = (
   }>;
 };
 
-export type ServerMode = "stdio" | "http";
+export type ServerMode = ToolRuntimeOptions["mode"];
 
 const sharedToolFactories = [
   createQurlTool,
