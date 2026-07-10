@@ -14,7 +14,10 @@ import { revokeQurlTokenTool } from "./tools/revoke-qurl-token.js";
 import { updateQurlTokenTool } from "./tools/update-qurl-token.js";
 import { listQurlSessionsTool } from "./tools/list-qurl-sessions.js";
 import { terminateQurlSessionsTool } from "./tools/terminate-qurl-sessions.js";
-import type { ToolAnnotations } from "./tools/_shared.js";
+import { uploadFileDataQurlTool } from "./tools/upload-file-data-qurl.js";
+import { uploadFileQurlTool } from "./tools/upload-file-qurl.js";
+import { uploadTextQurlTool } from "./tools/upload-text-qurl.js";
+import type { ToolAnnotations, ToolRuntimeOptions } from "./tools/_shared.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
@@ -26,7 +29,12 @@ import { rotateAccessPrompt } from "./prompts/rotate-access.js";
  * TDQS-coverage test can iterate the same canonical list without
  * redeclaring the type.
  */
-export type ToolFactory = (client: IQURLClient) => {
+export type ToolFactory = (
+  client: IQURLClient,
+  // Transport-sensitive tools consume this security context. Other factories
+  // intentionally ignore the required second argument supplied by createServer.
+  runtime: ToolRuntimeOptions,
+) => {
   name: string;
   title: string;
   description: string;
@@ -42,7 +50,9 @@ export type ToolFactory = (client: IQURLClient) => {
   }>;
 };
 
-export const toolFactories = [
+export type ServerMode = ToolRuntimeOptions["mode"];
+
+const sharedToolFactories = [
   createQurlTool,
   resolveQurlTool,
   listQurlsTool,
@@ -58,14 +68,36 @@ export const toolFactories = [
   terminateQurlSessionsTool,
 ] satisfies ToolFactory[];
 
-export function createServer(client: IQURLClient, version: string): McpServer {
+export const toolFactories = [
+  ...sharedToolFactories,
+  uploadFileQurlTool,
+  uploadFileDataQurlTool,
+  uploadTextQurlTool,
+] satisfies ToolFactory[];
+
+export function getToolFactoriesForMode(mode: ServerMode): ToolFactory[] {
+  // Security boundary: remote HTTP callers can upload bounded request bytes
+  // but never choose server-local paths. upload_text_qurl may read only the
+  // tool's own mkdtemp PDF in HTTP mode. Local stdio callers may use all three
+  // upload forms, including caller-chosen paths and base64/text attachments.
+  return mode === "http"
+    ? toolFactories.filter((factory) => factory !== uploadFileQurlTool)
+    : toolFactories;
+}
+
+export function createServer(
+  client: IQURLClient,
+  version: string,
+  mode: ServerMode = "stdio",
+  maxUploadFileDataBytes?: number,
+): McpServer {
   const server = new McpServer({
     name: "qurl",
     version,
   });
 
-  for (const factory of toolFactories) {
-    const tool = factory(client);
+  for (const factory of getToolFactoriesForMode(mode)) {
+    const tool = factory(client, { mode, maxUploadFileDataBytes });
     // registerTool wires outputSchema + annotations into tools/list; pass
     // .shape (ZodRawShape), not the ZodObject itself.
     server.registerTool(

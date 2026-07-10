@@ -21,12 +21,73 @@ startCommand:
           qURL API base URL. Defaults to https://api.layerv.ai. Override only for testing
           against a non-production qURL backend.
         default: https://api.layerv.ai
+      qurlConnectorUrl:
+        type: string
+        description: Connector base URL used by file and text upload tools.
+      qurlMcpConfig:
+        type: string
+        description: Optional path to the shared qURL MCP runtime config file.
+      maxUploadFileDataBytes:
+        type: string
+        description: Maximum decoded/local upload size, capped at 100mb.
+        default: 10mb
+      smtpHost:
+        type: string
+        description: SMTP hostname for optional qURL link delivery.
+      smtpPort:
+        type: string
+        description: SMTP port for optional qURL link delivery.
+      smtpSecure:
+        type: string
+        description: Whether SMTP uses implicit TLS (true/false).
+      smtpUsername:
+        type: string
+        format: password
+        description: SMTP authentication username.
+      smtpPassword:
+        type: string
+        format: password
+        description: SMTP password or app-specific credential.
+      smtpFromEmail:
+        type: string
+        description: Sender email address for qURL delivery.
+      smtpFromName:
+        type: string
+        description: Optional sender display name.
+      smtpAllowedRecipients:
+        type: string
+        description: Optional comma-separated exact recipient allowlist.
+      smtpAllowedRecipientDomains:
+        type: string
+        description: Optional comma-separated recipient-domain allowlist.
+      smtpMaxRecipientsPerMessage:
+        type: string
+        description: Per-message recipient cap.
+        default: '10'
+      smtpMaxRecipientsPerHour:
+        type: string
+        description: Per-key attempted-recipient cap per fixed hourly window.
+        default: '100'
   commandFunction: |-
     (config) => ({
       command: 'npx',
       args: ['-y', '@layervai/qurl-mcp'],
-      env: {
+      env: Object.fromEntries(Object.entries({
         QURL_API_KEY: config.qurlApiKey,
         QURL_API_URL: config.qurlApiUrl || 'https://api.layerv.ai',
-      },
+        QURL_CONNECTOR_URL: config.qurlConnectorUrl,
+        QURL_MCP_CONFIG: config.qurlMcpConfig,
+        MCP_MAX_UPLOAD_FILE_DATA_BYTES: config.maxUploadFileDataBytes || '10mb',
+        QURL_SMTP_HOST: config.smtpHost,
+        QURL_SMTP_PORT: config.smtpPort,
+        QURL_SMTP_SECURE: config.smtpSecure,
+        QURL_SMTP_USERNAME: config.smtpUsername,
+        QURL_SMTP_PASSWORD: config.smtpPassword,
+        QURL_SMTP_FROM_EMAIL: config.smtpFromEmail,
+        QURL_SMTP_FROM_NAME: config.smtpFromName,
+        QURL_SMTP_ALLOWED_RECIPIENTS: config.smtpAllowedRecipients,
+        QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS: config.smtpAllowedRecipientDomains,
+        QURL_SMTP_MAX_RECIPIENTS_PER_MESSAGE: config.smtpMaxRecipientsPerMessage || '10',
+        QURL_SMTP_MAX_RECIPIENTS_PER_HOUR: config.smtpMaxRecipientsPerHour || '100',
+      }).filter(([, value]) => value !== undefined && value !== '')),
     })

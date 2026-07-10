@@ -1,7 +1,28 @@
 import { describe, it, expect, vi } from "vitest";
 import { QURLAPIError } from "../../client.js";
-import { createQurlTool, createQurlSchema } from "../../tools/create-qurl.js";
+import { EmailDeliverySetupError } from "../../email-types.js";
+import {
+  createQurlTool as createQurlToolFactory,
+  createQurlSchema,
+  MAX_ACCESS_POLICY_LIST_ITEMS,
+  MAX_ACCESS_POLICY_IP_CHARACTERS,
+  MAX_ACCESS_POLICY_GEO_CHARACTERS,
+  MAX_AI_AGENT_CATEGORY_CHARACTERS,
+  MAX_RESOURCE_TYPE_CHARACTERS,
+  MAX_USER_AGENT_REGEX_CHARACTERS,
+} from "../../tools/create-qurl.js";
 import { makeMockClient, sampleCreateQURLData } from "../helpers.js";
+
+vi.mock("../../services/email.js", () => ({
+  sendEmailMessage: vi.fn(),
+}));
+
+import { sendEmailMessage } from "../../services/email.js";
+
+const createQurlTool = (
+  client: Parameters<typeof createQurlToolFactory>[0],
+  runtime: Parameters<typeof createQurlToolFactory>[1] = { mode: "stdio" },
+) => createQurlToolFactory(client, runtime);
 
 const fixture = sampleCreateQURLData();
 
@@ -37,6 +58,15 @@ describe("createQurlTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("bounds the integration resource type", () => {
+      expect(
+        createQurlSchema.safeParse({
+          target_url: "https://example.com",
+          type: "x".repeat(MAX_RESOURCE_TYPE_CHARACTERS + 1),
+        }).success,
+      ).toBe(false);
+    });
+
     it("accepts all optional fields", () => {
       const result = createQurlSchema.safeParse({
         type: "url",
@@ -50,6 +80,11 @@ describe("createQurlTool", () => {
         access_policy: {
           ip_allowlist: ["192.168.1.0/24"],
           geo_allowlist: ["US"],
+        },
+        email_delivery: {
+          to: ["alice@example.com", "bob@example.com"],
+          subject: "Subject",
+          message: "Hello",
         },
       });
       expect(result.success).toBe(true);
@@ -66,6 +101,66 @@ describe("createQurlTool", () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it.each([
+      ["ip_allowlist", MAX_ACCESS_POLICY_IP_CHARACTERS],
+      ["ip_denylist", MAX_ACCESS_POLICY_IP_CHARACTERS],
+      ["geo_allowlist", MAX_ACCESS_POLICY_GEO_CHARACTERS],
+      ["geo_denylist", MAX_ACCESS_POLICY_GEO_CHARACTERS],
+    ] as const)("bounds access_policy.%s entries and element length", (field, maxLength) => {
+      expect(
+        createQurlSchema.safeParse({
+          target_url: "https://example.com",
+          access_policy: { [field]: ["x".repeat(maxLength + 1)] },
+        }).success,
+      ).toBe(false);
+      expect(
+        createQurlSchema.safeParse({
+          target_url: "https://example.com",
+          access_policy: { [field]: Array(MAX_ACCESS_POLICY_LIST_ITEMS + 1).fill("x") },
+        }).success,
+      ).toBe(false);
+    });
+
+    it.each(["allow_categories", "deny_categories"] as const)(
+      "bounds access_policy.ai_agent_policy.%s",
+      (field) => {
+        expect(
+          createQurlSchema.safeParse({
+            target_url: "https://example.com",
+            access_policy: {
+              ai_agent_policy: { [field]: ["x".repeat(MAX_AI_AGENT_CATEGORY_CHARACTERS + 1)] },
+            },
+          }).success,
+        ).toBe(false);
+        expect(
+          createQurlSchema.safeParse({
+            target_url: "https://example.com",
+            access_policy: {
+              ai_agent_policy: { [field]: Array(MAX_ACCESS_POLICY_LIST_ITEMS + 1).fill("x") },
+            },
+          }).success,
+        ).toBe(false);
+      },
+    );
+
+    it.each(["user_agent_allow_regex", "user_agent_deny_regex"] as const)(
+      "bounds access_policy.%s to the API's regex limit",
+      (field) => {
+        expect(
+          createQurlSchema.safeParse({
+            target_url: "https://example.com",
+            access_policy: { [field]: "x".repeat(MAX_USER_AGENT_REGEX_CHARACTERS) },
+          }).success,
+        ).toBe(true);
+        expect(
+          createQurlSchema.safeParse({
+            target_url: "https://example.com",
+            access_policy: { [field]: "x".repeat(MAX_USER_AGENT_REGEX_CHARACTERS + 1) },
+          }).success,
+        ).toBe(false);
+      },
+    );
 
     it("rejects non-integer max_sessions", () => {
       const result = createQurlSchema.safeParse({
@@ -197,13 +292,18 @@ describe("createQurlTool", () => {
         .mockRejectedValue(new QURLAPIError(0, "missing_api_key", "QURL_API_KEY is not set."));
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
+      vi.mocked(sendEmailMessage).mockClear();
 
-      const result = await tool.handler({ target_url: "https://example.com" });
+      const result = await tool.handler({
+        target_url: "https://example.com",
+        email_delivery: { to: ["alice@example.com"] },
+      });
 
       expect(result).toEqual({
         isError: true,
         content: [{ type: "text", text: "QURL_API_KEY is not set." }],
       });
+      expect(sendEmailMessage).not.toHaveBeenCalled();
     });
 
     it("passes all optional fields to the client", async () => {
@@ -223,6 +323,183 @@ describe("createQurlTool", () => {
       await tool.handler(input);
 
       expect(mockCreate).toHaveBeenCalledWith(input);
+    });
+
+    it("sends email when email_delivery is provided", async () => {
+      const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com", "bob@example.com"],
+        sent: 2,
+        failed: 0,
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+          { email: "bob@example.com", success: true, skipped: false, message_id: "msg-2" },
+        ],
+      });
+      const client = makeMockClient({ createQURL: mockCreate });
+      const tool = createQurlTool(client);
+
+      const result = await tool.handler({
+        target_url: "https://example.com/protected",
+        email_delivery: {
+          to: ["alice@example.com", "bob@example.com"],
+          message: "Here you go",
+        },
+      });
+
+      expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledOnce();
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.email_delivery).toEqual({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com", "bob@example.com"],
+        sent: 2,
+        failed: 0,
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+          { email: "bob@example.com", success: true, skipped: false, message_id: "msg-2" },
+        ],
+      });
+    });
+
+    it("flattens control characters in generated create-result detail lines", async () => {
+      const mockCreate = vi.fn().mockResolvedValue({
+        data: sampleCreateQURLData({ label: "Example\u2028Forged" }),
+      });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com"],
+        sent: 1,
+        failed: 0,
+        results: [{ email: "alice@example.com", success: true, skipped: false }],
+      });
+      const tool = createQurlTool(makeMockClient({ createQURL: mockCreate }));
+
+      await tool.handler({
+        target_url: "https://example.com/protected",
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.stringContaining("Label: Example Forged"),
+        }),
+        expect.any(Object),
+      );
+      expect(vi.mocked(sendEmailMessage).mock.calls[0]?.[0].text).not.toMatch(/[\u2028\u2029]/u);
+    });
+
+    it("uses request-scoped email quota credentials in HTTP mode and omits an absent site", async () => {
+      const mockCreate = vi.fn().mockResolvedValue({
+        data: sampleCreateQURLData({ expires_at: undefined, qurl_site: undefined }),
+      });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com"],
+        sent: 1,
+        failed: 0,
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+        ],
+      });
+      const tool = createQurlTool(makeMockClient({ createQURL: mockCreate }), { mode: "http" });
+
+      const result = await tool.handler({
+        target_url: "https://example.com/protected",
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.not.stringContaining("qURL Site: undefined"),
+        }),
+        { allowServerApiKeyFallback: false },
+      );
+      expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
+      expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: expect.not.stringContaining("Expires At: undefined"),
+        }),
+        { allowServerApiKeyFallback: false },
+      );
+    });
+
+    it("skips email cleanly when SMTP is not configured", async () => {
+      const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: false,
+        enabled: false,
+        recipients: ["alice@example.com"],
+        sent: 0,
+        failed: 0,
+        results: [],
+        skipped_reason: "SMTP is not configured.",
+      });
+      const client = makeMockClient({ createQURL: mockCreate });
+      const tool = createQurlTool(client);
+
+      const result = await tool.handler({
+        target_url: "https://example.com/protected",
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.resource_id).toBe("r_test123");
+      expect(parsed.email_delivery).toEqual({
+        attempted: false,
+        enabled: false,
+        recipients: ["alice@example.com"],
+        sent: 0,
+        failed: 0,
+        results: [],
+        skipped_reason: "SMTP is not configured.",
+      });
+    });
+
+    it.each([
+      [
+        new EmailDeliverySetupError("smtp", "SMTP connection failed"),
+        "Email delivery was not attempted because SMTP configuration or connection failed.",
+      ],
+      [
+        new EmailDeliverySetupError(
+          "authorization",
+          "Request-scoped qURL credentials are unavailable",
+        ),
+        "Email delivery authorization context was unavailable.",
+      ],
+      [
+        new EmailDeliverySetupError("input", "Email subject must be a single line"),
+        "Email delivery was not attempted because recipient or message validation failed.",
+      ],
+      [
+        new Error("internal setup at smtp.private failed"),
+        "Email delivery was not attempted because delivery setup failed.",
+      ],
+    ])("returns the one-shot link with a sanitized email failure: %s", async (error, reason) => {
+      const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
+      vi.mocked(sendEmailMessage).mockRejectedValue(error);
+      const tool = createQurlTool(makeMockClient({ createQURL: mockCreate }));
+
+      const result = await tool.handler({
+        target_url: "https://example.com/protected",
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      expect(result.isError).not.toBe(true);
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.qurl_link).toBe(fixture.qurl_link);
+      expect(parsed.email_delivery).toEqual(
+        expect.objectContaining({
+          attempted: false,
+          skipped_reason: reason,
+        }),
+      );
+      expect(parsed.email_delivery.skipped_reason).not.toContain("smtp.private");
     });
   });
 });

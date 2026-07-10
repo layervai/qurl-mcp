@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi } from "vitest";
 import type { IQURLClient } from "../client.js";
@@ -14,9 +15,11 @@ import {
   sampleSession,
 } from "./helpers.js";
 
-const tools = toolFactories.map((factory) => factory(makeMockClient()));
+const tools = toolFactories.map((factory) => factory(makeMockClient(), { mode: "stdio" }));
 const factoryByName = new Map(
-  toolFactories.map((factory) => [factory(makeMockClient()).name, factory] as const),
+  toolFactories.map(
+    (factory) => [factory(makeMockClient(), { mode: "stdio" }).name, factory] as const,
+  ),
 );
 
 describe("TDQS tool metadata coverage", () => {
@@ -79,6 +82,9 @@ describe("TDQS tool metadata coverage", () => {
       update_qurl_token: ["update_qurl", "revoke_qurl_token"],
       list_qurl_sessions: ["terminate_qurl_sessions", "get_qurl"],
       terminate_qurl_sessions: ["list_qurl_sessions"],
+      upload_file_data_qurl: ["upload_file_qurl", "create_qurl", "mint_link"],
+      upload_file_qurl: ["create_qurl", "mint_link"],
+      upload_text_qurl: ["upload_file_data_qurl", "upload_file_qurl", "create_qurl"],
     };
     const byName = new Map(tools.map((t) => [t.name, t]));
     for (const [name, siblings] of Object.entries(expected)) {
@@ -333,9 +339,12 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
     input: Record<string, unknown>;
     clientOverrides: Partial<IQURLClient>;
     textIsJson?: boolean;
+    setup?: () => void | (() => void);
   };
 
   const qurlFixture = sampleQURL();
+  const uploadFixturePath = resolvePath("src/__tests__/fixtures/sample.pdf");
+  const uploadFixtureBase64 = readFileSync(uploadFixturePath).toString("base64");
   const cases: Record<string, Case> = {
     create_qurl: {
       input: { target_url: "https://example.com" },
@@ -412,22 +421,144 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
         }),
       },
     },
+    upload_file_data_qurl: {
+      input: {
+        file_base64: uploadFixtureBase64,
+        file_name: "sample.pdf",
+        content_type: "application/pdf",
+      },
+      clientOverrides: {
+        mintLink: vi.fn().mockResolvedValue({
+          data: sampleMintLinkOutput({
+            qurl_id: "q_123456789ab",
+            qurl_link: "https://qurl.link/#at_upload_data",
+          }),
+        }),
+        getQURL: vi.fn().mockResolvedValue({
+          data: sampleQURL({
+            resource_id: "r_upload12345",
+            qurl_site: "https://r_upload12345.qurl.site",
+          }),
+        }),
+      },
+      setup: () => {
+        const originalApiKey = process.env.QURL_API_KEY;
+        const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
+        const originalFetch = globalThis.fetch;
+        process.env.QURL_API_KEY = "lv_live_test";
+        process.env.QURL_CONNECTOR_URL = "https://connector.test";
+        globalThis.fetch = vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+        return () => {
+          process.env.QURL_API_KEY = originalApiKey;
+          process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
+          globalThis.fetch = originalFetch;
+        };
+      },
+    },
+    upload_text_qurl: {
+      input: {
+        type: "markdown",
+        content: "hello from qurl",
+        file_name: "sample.txt",
+      },
+      clientOverrides: {
+        mintLink: vi.fn().mockResolvedValue({
+          data: sampleMintLinkOutput({
+            qurl_id: "q_123456789ab",
+            qurl_link: "https://qurl.link/#at_upload_text",
+          }),
+        }),
+        getQURL: vi.fn().mockResolvedValue({
+          data: sampleQURL({
+            resource_id: "r_upload12345",
+            qurl_site: "https://r_upload12345.qurl.site",
+          }),
+        }),
+      },
+      setup: () => {
+        const originalApiKey = process.env.QURL_API_KEY;
+        const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
+        const originalFetch = globalThis.fetch;
+        process.env.QURL_API_KEY = "lv_live_test";
+        process.env.QURL_CONNECTOR_URL = "https://connector.test";
+        globalThis.fetch = vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+        return () => {
+          process.env.QURL_API_KEY = originalApiKey;
+          process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
+          globalThis.fetch = originalFetch;
+        };
+      },
+    },
+    upload_file_qurl: {
+      input: { file_path: uploadFixturePath },
+      clientOverrides: {
+        mintLink: vi.fn().mockResolvedValue({
+          data: sampleMintLinkOutput({
+            qurl_id: "q_123456789ab",
+            qurl_link: "https://qurl.link/#at_upload",
+          }),
+        }),
+        getQURL: vi.fn().mockResolvedValue({
+          data: sampleQURL({
+            resource_id: "r_upload12345",
+            qurl_site: "https://r_upload12345.qurl.site",
+          }),
+        }),
+      },
+      setup: () => {
+        const originalApiKey = process.env.QURL_API_KEY;
+        const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
+        const originalFetch = globalThis.fetch;
+        process.env.QURL_API_KEY = "lv_live_test";
+        process.env.QURL_CONNECTOR_URL = "https://connector.test";
+        globalThis.fetch = vi.fn().mockResolvedValue(
+          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+        return () => {
+          process.env.QURL_API_KEY = originalApiKey;
+          process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
+          globalThis.fetch = originalFetch;
+        };
+      },
+    },
   };
 
-  for (const [name, { input, clientOverrides, textIsJson = true }] of Object.entries(cases)) {
+  for (const [name, { input, clientOverrides, textIsJson = true, setup }] of Object.entries(
+    cases,
+  )) {
     it(`${name} structuredContent validates against outputSchema`, async () => {
       const factory = factoryByName.get(name);
       if (!factory) throw new Error(`Unknown tool ${name}`);
-      const tool = factory(makeMockClient(clientOverrides));
+      const tool = factory(makeMockClient(clientOverrides), { mode: "stdio" });
+      const cleanup = setup?.();
 
-      const result = await tool.handler(input);
+      try {
+        // `toolFactories` is intentionally heterogeneous; the case table is
+        // the runtime pairing between each named factory and its valid input.
+        const result = await tool.handler(input as never);
 
-      expect(result.structuredContent).toBeDefined();
-      if (textIsJson) {
-        expect(result.structuredContent).toEqual(JSON.parse(result.content[0].text));
+        expect(result.structuredContent).toBeDefined();
+        if (textIsJson) {
+          expect(result.structuredContent).toEqual(JSON.parse(result.content[0].text));
+        }
+        const parsed = tool.outputSchema.safeParse(result.structuredContent);
+        expect(parsed.success).toBe(true);
+      } finally {
+        cleanup?.();
       }
-      const parsed = tool.outputSchema.safeParse(result.structuredContent);
-      expect(parsed.success).toBe(true);
     });
   }
 

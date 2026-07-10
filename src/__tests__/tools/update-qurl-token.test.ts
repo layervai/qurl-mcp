@@ -26,6 +26,16 @@ describe("updateQurlTokenTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("accepts RFC 3339 timezone offsets", () => {
+      expect(
+        updateQurlTokenSchema.safeParse({
+          resource_id: resourceId,
+          qurl_id: qurlId,
+          expires_at: "2026-07-10T12:00:00+02:00",
+        }).success,
+      ).toBe(true);
+    });
+
     it("rejects both extend_by and expires_at", () => {
       const result = updateQurlTokenSchema.safeParse({
         resource_id: resourceId,

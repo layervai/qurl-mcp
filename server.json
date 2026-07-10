@@ -31,6 +31,95 @@
           "isRequired": false,
           "format": "string",
           "default": "https://api.layerv.ai"
+        },
+        {
+          "name": "QURL_CONNECTOR_URL",
+          "description": "Connector base URL used by local-file, file-data, and text-to-PDF upload tools before minting a qURL.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "QURL_MCP_CONFIG",
+          "description": "Optional path to a shared qURL MCP config file. Both stdio and HTTP modes can read SMTP, connector, and default API settings from this file.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "MCP_MAX_UPLOAD_FILE_DATA_BYTES",
+          "description": "Maximum decoded/local upload size. Accepts bytes or units such as 10mb; capped at 100mb.",
+          "isRequired": false,
+          "format": "string",
+          "default": "10mb"
+        },
+        {
+          "name": "QURL_SMTP_HOST",
+          "description": "SMTP hostname for optional qURL link delivery.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_PORT",
+          "description": "SMTP port for optional qURL link delivery.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_SECURE",
+          "description": "Whether SMTP uses an implicit TLS connection (true/false).",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_USERNAME",
+          "description": "SMTP authentication username.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_PASSWORD",
+          "description": "SMTP authentication password or app-specific credential.",
+          "isRequired": false,
+          "isSecret": true,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_FROM_EMAIL",
+          "description": "Validated sender email address for qURL delivery.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_FROM_NAME",
+          "description": "Optional sender display name for qURL delivery.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_ALLOWED_RECIPIENTS",
+          "description": "Optional comma-separated exact recipient allowlist.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS",
+          "description": "Optional comma-separated recipient-domain allowlist.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
+          "name": "QURL_SMTP_MAX_RECIPIENTS_PER_MESSAGE",
+          "description": "Maximum recipients in one delivery request (default 10).",
+          "isRequired": false,
+          "format": "string",
+          "default": "10"
+        },
+        {
+          "name": "QURL_SMTP_MAX_RECIPIENTS_PER_HOUR",
+          "description": "Maximum attempted recipients per qURL key per fixed hourly window (default 100).",
+          "isRequired": false,
+          "format": "string",
+          "default": "100"
         }
       ]
     }

@@ -5,6 +5,7 @@ import {
   toStructuredContent,
   withMissingApiKeyHandler,
   zodErrorToToolResult,
+  type ToolRuntimeOptions,
 } from "./_shared.js";
 import { updateQurlOutputSchema } from "./output-schemas.js";
 
@@ -29,7 +30,7 @@ export const updateQurlBaseSchema = z.object({
     .describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
   expires_at: z
     .string()
-    .datetime()
+    .datetime({ offset: true })
     .optional()
     .describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with extend_by."),
   tags: z
@@ -89,7 +90,10 @@ export const updateQurlSchema = updateQurlBaseSchema
     },
   );
 
-export function updateQurlTool(client: IQURLClient) {
+export function updateQurlTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "update_qurl",
     title: "Update qURL",

@@ -5,16 +5,21 @@
   "mcpName": "io.github.layervai/qurl-mcp",
   "type": "module",
   "bin": {
-    "qurl-mcp": "./dist/index.js"
+    "qurl-mcp": "./dist/index.js",
+    "qurl-mcp-http": "./dist/http.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "start:http": "node dist/http.js",
     "lint": "eslint src/",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck:tests": "tsc --project tsconfig.test.json",
     "format": "prettier --write 'src/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts'",
     "prepublishOnly": "npm run build"
@@ -34,14 +39,22 @@
   },
   "dependencies": {
     "@layervai/qurl": "^0.3.0",
-    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@modelcontextprotocol/sdk": "^1.24.0",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "nodemailer": "^9.0.1",
+    "pdfkit": "^0.19.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",
-    "@types/node": "^26.0.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "20.19.43",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pdfkit": "^0.17.6",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.32.1",
+    "@vitest/coverage-v8": "4.1.9",
     "eslint": "^10.2.1",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
@@ -51,7 +64,8 @@
     "node": ">=20"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "assets/"
   ],
   "publishConfig": {
     "access": "public"

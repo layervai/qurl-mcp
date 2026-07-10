@@ -10,6 +10,7 @@
  */
 
 import { QURLClient as SDKQURLClient, QURLError } from "@layervai/qurl";
+import { markRequestCredentialValidated } from "./auth/request-context.js";
 import type {
   QURL as SDKQURL,
   Resource as SDKResource,
@@ -358,7 +359,7 @@ export class QURLAPIError extends Error {
  * substring to assert against.
  */
 export const MISSING_API_KEY_MESSAGE =
-  "QURL_API_KEY is not set. Set it in the MCP server environment and restart to make API calls.";
+  "QURL_API_KEY is not set. Set it in the MCP server environment or runtime config and restart to make API calls.";
 
 // --- SDK adapter helpers ---
 
@@ -462,7 +463,14 @@ export class QURLClient implements IQURLClient {
   /** Run an SDK call, translating its errors into `QURLAPIError`. */
   private async call<T>(fn: (sdk: SDKQURLClient) => Promise<T>): Promise<T> {
     try {
-      return await fn(this.sdk);
+      const result = await fn(this.sdk);
+      // Only a successful API response conclusively validates the request
+      // credential. Any error status may have originated from an intermediary
+      // before the qURL API authenticated the bearer token. This trust boundary
+      // assumes the operator-configured HTTPS endpoint and its intermediaries
+      // neither synthesize nor cache authenticated success responses.
+      markRequestCredentialValidated();
+      return result;
     } catch (err) {
       throw translateError(err);
     }
@@ -531,7 +539,9 @@ export class QURLClient implements IQURLClient {
       // The SDK passes through HTTP 400 (all items failed) as a populated
       // BatchCreateOutput rather than throwing, so the all-failed case still
       // reaches here with `failed > 0` — matching the old passthrough behavior
-      // that batch-create.ts depends on.
+      // that batch-create.ts depends on. A populated response proves the API
+      // accepted the credential, so the shared call wrapper intentionally
+      // marks the request credential validated even for this HTTP 400 shape.
       const out = await sdk.batchCreate(input);
       return {
         data: {

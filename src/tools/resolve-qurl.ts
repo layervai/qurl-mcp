@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
 import { resolveQurlOutputSchema } from "./output-schemas.js";
 
 export const resolveQurlSchema = z.object({
@@ -10,7 +14,10 @@ export const resolveQurlSchema = z.object({
     .describe("The access token from a qURL link (e.g., at_k8xqp9h2sj9lx7r4a)"),
 });
 
-export function resolveQurlTool(client: IQURLClient) {
+export function resolveQurlTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "resolve_qurl",
     title: "Resolve qURL Access Token",

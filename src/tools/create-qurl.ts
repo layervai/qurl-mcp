@@ -1,41 +1,73 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  allowsServerApiKeyFallback,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
+import {
+  emailDeliveryInputSchema,
+  maybeDeliverToolEmail,
+  singleLineEmailDetail,
+  toEmailAugmentedResult,
+} from "./email-delivery.js";
 import { createQurlOutputSchema } from "./output-schemas.js";
+
+export const MAX_ACCESS_POLICY_LIST_ITEMS = 1000;
+export const MAX_ACCESS_POLICY_IP_CHARACTERS = 64;
+export const MAX_ACCESS_POLICY_GEO_CHARACTERS = 8;
+export const MAX_AI_AGENT_CATEGORY_CHARACTERS = 128;
+export const MAX_RESOURCE_TYPE_CHARACTERS = 64;
+
+const boundedPolicyList = (item: z.ZodString) => z.array(item).max(MAX_ACCESS_POLICY_LIST_ITEMS);
 
 export const aiAgentPolicySchema = z.object({
   block_all: z.boolean().optional().describe("Block all recognized AI agents"),
-  deny_categories: z
-    .array(z.string())
+  deny_categories: boundedPolicyList(z.string().min(1).max(MAX_AI_AGENT_CATEGORY_CHARACTERS))
     .optional()
-    .describe("AI agent categories to block (e.g., gptbot, commoncrawl)"),
-  allow_categories: z
-    .array(z.string())
+    .describe(
+      `AI agent categories to block (e.g., gptbot, commoncrawl; max ${MAX_ACCESS_POLICY_LIST_ITEMS} entries, ${MAX_AI_AGENT_CATEGORY_CHARACTERS} chars each)`,
+    ),
+  allow_categories: boundedPolicyList(z.string().min(1).max(MAX_AI_AGENT_CATEGORY_CHARACTERS))
     .optional()
-    .describe("AI agent categories to permit (all others blocked)"),
+    .describe(
+      `AI agent categories to permit (all others blocked; max ${MAX_ACCESS_POLICY_LIST_ITEMS} entries, ${MAX_AI_AGENT_CATEGORY_CHARACTERS} chars each)`,
+    ),
 });
 
+export const MAX_USER_AGENT_REGEX_CHARACTERS = 256;
+const userAgentRegexSchema = z.string().max(MAX_USER_AGENT_REGEX_CHARACTERS);
+
 export const accessPolicySchema = z.object({
-  ip_allowlist: z.array(z.string()).optional().describe("Allowed IP addresses or CIDR ranges"),
-  ip_denylist: z.array(z.string()).optional().describe("Denied IP addresses or CIDR ranges"),
-  geo_allowlist: z
-    .array(z.string())
+  ip_allowlist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_IP_CHARACTERS))
     .optional()
-    .describe("Allowed country codes (ISO 3166-1 alpha-2)"),
-  geo_denylist: z
-    .array(z.string())
+    .describe("Allowed IP addresses or CIDR ranges (max 1000 entries, 64 chars each)"),
+  ip_denylist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_IP_CHARACTERS))
     .optional()
-    .describe("Denied country codes (ISO 3166-1 alpha-2)"),
-  user_agent_allow_regex: z.string().optional().describe("Regex to allow matching user agents"),
-  user_agent_deny_regex: z.string().optional().describe("Regex to deny matching user agents"),
+    .describe("Denied IP addresses or CIDR ranges (max 1000 entries, 64 chars each)"),
+  geo_allowlist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_GEO_CHARACTERS))
+    .optional()
+    .describe("Allowed country codes (ISO 3166-1 alpha-2; max 1000 entries, 8 chars each)"),
+  geo_denylist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_GEO_CHARACTERS))
+    .optional()
+    .describe("Denied country codes (ISO 3166-1 alpha-2; max 1000 entries, 8 chars each)"),
+  user_agent_allow_regex: userAgentRegexSchema
+    .optional()
+    .describe(`Regex to allow matching user agents (max ${MAX_USER_AGENT_REGEX_CHARACTERS} chars)`),
+  user_agent_deny_regex: userAgentRegexSchema
+    .optional()
+    .describe(`Regex to deny matching user agents (max ${MAX_USER_AGENT_REGEX_CHARACTERS} chars)`),
   ai_agent_policy: aiAgentPolicySchema.optional().describe("Structured AI agent access control"),
 });
 
 export const createQurlSchema = z.object({
   type: z
     .string()
+    .max(MAX_RESOURCE_TYPE_CHARACTERS)
     .optional()
-    .describe("Resource type for integrations allowed to mint non-url qURLs. Defaults to url."),
+    .describe(
+      `Resource type for integrations allowed to mint non-url qURLs (max ${MAX_RESOURCE_TYPE_CHARACTERS} chars). Defaults to url.`,
+    ),
   target_url: z.string().url().describe("The URL to protect with qURL"),
   label: z
     .string()
@@ -69,18 +101,25 @@ export const createQurlSchema = z.object({
       "Custom domain to assign to the auto-created resource (max 253 chars, must be registered/active/owned).",
     ),
   access_policy: accessPolicySchema.optional().describe("Access control policy for the qURL"),
+  email_delivery: emailDeliveryInputSchema
+    .optional()
+    .describe(
+      "Optional email notification settings for sending the generated qURL to one or more recipients.",
+    ),
 });
 
-export function createQurlTool(client: IQURLClient) {
+export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "create_qurl",
     title: "Create qURL",
     description:
       "Create a qURL — a policy-bound, expiring access link that gates a target URL with optional IP/geo/UA/AI-agent filters and time or session limits. " +
       "**When to use:** minting a fresh protected access link for share-once or time-limited access (e.g. send a customer a 24-hour download link, gate a doc behind an IP allowlist, distribute a one-time-use credential to a contractor). " +
+      "**Do NOT use this for chat-uploaded images, PDFs, screenshots, or file attachments.** In HTTP MCP mode, those should go through `upload_file_data_qurl`; in stdio mode, use `upload_file_qurl`. " +
       "**When NOT to use:** use `mint_link` when you already have a resource (`r_…`) and just need an additional access token under it — `create_qurl` identifies the resource by target URL and may return an existing same-type resource grouping. " +
       "Use `batch_create_qurls` to create many in one round-trip. " +
       "Use `update_qurl` to retag or extend an existing resource without minting a new one. " +
+      "If the user says 'give me the qURL of this image/file' and the content was uploaded in chat, this is the wrong tool. " +
       "**Behavior:** not idempotent — calling twice produces two distinct qURL tokens, though both may share the same `resource_id` when the target URL groups to an existing same-type resource (this tool doesn't surface the underlying API's `Idempotency-Key` header). " +
       "The returned `qurl_link` is shown ONCE in this response and is never recoverable through `get_qurl` or `list_qurls`; persist or share it immediately. " +
       "A returned resource is in `active` status with the policy and per-token limits applied. " +
@@ -99,16 +138,29 @@ export function createQurlTool(client: IQURLClient) {
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof createQurlSchema>) => {
-      const result = await client.createQURL(input);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(result.data),
-          },
+      const { email_delivery, ...createInput } = input;
+      const result = await client.createQURL(createInput);
+      const emailResult = await maybeDeliverToolEmail({
+        allowServerApiKeyFallback: allowsServerApiKeyFallback(runtime),
+        delivery: email_delivery,
+        defaultSubject: "Your secure qURL link is ready",
+        detailLines: [
+          "A secure qURL link has been created for you.",
+          `Target URL: ${singleLineEmailDetail(createInput.target_url)}`,
+          `Secure Link: ${singleLineEmailDetail(result.data.qurl_link)}`,
+          // The SDK type requires expires_at; keep the guard so upstream
+          // response drift cannot render "undefined" into a customer email.
+          ...(result.data.expires_at
+            ? [`Expires At: ${singleLineEmailDetail(result.data.expires_at)}`]
+            : []),
+          ...(result.data.qurl_site
+            ? [`qURL Site: ${singleLineEmailDetail(result.data.qurl_site)}`]
+            : []),
+          ...(result.data.label ? [`Label: ${singleLineEmailDetail(result.data.label)}`] : []),
+          ...(result.data.type ? [`Type: ${singleLineEmailDetail(result.data.type)}`] : []),
         ],
-        structuredContent: toStructuredContent(result.data),
-      };
+      });
+      return toEmailAugmentedResult(result.data, emailResult);
     }),
   };
 }

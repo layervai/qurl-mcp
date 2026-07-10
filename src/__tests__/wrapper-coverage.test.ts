@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, it, expect, vi } from "vitest";
 import { MISSING_API_KEY_MESSAGE, QURLAPIError, type IQURLClient } from "../client.js";
 import { batchCreateTool } from "../tools/batch-create.js";
@@ -13,6 +16,10 @@ import { revokeQurlTokenTool } from "../tools/revoke-qurl-token.js";
 import { terminateQurlSessionsTool } from "../tools/terminate-qurl-sessions.js";
 import { updateQurlTool } from "../tools/update-qurl.js";
 import { updateQurlTokenTool } from "../tools/update-qurl-token.js";
+import { uploadFileDataQurlTool } from "../tools/upload-file-data-qurl.js";
+import { uploadFileQurlTool } from "../tools/upload-file-qurl.js";
+import { uploadTextQurlTool } from "../tools/upload-text-qurl.js";
+import type { ToolRuntimeOptions } from "../tools/_shared.js";
 import { linksResource } from "../resources/links.js";
 import { usageResource } from "../resources/usage.js";
 import { makeMockClient } from "./helpers.js";
@@ -33,7 +40,10 @@ const missingKeyError = () => new QURLAPIError(0, "missing_api_key", MISSING_API
 
 type ToolCase = {
   name: string;
-  build: (client: IQURLClient) => { handler: (input: never) => Promise<unknown> };
+  build: (
+    client: IQURLClient,
+    runtime: ToolRuntimeOptions,
+  ) => { handler: (input: never) => Promise<unknown> };
   // Mock methods on the client to throw missing_api_key. Keyed so each
   // tool only stubs the method it actually invokes (defensive against
   // future delegation changes — extendQURL currently delegates to
@@ -124,12 +134,40 @@ const toolCases: ToolCase[] = [
     stubs: ["terminateAllResourceSessions"],
     input: { resource_id: "r_test1234567" },
   },
+  {
+    name: "upload_file_qurl",
+    build: uploadFileQurlTool,
+    stubs: [],
+    input: { file_path: "missing.pdf" },
+  },
+  {
+    name: "upload_file_data_qurl",
+    build: uploadFileDataQurlTool,
+    stubs: [],
+    input: {
+      file_base64: "UERG",
+      file_name: "missing.pdf",
+      content_type: "application/pdf",
+    },
+  },
+  {
+    name: "upload_text_qurl",
+    build: uploadTextQurlTool,
+    stubs: [],
+    input: {
+      type: "markdown",
+      content: "hello world",
+    },
+  },
 ];
 
 describe("missing_api_key wrapper coverage", () => {
   describe("every tool handler", () => {
     for (const { name, build, stubs, input } of toolCases) {
       it(`${name} returns isError content instead of throwing`, async () => {
+        const originalApiKey = process.env.QURL_API_KEY;
+        const originalConfigPath = process.env.QURL_MCP_CONFIG;
+        const tempDir = mkdtempSync(join(tmpdir(), "qurl-wrapper-test-"));
         const overrides: Partial<IQURLClient> = {};
         for (const key of stubs) {
           (overrides as Record<string, unknown>)[key] = vi
@@ -137,16 +175,26 @@ describe("missing_api_key wrapper coverage", () => {
             .mockRejectedValue(missingKeyError());
         }
         const client = makeMockClient(overrides);
-        const tool = build(client);
+        const tool = build(client, { mode: "stdio" });
+        delete process.env.QURL_API_KEY;
+        const configPath = join(tempDir, "qurl-mcp.config.json");
+        writeFileSync(configPath, JSON.stringify({ defaultQurlApiUrl: "https://api.layerv.ai" }));
+        process.env.QURL_MCP_CONFIG = configPath;
 
-        const result = (await tool.handler(input as never)) as {
-          isError?: boolean;
-          content: Array<{ type: string; text: string }>;
-        };
+        try {
+          const result = (await tool.handler(input as never)) as {
+            isError?: boolean;
+            content: Array<{ type: string; text: string }>;
+          };
 
-        expect(result.isError).toBe(true);
-        expect(result.content).toHaveLength(1);
-        expect(result.content[0].text).toBe(MISSING_API_KEY_MESSAGE);
+          expect(result.isError).toBe(true);
+          expect(result.content).toHaveLength(1);
+          expect(result.content[0].text).toBe(MISSING_API_KEY_MESSAGE);
+        } finally {
+          process.env.QURL_API_KEY = originalApiKey;
+          process.env.QURL_MCP_CONFIG = originalConfigPath;
+          rmSync(tempDir, { recursive: true, force: true });
+        }
       });
     }
   });

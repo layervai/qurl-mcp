@@ -1,6 +1,22 @@
 import { describe, it, expect, vi } from "vitest";
-import { mintLinkTool, mintLinkBaseSchema, mintLinkSchema } from "../../tools/mint-link.js";
+import {
+  mintLinkTool as mintLinkToolFactory,
+  mintLinkBaseSchema,
+  mintLinkSchema,
+} from "../../tools/mint-link.js";
+import { MAX_USER_AGENT_REGEX_CHARACTERS } from "../../tools/create-qurl.js";
 import { makeMockClient } from "../helpers.js";
+
+vi.mock("../../services/email.js", () => ({
+  sendEmailMessage: vi.fn(),
+}));
+
+import { sendEmailMessage } from "../../services/email.js";
+
+const mintLinkTool = (
+  client: Parameters<typeof mintLinkToolFactory>[0],
+  runtime: Parameters<typeof mintLinkToolFactory>[1] = { mode: "stdio" },
+) => mintLinkToolFactory(client, runtime);
 
 const fixture = {
   qurl_id: "q_abc123def45",
@@ -55,6 +71,15 @@ describe("mintLinkTool", () => {
       expect(result.success).toBe(true);
     });
 
+    it("accepts RFC 3339 timezone offsets", () => {
+      expect(
+        mintLinkSchema.safeParse({
+          resource_id: validResourceId,
+          expires_at: "2026-04-01T02:00:00+02:00",
+        }).success,
+      ).toBe(true);
+    });
+
     it("rejects both expires_in and expires_at", () => {
       const result = mintLinkSchema.safeParse({
         resource_id: validResourceId,
@@ -72,6 +97,9 @@ describe("mintLinkTool", () => {
         one_time_use: true,
         max_sessions: 1,
         session_duration: "30m",
+        email_delivery: {
+          to: ["alice@example.com"],
+        },
       });
       expect(result.success).toBe(true);
     });
@@ -85,6 +113,16 @@ describe("mintLinkTool", () => {
         },
       });
       expect(result.success).toBe(true);
+    });
+
+    it("applies the shared user-agent regex bound", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: validResourceId,
+        access_policy: {
+          user_agent_allow_regex: "x".repeat(MAX_USER_AGENT_REGEX_CHARACTERS + 1),
+        },
+      });
+      expect(result.success).toBe(false);
     });
 
     it("rejects max_sessions above 1000 (API hard limit)", () => {
@@ -180,6 +218,85 @@ describe("mintLinkTool", () => {
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain("expires_in or expires_at");
       expect(mockMint).not.toHaveBeenCalled();
+    });
+
+    it("sends email to multiple recipients when email_delivery is provided", async () => {
+      const mockMint = vi.fn().mockResolvedValue({ data: fixture });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com", "bob@example.com"],
+        sent: 2,
+        failed: 0,
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+          { email: "bob@example.com", success: true, skipped: false, message_id: "msg-2" },
+        ],
+      });
+      const client = makeMockClient({ mintLink: mockMint });
+      const tool = mintLinkTool(client);
+
+      const result = await tool.handler({
+        resource_id: validResourceId,
+        email_delivery: { to: ["alice@example.com", "bob@example.com"] },
+      });
+
+      expect(mockMint).toHaveBeenCalledWith(validResourceId, {});
+      expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledOnce();
+      const parsed = JSON.parse(result.content[0].text);
+      expect(parsed.email_delivery?.sent).toBe(2);
+      expect(parsed.qurl_link).toBe("https://qurl.link/at_newtoken123");
+    });
+
+    it("omits an absent expiration from the email body", async () => {
+      const mockMint = vi.fn().mockResolvedValue({
+        data: { ...fixture, expires_at: undefined },
+      });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com"],
+        sent: 1,
+        failed: 0,
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+        ],
+      });
+      const tool = mintLinkTool(makeMockClient({ mintLink: mockMint }));
+
+      const result = await tool.handler({
+        resource_id: validResourceId,
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledWith(
+        expect.objectContaining({ text: expect.not.stringContaining("Expires At: undefined") }),
+        expect.anything(),
+      );
+      expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
+    });
+
+    it("prevents caller labels from forging additional email detail rows", async () => {
+      const mockMint = vi.fn().mockResolvedValue({ data: fixture });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com"],
+        sent: 1,
+        failed: 0,
+        results: [{ email: "alice@example.com", success: true, skipped: false }],
+      });
+      const tool = mintLinkTool(makeMockClient({ mintLink: mockMint }));
+
+      await tool.handler({
+        resource_id: validResourceId,
+        label: "Approved\nSecure Link: https://attacker.example",
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      const text = vi.mocked(sendEmailMessage).mock.calls.at(-1)?.[0].text;
+      expect(text).toContain("Label: Approved Secure Link: https://attacker.example");
+      expect(text).not.toContain("\nSecure Link: https://attacker.example");
     });
   });
 });

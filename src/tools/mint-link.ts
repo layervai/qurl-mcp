@@ -2,10 +2,17 @@ import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { accessPolicySchema } from "./create-qurl.js";
 import {
+  emailDeliveryInputSchema,
+  maybeDeliverToolEmail,
+  singleLineEmailDetail,
+  toEmailAugmentedResult,
+} from "./email-delivery.js";
+import {
+  allowsServerApiKeyFallback,
   resourceIdSchema,
-  toStructuredContent,
   withMissingApiKeyHandler,
   zodErrorToToolResult,
+  type ToolRuntimeOptions,
 } from "./_shared.js";
 import { mintLinkOutputSchema } from "./output-schemas.js";
 
@@ -25,7 +32,7 @@ export const mintLinkBaseSchema = z.object({
     ),
   expires_at: z
     .string()
-    .datetime()
+    .datetime({ offset: true })
     .optional()
     .describe("Absolute expiration timestamp (RFC 3339). Mutually exclusive with expires_in"),
   one_time_use: z.boolean().optional().describe("Whether this link can only be used once"),
@@ -45,6 +52,11 @@ export const mintLinkBaseSchema = z.object({
         "Rejected if it exceeds the parent resource's session-duration cap.",
     ),
   access_policy: accessPolicySchema.optional().describe("Access control policy for this link"),
+  email_delivery: emailDeliveryInputSchema
+    .optional()
+    .describe(
+      "Optional email notification settings for sending the minted access link to one or more recipients.",
+    ),
 });
 
 export const mintLinkSchema = mintLinkBaseSchema.refine(
@@ -52,7 +64,7 @@ export const mintLinkSchema = mintLinkBaseSchema.refine(
   { message: "Provide either expires_in or expires_at, not both" },
 );
 
-export function mintLinkTool(client: IQURLClient) {
+export function mintLinkTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "mint_link",
     title: "Mint Access Link",
@@ -77,17 +89,24 @@ export function mintLinkTool(client: IQURLClient) {
     handler: withMissingApiKeyHandler(async (raw: z.infer<typeof mintLinkBaseSchema>) => {
       const parsed = mintLinkSchema.safeParse(raw);
       if (!parsed.success) return zodErrorToToolResult(parsed.error);
-      const { resource_id, ...body } = parsed.data;
+      const { resource_id, email_delivery, ...body } = parsed.data;
       const result = await client.mintLink(resource_id, body);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(result.data),
-          },
+      const emailResult = await maybeDeliverToolEmail({
+        allowServerApiKeyFallback: allowsServerApiKeyFallback(runtime),
+        delivery: email_delivery,
+        defaultSubject: "Your qURL access link is ready",
+        detailLines: [
+          "A new qURL access link has been minted for you.",
+          `Resource ID: ${singleLineEmailDetail(resource_id)}`,
+          `Secure Link: ${singleLineEmailDetail(result.data.qurl_link)}`,
+          ...(result.data.expires_at
+            ? [`Expires At: ${singleLineEmailDetail(result.data.expires_at)}`]
+            : []),
+          ...(body.label ? [`Label: ${singleLineEmailDetail(body.label)}`] : []),
+          ...(result.data.type ? [`Type: ${singleLineEmailDetail(result.data.type)}`] : []),
         ],
-        structuredContent: toStructuredContent(result.data),
-      };
+      });
+      return toEmailAugmentedResult(result.data, emailResult);
     }),
   };
 }

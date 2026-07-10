@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { type IQURLClient, QURLAPIError } from "../client.js";
-import { resourceOnlyIdSchema, toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  resourceOnlyIdSchema,
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
 import { terminateQurlSessionsOutputSchema } from "./output-schemas.js";
 
 export const terminateQurlSessionsSchema = z.object({
@@ -14,7 +19,10 @@ export const terminateQurlSessionsSchema = z.object({
     ),
 });
 
-export function terminateQurlSessionsTool(client: IQURLClient) {
+export function terminateQurlSessionsTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "terminate_qurl_sessions",
     title: "Terminate qURL Sessions",
@@ -41,7 +49,9 @@ export function terminateQurlSessionsTool(client: IQURLClient) {
             resource_id: input.resource_id,
             session_id: input.session_id,
             // The API returns 204 for a single session delete, so the tool
-            // synthesizes the count from the successful operation.
+            // synthesizes the count from the successful operation. This means
+            // `terminated: 1` confirms accepted idempotent deletion semantics;
+            // it cannot prove that the session still existed at request time.
             terminated: 1,
             message: `qURL session ${input.session_id} is terminated.`,
           };
@@ -52,6 +62,8 @@ export function terminateQurlSessionsTool(client: IQURLClient) {
         }
 
         const result = await client.terminateAllResourceSessions(input.resource_id);
+        // The typed client contract requires this count; retain a runtime guard
+        // because the SDK response is untrusted at the wire boundary.
         const terminated = result.data?.terminated;
         if (typeof terminated !== "number") {
           throw new QURLAPIError(

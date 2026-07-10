@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
-import { resourceIdSchema, toStructuredContent, withMissingApiKeyHandler } from "./_shared.js";
+import {
+  resourceIdSchema,
+  toStructuredContent,
+  withMissingApiKeyHandler,
+  type ToolRuntimeOptions,
+} from "./_shared.js";
 import { extendQurlOutputSchema } from "./output-schemas.js";
 
 export const extendQurlSchema = z.object({
@@ -8,7 +13,10 @@ export const extendQurlSchema = z.object({
   extend_by: z.string().min(1).describe('Duration to extend by (e.g., "24h", "7d")'),
 });
 
-export function extendQurlTool(client: IQURLClient) {
+export function extendQurlTool(
+  client: IQURLClient,
+  _runtime: ToolRuntimeOptions = { mode: "stdio" },
+) {
   return {
     name: "extend_qurl",
     title: "Extend qURL Expiration",

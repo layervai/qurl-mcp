@@ -67,6 +67,8 @@ body:
         - client
         - resources
         - prompts
+        - http
+        - security
         - ci
         - deps
         - other

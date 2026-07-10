@@ -1,40 +1,48 @@
 #!/usr/bin/env node
 
 import { createRequire } from "node:module";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { formatErrorForLog, installTimestampedConsole, logInfo } from "./logging.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { MISSING_API_KEY_MESSAGE, QURLClient } from "./client.js";
+import { getDefaultConfigPath, inspectSmtpConfig, loadRuntimeConfig } from "./config.js";
 import { createServer } from "./server.js";
+
+installTimestampedConsole();
 
 const require = createRequire(import.meta.url);
 const { version } = require("../package.json") as { version: string };
 
-// Auth validation is deferred to first API call so the server can boot for
-// MCP introspection (tools/list, resources/list, prompts/list) without a key.
-// Tool/resource invocations that hit the API will throw the same typed
-// `missing_api_key` error when the client lazily constructs the SDK on the
-// first call, if the key is still missing.
-//
-// Trim so whitespace-only values (e.g. `QURL_API_KEY=" "`) take the same
-// missing-key path as truly unset; otherwise they'd silently pass the guard
-// and surface as a 401 from the server.
-const apiKey = process.env.QURL_API_KEY?.trim() ?? "";
-if (!apiKey) {
-  console.error(`Warning: ${MISSING_API_KEY_MESSAGE}`);
+export async function main(): Promise<void> {
+  try {
+    const runtimeConfigPath = getDefaultConfigPath();
+    const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
+    const apiKey = runtimeConfig.qurlApiKey ?? "";
+    if (!apiKey) {
+      console.error(`Warning: ${MISSING_API_KEY_MESSAGE}`);
+    }
+    const smtpInspection = inspectSmtpConfig(runtimeConfigPath);
+    logInfo("Runtime config loaded.");
+    if (smtpInspection.enabled) {
+      logInfo("SMTP is configured.");
+    } else {
+      logInfo(
+        `SMTP is not configured. Missing fields: ${smtpInspection.missingFields.join(", ") || "(unknown)"}`,
+      );
+    }
+    for (const warning of smtpInspection.securityWarnings) console.warn(`Warning: ${warning}`);
+
+    const client = new QURLClient({ apiKey, baseURL: runtimeConfig.defaultQurlApiUrl });
+    const server = createServer(client, version, "stdio", runtimeConfig.maxUploadFileDataBytes);
+    await server.connect(new StdioServerTransport());
+  } catch (error) {
+    console.error(`qURL MCP startup failed (${formatErrorForLog(error)})`);
+    process.exitCode = 1;
+  }
 }
 
-// Trim symmetric with the apiKey path so a stray space in the URL doesn't
-// produce a confusing fetch failure (DNS or scheme parse error) instead of
-// being treated as unset.
-//
-// Intentional asymmetry vs. line 19 (`?? ""`): an empty/whitespace key is
-// a misconfig the user has to fix, so we want it to land on the empty path
-// where the warning fires. An empty/whitespace URL should silently fall
-// back to the default — `||` collapses both `undefined` and `""` cases
-// into one fallback expression.
-const baseURL = process.env.QURL_API_URL?.trim() || "https://api.layerv.ai";
-
-const client = new QURLClient({ apiKey, baseURL });
-const server = createServer(client, version);
-
-const transport = new StdioServerTransport();
-await server.connect(transport);
+const isMainModule =
+  typeof process.argv[1] === "string" &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMainModule) await main();

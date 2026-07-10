@@ -1,6 +1,21 @@
 import { z, type ZodError } from "zod";
 import { QURLAPIError } from "../client.js";
 
+// Contract snapshot: api-spec/qurls.yaml defines r_ IDs with exactly eleven
+// lowercase URL-safe suffix characters. Connector responses and tool inputs
+// share this constant so a future spec change fails in one obvious place.
+export const RESOURCE_ID_PATTERN = /^r_[a-z0-9_-]{11}$/;
+
+export type ToolRuntimeOptions = {
+  mode: "stdio" | "http";
+  /** Decoded attachment limit used to build transport-visible upload schemas. */
+  maxUploadFileDataBytes?: number;
+};
+
+export function allowsServerApiKeyFallback(runtime: ToolRuntimeOptions): boolean {
+  return runtime.mode === "stdio";
+}
+
 /**
  * Tool result shape that handlers return. Kept structural so we don't
  * take a hard dep on the MCP SDK's internal types. `structuredContent`
@@ -37,7 +52,8 @@ export type ToolAnnotations = {
 };
 
 // SDK's `structuredContent` is `Record<string, unknown>`; payloads are
-// typed against API response shapes. Single seam for the cast.
+// typed against API response shapes. Each registered tool's zod output schema
+// is the runtime validation guard, and this is the single seam for the cast.
 // `T extends object` rules out primitives and `null` at compile time;
 // `{ length?: never }` rules out arrays. The constraint does *not*
 // reject `Map`/`Set`/`Date`/class instances with non-public state — in
@@ -128,7 +144,7 @@ export function resourceIdSchema(verb: string) {
 export function resourceOnlyIdSchema(verb: string) {
   return z
     .string()
-    .regex(/^r_[a-z0-9_-]{11}$/, "Expected an r_ resource ID")
+    .regex(RESOURCE_ID_PATTERN, "Expected an r_ resource ID")
     .describe(`The resource ID (r_ prefix) to ${verb}.`);
 }
 

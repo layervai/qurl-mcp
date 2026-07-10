@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { emailDeliveryResultSchema } from "../email-types.js";
 
 /**
  * Output schemas for MCP tools.
@@ -126,10 +127,11 @@ export const createQurlOutputSchema = z.object({
     .string()
     .optional()
     .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
-  qurl_site: z.string(),
-  expires_at: z.string(),
+  qurl_site: z.string().optional(),
+  expires_at: z.string().optional(),
   label: z.string().optional(),
   type: z.string().optional().describe("Resource type echoed from the create request"),
+  email_delivery: emailDeliveryResultSchema.optional(),
 });
 
 export const getQurlOutputSchema = qurlSchema;
@@ -180,8 +182,33 @@ export const mintLinkOutputSchema = z.object({
     .string()
     .optional()
     .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
-  expires_at: z.string(),
+  expires_at: z.string().optional(),
   type: z.string().optional().describe("Resource type echoed from the underlying resource"),
+  email_delivery: emailDeliveryResultSchema.optional(),
+});
+
+export const uploadFileQurlOutputSchema = z.object({
+  resource_id: z
+    .string()
+    .describe("Stable resource identifier (r_ prefix) returned by the connector"),
+  qurl_id: z.string().describe("Display-friendly qURL ID (q_ prefix) for the minted token"),
+  qurl_link: z
+    .string()
+    .describe("One-shot display access link for the uploaded file — share immediately"),
+  qurl_site: z
+    .string()
+    .optional()
+    .describe("Resource site URL when it could be read back from get_qurl"),
+  expires_at: z.string().optional(),
+  file_name: z.string().describe("Filename registered with the connector"),
+  content_type: z.string().describe("MIME type used for the uploaded file"),
+  size_bytes: z.number().describe("Uploaded file size in bytes"),
+  branded_domain: z
+    .string()
+    .optional()
+    .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
+  type: z.string().optional().describe("Resource type echoed from the minted token"),
+  email_delivery: emailDeliveryResultSchema.optional(),
 });
 
 export const updateQurlTokenOutputSchema = accessTokenOutputSchema;

@@ -44,7 +44,15 @@ vi.mock("@layervai/qurl", async (importOriginal) => {
 });
 
 import { QURLClient, QURLAPIError, MISSING_API_KEY_MESSAGE } from "../client.js";
-import { NotFoundError, AuthorizationError, NetworkError } from "@layervai/qurl";
+import { createQurlClientFromBearerToken } from "../auth/static-bearer.js";
+import { runWithRequestAuthContext } from "../auth/request-context.js";
+import {
+  AuthenticationError,
+  AuthorizationError,
+  NetworkError,
+  NotFoundError,
+  RateLimitError,
+} from "@layervai/qurl";
 
 const newClient = (apiKey = "lv_live_key", baseURL = "https://api.test.layerv.ai") =>
   new QURLClient({ apiKey, baseURL });
@@ -87,6 +95,40 @@ describe("QURLClient adapter", () => {
         apiKey: "lv_live_key",
         baseUrl: "https://api.test.layerv.ai",
       });
+    });
+
+    it("keeps distinct caller bearer tokens isolated at the SDK boundary", async () => {
+      sdk.get.mockResolvedValue({ resource_id: "r_x" });
+      const callerA = createQurlClientFromBearerToken("lv_live_caller_a", {
+        qurlApiUrl: "https://api.test.layerv.ai",
+      });
+      const callerB = createQurlClientFromBearerToken("lv_live_caller_b", {
+        qurlApiUrl: "https://api.test.layerv.ai",
+      });
+
+      await callerA.getQURL("r_a");
+      await callerB.getQURL("r_b");
+
+      expect(SDKClientMock).toHaveBeenNthCalledWith(1, {
+        apiKey: "lv_live_caller_a",
+        baseUrl: "https://api.test.layerv.ai",
+      });
+      expect(SDKClientMock).toHaveBeenNthCalledWith(2, {
+        apiKey: "lv_live_caller_b",
+        baseUrl: "https://api.test.layerv.ai",
+      });
+    });
+
+    it("marks the request credential validated after a downstream API success", async () => {
+      sdk.get.mockResolvedValue({ resource_id: "r_x" });
+      let credentialValidated = false;
+
+      await runWithRequestAuthContext(
+        { markCredentialValidated: () => (credentialValidated = true) },
+        () => newClient().getQURL("r_x"),
+      );
+
+      expect(credentialValidated).toBe(true);
     });
   });
 
@@ -178,15 +220,21 @@ describe("QURLClient adapter", () => {
         ],
         request_id: "req_fail",
       });
-      const out = await newClient().batchCreate({
-        items: [{ target_url: "ftp://a" }, { target_url: "ftp://b" }],
-      });
+      let credentialValidated = false;
+      const out = await runWithRequestAuthContext(
+        { markCredentialValidated: () => (credentialValidated = true) },
+        () =>
+          newClient().batchCreate({
+            items: [{ target_url: "ftp://a" }, { target_url: "ftp://b" }],
+          }),
+      );
 
       expect(out.data.succeeded).toBe(0);
       expect(out.data.failed).toBe(2);
       expect(out.data.results).toHaveLength(2);
       expect(out.data.results[0].success).toBe(false);
       expect(out.meta.request_id).toBe("req_fail");
+      expect(credentialValidated).toBe(true);
     });
 
     it("listResourceSessions maps sessions → data", async () => {
@@ -313,6 +361,74 @@ describe("QURLClient adapter", () => {
       expect(err.statusCode).toBe(403);
       expect(err.code).toBe("insufficient_scope");
       expect(err.requestId).toBe("req_9");
+    });
+
+    it("does not validate the request credential on a downstream 401", async () => {
+      sdk.get.mockRejectedValue(
+        new AuthenticationError({
+          status: 401,
+          code: "invalid_api_key",
+          title: "Unauthorized",
+          detail: "invalid credential",
+        }),
+      );
+      let credentialValidated = false;
+
+      await runWithRequestAuthContext(
+        { markCredentialValidated: () => (credentialValidated = true) },
+        () =>
+          newClient()
+            .getQURL("r_x")
+            .catch(() => undefined),
+      );
+
+      expect(credentialValidated).toBe(false);
+    });
+
+    it.each([
+      [
+        "403",
+        () =>
+          new AuthorizationError({
+            status: 403,
+            code: "insufficient_scope",
+            title: "Forbidden",
+            detail: "missing qurl:read",
+          }),
+      ],
+      [
+        "404",
+        () =>
+          new NotFoundError({
+            status: 404,
+            code: "resource_not_found",
+            title: "Not Found",
+            detail: "resource missing",
+          }),
+      ],
+      [
+        "429",
+        () =>
+          new RateLimitError({
+            status: 429,
+            code: "rate_limited",
+            title: "Too Many Requests",
+            detail: "quota exceeded",
+          }),
+      ],
+    ])("does not validate the request credential on an inconclusive %s", async (_status, error) => {
+      sdk.get.mockRejectedValue(error());
+      let credentialValidated = false;
+
+      await runWithRequestAuthContext(
+        { markCredentialValidated: () => (credentialValidated = true) },
+        () =>
+          newClient()
+            .getQURL("r_x")
+            .catch(() => undefined),
+      );
+
+      expect(credentialValidated).toBe(false);
     });
 
     it("translates a transport-level SDK error (NetworkError) to QURLAPIError", async () => {

@@ -1,0 +1,23 @@
+{
+  "maxUploadFileDataBytes": "10mb",
+  "defaultQurlApiUrl": "https://api.layerv.ai",
+  "defaultQurlConnectorUrl": "https://connector.example.com",
+  "smtp": {
+    "host": "smtp.example.com",
+    "port": 587,
+    "secure": false,
+    "username": "",
+    "password": "",
+    "fromEmail": "",
+    "fromName": "qURL",
+    "allowedRecipients": ["recipient@example.com"],
+    "allowedRecipientDomains": ["example.com"],
+    "maxRecipientsPerMessage": 10,
+    "maxRecipientsPerHour": 100
+  },
+  "publicVideo": {
+    "title": "Product Demo Video",
+    "pagePath": "/media/video",
+    "filePath": "/srv/qurl-media/example.mp4"
+  }
+}

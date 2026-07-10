@@ -16,7 +16,7 @@ describe("createServer", () => {
 
   async function connectServer() {
     const mockClient = makeMockClient();
-    server = createServer(mockClient, "0.1.0");
+    server = createServer(mockClient, "0.1.0", "stdio");
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
@@ -28,14 +28,7 @@ describe("createServer", () => {
   }
 
   describe("tools", () => {
-    it("registers all 13 tools", async () => {
-      const { client } = await connectServer();
-      const { tools } = await client.listTools();
-
-      expect(tools).toHaveLength(13);
-    });
-
-    it("registers tools with correct names", async () => {
+    it("registers stdio tools with correct names", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
@@ -54,6 +47,41 @@ describe("createServer", () => {
         "terminate_qurl_sessions",
         "update_qurl",
         "update_qurl_token",
+        "upload_file_data_qurl",
+        "upload_file_qurl",
+        "upload_text_qurl",
+      ]);
+    });
+
+    it("registers http tools with correct names", async () => {
+      const mockClient = makeMockClient();
+      server = createServer(mockClient, "0.1.0", "http");
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      await server.connect(serverTransport);
+
+      client = new Client({ name: "test-client", version: "1.0.0" });
+      await client.connect(clientTransport);
+
+      const { tools } = await client.listTools();
+      const names = tools.map((t) => t.name).sort();
+
+      expect(names).toEqual([
+        "batch_create_qurls",
+        "create_qurl",
+        "delete_qurl",
+        "extend_qurl",
+        "get_qurl",
+        "list_qurl_sessions",
+        "list_qurls",
+        "mint_link",
+        "resolve_qurl",
+        "revoke_qurl_token",
+        "terminate_qurl_sessions",
+        "update_qurl",
+        "update_qurl_token",
+        "upload_file_data_qurl",
+        "upload_text_qurl",
       ]);
     });
 
