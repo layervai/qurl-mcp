@@ -371,6 +371,20 @@ describe("uploadFileDataQurlTool", () => {
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
+    it("bounds data URL prefix parsing independently of the file payload ceiling", async () => {
+      globalThis.fetch = vi.fn();
+      const tool = uploadFileDataQurlTool(makeMockClient());
+
+      await expect(
+        tool.handler({
+          file_base64: `data:application/pdf;note=${"x".repeat(1024)};base64,${fixtureBase64}`,
+          file_name: "sample.pdf",
+          content_type: "application/pdf",
+        }),
+      ).rejects.toThrow("Only base64-encoded data URLs are supported");
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
     it("emails the generated file link when email_delivery is provided", async () => {
       globalThis.fetch = vi.fn().mockResolvedValue(
         new Response(JSON.stringify({ resource_id: "r_upload12345" }), {

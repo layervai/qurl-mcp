@@ -34,6 +34,7 @@ import { uploadMintOptionsShape } from "./upload-mint-options.js";
 // validated by a successful downstream qURL API call (see createHttpRuntime).
 export const MAX_UPLOAD_FILE_BASE64_CHARACTERS =
   Math.ceil((MAX_UPLOAD_FILE_DATA_BYTES * 4) / 3) + 1024;
+const MAX_DATA_URL_PREFIX_CHARACTERS = 1024;
 
 export function createUploadFileDataQurlSchema(
   maxBase64Characters = MAX_UPLOAD_FILE_BASE64_CHARACTERS,
@@ -94,8 +95,13 @@ function normalizeBase64Input(input: string): {
 
   // Step 1: Parse and strip the data URL prefix if present (e.g.,
   // "data:image/png;base64,"). Return its media type so callers do not need
-  // to parse the same prefix again.
-  const dataUrl = /^data:([^;,]*)(?:;[a-z0-9!#$&^_.+-]+=[^;,\s]*)*;base64,/i.exec(trimmed);
+  // to parse the same prefix again. Bound the regex probe independently of
+  // the payload ceiling so even a very large hostile string cannot make
+  // prefix parsing scale with the file body.
+  const dataUrlPrefixProbe = trimmed.slice(0, MAX_DATA_URL_PREFIX_CHARACTERS);
+  const dataUrl = /^data:([^;,]*)(?:;[a-z0-9!#$&^_.+-]+=[^;,\s]*)*;base64,/i.exec(
+    dataUrlPrefixProbe,
+  );
   if (!dataUrl && trimmed.toLowerCase().startsWith("data:")) {
     throw new Error("Only base64-encoded data URLs are supported.");
   }
