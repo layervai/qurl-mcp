@@ -37,7 +37,7 @@ export function ensurePdfFileName(input: string | undefined): string {
   const extensionLength =
     sourceExtension.length || (baseName.toLowerCase().endsWith(".pdf") ? 4 : 0);
   const withoutExt = extensionLength ? baseName.slice(0, -extensionLength) : baseName;
-  const normalizedStem = withoutExt.replace(/\.+$/, "");
+  const normalizedStem = withoutExt.replace(/^\.+|\.+$/g, "");
   const safeStem = normalizedStem || "content";
   return `${safeStem}.pdf`;
 }

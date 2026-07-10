@@ -370,6 +370,17 @@ describe("HTTP MCP server", () => {
 
       expect(response.status).not.toBe(413);
       expect(await response.text()).not.toContain("Request body is too large");
+
+      const mismatchedCredential = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: {
+          ...bearerHeaders("lv_live_large_request_attacker"),
+          "mcp-session-id": sessionId,
+        },
+        body: JSON.stringify({ payload: "x".repeat(16 * 1024 * 1024) }),
+      });
+      expect(mismatchedCredential.status).toBe(413);
+      expect(await mismatchedCredential.text()).toContain("Complete a smaller qURL API call first");
     } finally {
       await raisedLimitRuntime.closeAllSessions();
     }
@@ -1728,6 +1739,16 @@ describe("HTTP MCP server", () => {
         })
       ).status,
     ).toBe(403);
+    for (const method of ["GET", "DELETE"]) {
+      expect(
+        (
+          await fetch(`${baseUrl}/mcp`, {
+            method,
+            headers: { origin: "https://attacker.example" },
+          })
+        ).status,
+      ).toBe(403);
+    }
     expect(
       (
         await fetch(`${baseUrl}/mcp`, {

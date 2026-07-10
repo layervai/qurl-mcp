@@ -26,6 +26,8 @@ describe("createTextPdfTempFile", () => {
     expect(ensurePdfFileName("../REPORT.PDF")).toBe("REPORT.pdf");
     expect(ensurePdfFileName("archive.tar.gz")).toBe("archive.tar.pdf");
     expect(ensurePdfFileName("..pdf")).toBe("content.pdf");
+    expect(ensurePdfFileName("..foo")).toBe("content.pdf");
+    expect(ensurePdfFileName(".notes")).toBe("notes.pdf");
   });
 
   it("creates a pdf, normalizes the file name, and cleans it up", async () => {
