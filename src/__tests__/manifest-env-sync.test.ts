@@ -11,6 +11,7 @@ describe("published stdio environment manifests", () => {
   const runtimeConfigSource = readFileSync("src/config.ts", "utf8");
   const claudeGuidance = readFileSync("CLAUDE.md", "utf8");
   const bugReportTemplate = readFileSync(".github/ISSUE_TEMPLATE/bug_report.yml", "utf8");
+  const gitignore = readFileSync(".gitignore", "utf8");
   const publishedVariables = serverManifest.packages[0]?.environmentVariables ?? [];
 
   it("keeps every server.json variable in the Smithery command mapping", () => {
@@ -70,6 +71,13 @@ describe("published stdio environment manifests", () => {
       "QURL_PUBLIC_VIDEO_*",
     ]) {
       expect(claudeGuidance).toContain(`\`${variable}\``);
+    }
+  });
+
+  it("ignores operator-named config copies without hiding tracked examples", () => {
+    for (const stem of ["qurl-mcp.config", "qurl-mcp.http"]) {
+      expect(gitignore).toContain(`${stem}.*.json`);
+      expect(gitignore).toContain(`!${stem}.example.json`);
     }
   });
 });

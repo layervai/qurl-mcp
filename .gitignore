@@ -24,6 +24,11 @@ Thumbs.db
 .env.*.local
 qurl-mcp.config.json
 qurl-mcp.http.json
+# Ignore operator-named copies while keeping the tracked templates visible.
+qurl-mcp.config.*.json
+!qurl-mcp.config.example.json
+qurl-mcp.http.*.json
+!qurl-mcp.http.example.json
 
 # Test
 coverage/
