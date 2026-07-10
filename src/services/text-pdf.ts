@@ -48,10 +48,19 @@ export function resolveFontPath(candidatePath = bundledFontPath): string | undef
   return undefined;
 }
 
-// Published package/container assets are immutable for the process lifetime,
-// so cache both the resolved path and fallback decision. A deployment that
-// changes bundled assets must restart before serving requests from that build.
-const resolvedBundledFontPath = resolveFontPath();
+let cachedBundledFontPath: string | undefined;
+let hasResolvedBundledFontPath = false;
+
+function getBundledFontPath(): string | undefined {
+  if (!hasResolvedBundledFontPath) {
+    // Resolve lazily so a missing-asset warning passes through the installed
+    // console timestamp/redaction boundary instead of running during ESM
+    // evaluation. Published assets are immutable, so cache the decision.
+    cachedBundledFontPath = resolveFontPath();
+    hasResolvedBundledFontPath = true;
+  }
+  return cachedBundledFontPath;
+}
 
 export async function createTextPdfTempFile(input: {
   content: string;
@@ -73,7 +82,7 @@ export async function createTextPdfTempFile(input: {
   const tempDir = await mkdtemp(join(tmpdir(), "qurl-text-pdf-"));
   const fileName = ensurePdfFileName(input.fileName);
   const filePath = join(tempDir, fileName);
-  const fontPath = resolvedBundledFontPath;
+  const fontPath = getBundledFontPath();
 
   try {
     await new Promise<void>((resolve, reject) => {
