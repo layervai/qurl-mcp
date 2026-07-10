@@ -149,10 +149,7 @@ export async function uploadLocalFileAndMint(
   );
 }
 
-export function uploadFileQurlTool(
-  client: IQURLClient,
-  runtime: ToolRuntimeOptions = { mode: "stdio" },
-) {
+export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "upload_file_qurl",
     title: "Upload File qURL",
@@ -160,6 +157,7 @@ export function uploadFileQurlTool(
       "Upload a local PDF or raster image file to a qURL connector, then mint an access link for it. " +
       "Use this when the content already exists on the MCP server host and you need a shareable file qURL rather than a proxy to an existing website URL. " +
       "This stdio-only tool can read any supported file that the local MCP process user can access; invoke it only for a path the user explicitly chose to share. " +
+      "Deploy stdio under a restricted OS account or container whose readable files are limited to intended shareable content. " +
       "Use `create_qurl` when you already have a URL, and use `mint_link` when the file has already been uploaded and you only need another token. " +
       "The tool reads `file_path`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints a qURL from the returned `resource_id`. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +

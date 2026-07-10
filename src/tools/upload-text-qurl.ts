@@ -50,10 +50,7 @@ export const uploadTextQurlSchema = z
   })
   .extend(uploadMintOptionsShape);
 
-export function uploadTextQurlTool(
-  client: IQURLClient,
-  runtime: ToolRuntimeOptions = { mode: "stdio" },
-) {
+export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "upload_text_qurl",
     title: "Upload Text qURL",

@@ -99,14 +99,10 @@ function normalizeBase64Input(input: string): {
     throw new Error("file_base64 must not be empty");
   }
 
-  // Step 3: Validate one base64 alphabet. Mixed standard and URL-safe
-  // alphabets are ambiguous and are rejected instead of silently coerced.
-  const usesStandardAlphabet = /[+/]/.test(withoutWhitespace);
-  const usesUrlSafeAlphabet = /[-_]/.test(withoutWhitespace);
-  if (
-    (usesStandardAlphabet && usesUrlSafeAlphabet) ||
-    !/^[A-Za-z0-9+/_-]*={0,2}$/.test(withoutWhitespace)
-  ) {
+  // Step 3: Validate the union of standard and URL-safe alphabets. Their
+  // differing symbols map unambiguously to the same values, so mixed input can
+  // be normalized safely instead of rejected.
+  if (!/^[A-Za-z0-9+/_-]*={0,2}$/.test(withoutWhitespace)) {
     throw new Error("file_base64 must be valid base64-encoded content");
   }
 
@@ -162,10 +158,7 @@ function decodeBase64File(input: string, maxBytes: number, contentType: string):
   return fileData;
 }
 
-export function uploadFileDataQurlTool(
-  client: IQURLClient,
-  runtime: ToolRuntimeOptions = { mode: "stdio" },
-) {
+export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "upload_file_data_qurl",
     title: "Upload File Data qURL",

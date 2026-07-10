@@ -5,13 +5,21 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { QURLAPIError } from "../../client.js";
 import { clearRuntimeConfigCache } from "../../config.js";
 import { makeMockClient } from "../helpers.js";
-import { uploadFileQurlSchema, uploadFileQurlTool } from "../../tools/upload-file-qurl.js";
+import {
+  uploadFileQurlSchema,
+  uploadFileQurlTool as uploadFileQurlToolFactory,
+} from "../../tools/upload-file-qurl.js";
 
 vi.mock("../../services/email.js", () => ({
   sendEmailMessage: vi.fn(),
 }));
 
 import { sendEmailMessage } from "../../services/email.js";
+
+const uploadFileQurlTool = (
+  client: Parameters<typeof uploadFileQurlToolFactory>[0],
+  runtime: Parameters<typeof uploadFileQurlToolFactory>[1] = { mode: "stdio" },
+) => uploadFileQurlToolFactory(client, runtime);
 
 const fixturePath = resolve("src/__tests__/fixtures/sample.pdf");
 

@@ -8,6 +8,7 @@
   "maxSessionsPerCredential": 20,
   "maxUnvalidatedSessions": 100,
   "sessionIdleTtlMs": 900000,
+  "sessionAbsoluteTtlMs": 86400000,
   "unvalidatedSessionTtlMs": 60000,
   "mcpRateLimitPerMinute": 120,
   "publicFileRateLimitPerMinute": 300

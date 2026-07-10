@@ -85,10 +85,7 @@ export const createQurlSchema = z.object({
     ),
 });
 
-export function createQurlTool(
-  client: IQURLClient,
-  runtime: ToolRuntimeOptions = { mode: "stdio" },
-) {
+export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "create_qurl",
     title: "Create qURL",

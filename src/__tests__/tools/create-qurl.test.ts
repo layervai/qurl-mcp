@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { QURLAPIError } from "../../client.js";
 import { EmailDeliverySetupError } from "../../email-types.js";
-import { createQurlTool, createQurlSchema } from "../../tools/create-qurl.js";
+import {
+  createQurlTool as createQurlToolFactory,
+  createQurlSchema,
+} from "../../tools/create-qurl.js";
 import { makeMockClient, sampleCreateQURLData } from "../helpers.js";
 
 vi.mock("../../services/email.js", () => ({
@@ -9,6 +12,11 @@ vi.mock("../../services/email.js", () => ({
 }));
 
 import { sendEmailMessage } from "../../services/email.js";
+
+const createQurlTool = (
+  client: Parameters<typeof createQurlToolFactory>[0],
+  runtime: Parameters<typeof createQurlToolFactory>[1] = { mode: "stdio" },
+) => createQurlToolFactory(client, runtime);
 
 const fixture = sampleCreateQURLData();
 

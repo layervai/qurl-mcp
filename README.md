@@ -66,6 +66,10 @@ in-chat attachments without first materializing them at a known host path.
 Connector upload and qURL minting are separate operations. If minting fails
 after upload, the connector currently has no delete endpoint; the server logs
 the orphaned `resource_id` for operator cleanup and returns the mint failure.
+Upload validation binds the declared media type to the filename plus format
+start/end markers; it is not a malware scanner or full PDF/image decoder.
+Connectors must preserve the declared safe media type and serve downloads with
+`X-Content-Type-Options: nosniff` rather than inferring an executable type.
 There is intentionally no application-level path allowlist: symlinks and
 time-of-check/time-of-use races make a lexical prefix check a misleading
 security boundary. Use a dedicated OS account, container, or read-only mount
@@ -289,6 +293,7 @@ When configured, the HTTP server additionally exposes:
 | `maxSessionsPerCredential`     | Per-bearer live and initializing session cap (default `20`)                         |
 | `maxUnvalidatedSessions`       | Cap on sessions that have not completed a downstream qURL API call (default `100`)  |
 | `sessionIdleTtlMs`             | Idle session eviction window (default 15 minutes)                                   |
+| `sessionAbsoluteTtlMs`         | Absolute session lifetime, including active SSE/tool requests (default 24 hours)    |
 | `unvalidatedSessionTtlMs`      | Absolute validation deadline for never-validated bearer sessions (default 1 minute) |
 | `mcpRateLimitPerMinute`        | Per-client `/mcp` request limit (default `120`)                                     |
 | `publicFileRateLimitPerMinute` | Per-client public-route request limit (default `300`)                               |
@@ -306,6 +311,7 @@ HTTP fields have matching environment overrides:
 | `MCP_MAX_SESSIONS_PER_CREDENTIAL`       | `maxSessionsPerCredential`        |
 | `MCP_MAX_UNVALIDATED_SESSIONS`          | `maxUnvalidatedSessions`          |
 | `MCP_SESSION_IDLE_TTL_MS`               | `sessionIdleTtlMs`                |
+| `MCP_SESSION_ABSOLUTE_TTL_MS`           | `sessionAbsoluteTtlMs`            |
 | `MCP_UNVALIDATED_SESSION_TTL_MS`        | `unvalidatedSessionTtlMs`         |
 | `MCP_RATE_LIMIT_PER_MINUTE`             | `mcpRateLimitPerMinute`           |
 | `MCP_PUBLIC_FILE_RATE_LIMIT_PER_MINUTE` | `publicFileRateLimitPerMinute`    |
@@ -335,10 +341,9 @@ bounded session slot for a 30-second reconnect grace period. A reconnect clears
 that deadline; otherwise the session is reaped without waiting for the longer
 idle TTL. Size `maxSessions` and the idle TTL for clients that remain connected
 but do not perform explicit session teardown.
-Validated sessions intentionally have no separate absolute lifetime: a client
-that continues making requests inside the idle window can retain its session
-until disconnect, explicit deletion, or server restart. The global and
-per-credential caps keep that deliberate long-lived-session behavior bounded.
+Validated sessions also expire at `sessionAbsoluteTtlMs` (24 hours by default),
+even during an active SSE stream or tool request. This prevents keepalives from
+pinning a global or per-credential session slot indefinitely.
 The first downstream qURL operation must therefore complete before that
 deadline; an unusually slow first API call may be interrupted and the client
 must re-initialize. This fail-closed behavior prevents an invalid credential

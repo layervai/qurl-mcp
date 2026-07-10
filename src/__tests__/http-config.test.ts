@@ -86,6 +86,7 @@ describe("HTTP listener config", () => {
         maxSessionsPerCredential: 7,
         maxUnvalidatedSessions: 20,
         sessionIdleTtlMs: 60_000,
+        sessionAbsoluteTtlMs: 120_000,
         unvalidatedSessionTtlMs: 20_000,
         mcpRateLimitPerMinute: 30,
         publicFileRateLimitPerMinute: 40,
@@ -99,6 +100,7 @@ describe("HTTP listener config", () => {
         maxSessionsPerCredential: 7,
         maxUnvalidatedSessions: 20,
         sessionIdleTtlMs: 60_000,
+        sessionAbsoluteTtlMs: 120_000,
         unvalidatedSessionTtlMs: 20_000,
         mcpRateLimitPerMinute: 30,
         publicFileRateLimitPerMinute: 40,
@@ -110,6 +112,9 @@ describe("HTTP listener config", () => {
 
     delete process.env.MCP_TRUST_PROXY_HOPS;
     process.env.MCP_MAX_SESSIONS_PER_CREDENTIAL = "51";
+    expect(() => loadHttpServerConfig(configPath)).toThrow("between 1 and 50");
+
+    process.env.MCP_MAX_SESSIONS_PER_CREDENTIAL = "1e1";
     expect(() => loadHttpServerConfig(configPath)).toThrow("between 1 and 50");
   });
 

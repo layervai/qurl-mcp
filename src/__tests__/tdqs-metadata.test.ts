@@ -15,9 +15,11 @@ import {
   sampleSession,
 } from "./helpers.js";
 
-const tools = toolFactories.map((factory) => factory(makeMockClient()));
+const tools = toolFactories.map((factory) => factory(makeMockClient(), { mode: "stdio" }));
 const factoryByName = new Map(
-  toolFactories.map((factory) => [factory(makeMockClient()).name, factory] as const),
+  toolFactories.map(
+    (factory) => [factory(makeMockClient(), { mode: "stdio" }).name, factory] as const,
+  ),
 );
 
 describe("TDQS tool metadata coverage", () => {
@@ -540,7 +542,7 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
     it(`${name} structuredContent validates against outputSchema`, async () => {
       const factory = factoryByName.get(name);
       if (!factory) throw new Error(`Unknown tool ${name}`);
-      const tool = factory(makeMockClient(clientOverrides));
+      const tool = factory(makeMockClient(clientOverrides), { mode: "stdio" });
       const cleanup = setup?.();
 
       try {

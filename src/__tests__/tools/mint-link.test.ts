@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { mintLinkTool, mintLinkBaseSchema, mintLinkSchema } from "../../tools/mint-link.js";
+import {
+  mintLinkTool as mintLinkToolFactory,
+  mintLinkBaseSchema,
+  mintLinkSchema,
+} from "../../tools/mint-link.js";
 import { makeMockClient } from "../helpers.js";
 
 vi.mock("../../services/email.js", () => ({
@@ -7,6 +11,11 @@ vi.mock("../../services/email.js", () => ({
 }));
 
 import { sendEmailMessage } from "../../services/email.js";
+
+const mintLinkTool = (
+  client: Parameters<typeof mintLinkToolFactory>[0],
+  runtime: Parameters<typeof mintLinkToolFactory>[1] = { mode: "stdio" },
+) => mintLinkToolFactory(client, runtime);
 
 const fixture = {
   qurl_id: "q_abc123def45",

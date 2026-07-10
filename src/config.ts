@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { isIP } from "node:net";
-import { resolve } from "node:path";
+import { isAbsolute, resolve, win32 } from "node:path";
 import { isEmailAddress, normalizeEmailAddress, normalizeEmailDomain } from "./email-addresses.js";
 
 export interface SmtpConfig {
@@ -54,6 +54,7 @@ export type ConfigFileShape = Partial<{
   maxSessionsPerCredential: number;
   maxUnvalidatedSessions: number;
   sessionIdleTtlMs: number;
+  sessionAbsoluteTtlMs: number;
   unvalidatedSessionTtlMs: number;
   mcpRateLimitPerMinute: number;
   publicFileRateLimitPerMinute: number;
@@ -356,11 +357,22 @@ export function normalizePublicPath(
   return path.replace(/\/+$/, "");
 }
 
+export function normalizeAbsoluteFilePath(value: unknown, fieldName: string): string | undefined {
+  const filePath = trimString(value);
+  if (!filePath) return undefined;
+  if (!isAbsolute(filePath) && !win32.isAbsolute(filePath)) {
+    throw new Error(`${fieldName} must be an absolute filesystem path.`);
+  }
+  return filePath;
+}
+
 function resolvePublicVideoConfig(
   fileConfig: Partial<PublicVideoConfig> | undefined,
 ): PublicVideoConfig | undefined {
-  const filePath =
-    trimString(process.env.QURL_PUBLIC_VIDEO_FILE_PATH) ?? trimString(fileConfig?.filePath);
+  const filePath = normalizeAbsoluteFilePath(
+    process.env.QURL_PUBLIC_VIDEO_FILE_PATH ?? fileConfig?.filePath,
+    "publicVideo.filePath",
+  );
   if (!filePath) {
     return undefined;
   }

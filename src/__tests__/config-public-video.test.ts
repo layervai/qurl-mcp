@@ -201,6 +201,16 @@ describe("public video config", () => {
     expect(() => loadRuntimeConfig(configPath)).toThrow("non-reserved absolute URL path");
   });
 
+  it("requires an absolute public video file path", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ publicVideo: { pagePath: "/media/video", filePath: "video.mp4" } }),
+    );
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow("must be an absolute filesystem path");
+  });
+
   it("loads the qurl API key only from the environment", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(

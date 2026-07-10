@@ -24,6 +24,9 @@ export const supportedMimeTypes = [
   "image/webp",
 ] as const;
 
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+const PNG_IEND_CHUNK = Buffer.from([0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);
+
 export const mimeTypeByExtension = new Map<string, (typeof supportedMimeTypes)[number]>([
   [".gif", "image/gif"],
   [".jpeg", "image/jpeg"],
@@ -171,15 +174,19 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
   const bytes = Buffer.from(fileData.buffer, fileData.byteOffset, fileData.byteLength);
   // latin1 preserves byte values exactly; Node's ascii decoder masks the high
   // bit and would let non-ASCII bytes impersonate an ASCII magic header.
-  // These checks are bounded type-confusion guards, not complete file parsers;
-  // legal PDF, PNG, and GIF structures may include format-specific trailing
-  // content. JPEG and WebP use safe exact end/container markers here.
+  // These are bounded type-confusion guards rather than full decoders, but all
+  // supported formats must also end at their defined trailer/container marker
+  // so an otherwise-valid prefix cannot bless arbitrary appended content.
   const ascii = (start: number, end: number) => bytes.subarray(start, end).toString("latin1");
+  const pdfTail = ascii(Math.max(0, bytes.length - 1024), bytes.length);
   const valid =
-    (contentType === "application/pdf" && ascii(0, 5) === "%PDF-") ||
+    (contentType === "application/pdf" &&
+      ascii(0, 5) === "%PDF-" &&
+      /%%EOF[\t\n\f\r ]*$/.test(pdfTail)) ||
     (contentType === "image/png" &&
-      bytes.length >= 8 &&
-      bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) ||
+      bytes.length >= PNG_SIGNATURE.length + PNG_IEND_CHUNK.length &&
+      bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE) &&
+      bytes.subarray(-PNG_IEND_CHUNK.length).equals(PNG_IEND_CHUNK)) ||
     (contentType === "image/jpeg" &&
       bytes.length >= 5 &&
       bytes[0] === 0xff &&
@@ -187,7 +194,9 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
       bytes[2] === 0xff &&
       bytes[bytes.length - 2] === 0xff &&
       bytes[bytes.length - 1] === 0xd9) ||
-    (contentType === "image/gif" && ["GIF87a", "GIF89a"].includes(ascii(0, 6))) ||
+    (contentType === "image/gif" &&
+      ["GIF87a", "GIF89a"].includes(ascii(0, 6)) &&
+      bytes[bytes.length - 1] === 0x3b) ||
     (contentType === "image/webp" &&
       bytes.length >= 16 &&
       ascii(0, 4) === "RIFF" &&
@@ -224,8 +233,10 @@ function extractConnectorError(parsed: unknown): {
     typeof body.error === "object" && body.error !== null
       ? (body.error as Record<string, unknown>)
       : {};
-  const stringField = (record: Record<string, unknown>, field: string): string | undefined =>
-    typeof record[field] === "string" ? record[field] : undefined;
+  const stringField = (record: Record<string, unknown>, field: string): string | undefined => {
+    const value = record[field];
+    return typeof value === "string" ? value : undefined;
+  };
   return {
     code:
       stringField(nestedError, "code") ?? stringField(body, "code") ?? "connector_upload_failed",

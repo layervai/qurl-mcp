@@ -171,7 +171,7 @@ describe("missing_api_key wrapper coverage", () => {
             .mockRejectedValue(missingKeyError());
         }
         const client = makeMockClient(overrides);
-        const tool = build(client);
+        const tool = build(client, { mode: "stdio" });
         delete process.env.QURL_API_KEY;
         const configPath = join(tempDir, "qurl-mcp.config.json");
         writeFileSync(configPath, JSON.stringify({ defaultQurlApiUrl: "https://api.layerv.ai" }));

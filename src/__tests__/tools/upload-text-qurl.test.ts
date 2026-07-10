@@ -4,11 +4,19 @@ import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QURLAPIError } from "../../client.js";
 import { makeMockClient } from "../helpers.js";
-import { uploadTextQurlSchema, uploadTextQurlTool } from "../../tools/upload-text-qurl.js";
+import {
+  uploadTextQurlSchema,
+  uploadTextQurlTool as uploadTextQurlToolFactory,
+} from "../../tools/upload-text-qurl.js";
 
 vi.mock("../../services/email.js", () => ({
   sendEmailMessage: vi.fn(),
 }));
+
+const uploadTextQurlTool = (
+  client: Parameters<typeof uploadTextQurlToolFactory>[0],
+  runtime: Parameters<typeof uploadTextQurlToolFactory>[1] = { mode: "stdio" },
+) => uploadTextQurlToolFactory(client, runtime);
 
 const cleanupSpy = vi.fn().mockResolvedValue(undefined);
 const fixturePath = resolve("src/__tests__/fixtures/sample.pdf");

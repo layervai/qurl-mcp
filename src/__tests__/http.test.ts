@@ -1,5 +1,6 @@
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { rateLimit } from "express-rate-limit";
 import { createHash } from "node:crypto";
 import { statSync } from "node:fs";
@@ -21,6 +22,7 @@ const testConfig: HttpServerConfig = {
   maxSessionsPerCredential: 10,
   maxUnvalidatedSessions: 20,
   sessionIdleTtlMs: 15 * 60 * 1000,
+  sessionAbsoluteTtlMs: 24 * 60 * 60 * 1000,
   unvalidatedSessionTtlMs: 60 * 1000,
   mcpRateLimitPerMinute: 10_000,
   publicFileRateLimitPerMinute: 10_000,
@@ -588,6 +590,103 @@ describe("HTTP MCP server", () => {
     controller.abort();
   });
 
+  it("expires a validated session at the absolute deadline during active SSE", async () => {
+    const absoluteRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      clientFactory: () =>
+        makeMockClient({
+          createQURL: vi.fn(async () => {
+            markRequestCredentialValidated();
+            return { data: sampleCreateQURLData() };
+          }),
+        }),
+    });
+    const baseUrl = await start(absoluteRuntime.app);
+    const token = "lv_live_absolute_sse";
+    const controller = new globalThis.AbortController();
+
+    try {
+      const sessionId = await initialize(baseUrl, token);
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "mcp-session-id": sessionId },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+        }),
+      });
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "mcp-session-id": sessionId },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "create_qurl",
+            arguments: { target_url: "https://example.com" },
+          },
+        }),
+      });
+      const sse = await fetch(`${baseUrl}/mcp`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "text/event-stream",
+          "mcp-session-id": sessionId,
+        },
+        signal: controller.signal,
+      });
+      expect(sse.status).toBe(200);
+
+      expect(
+        await absoluteRuntime.sweepExpiredSessions(
+          Date.now() + testConfig.sessionAbsoluteTtlMs + 1,
+        ),
+      ).toBe(1);
+      expect(absoluteRuntime.getActiveSessionCount()).toBe(0);
+    } finally {
+      controller.abort();
+      await absoluteRuntime.closeAllSessions();
+    }
+  });
+
+  it("does not register a transport that closes during initialization", async () => {
+    const earlyCloseRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      transportFactory: () => {
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => "early-close-session",
+        });
+        const handleRequest = transport.handleRequest.bind(transport);
+        transport.handleRequest = async (...args) => {
+          await handleRequest(...args);
+          transport.onclose?.();
+        };
+        return transport;
+      },
+    });
+    const baseUrl = await start(earlyCloseRuntime.app);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: bearerHeaders("lv_live_early_close"),
+        body: JSON.stringify(initializeBody),
+      });
+
+      expect(response.status).toBe(200);
+      expect(earlyCloseRuntime.getActiveSessionCount()).toBe(0);
+      expect(warn).toHaveBeenCalledWith(
+        "[mcp-http] initialize transport closed before session registration",
+      );
+    } finally {
+      warn.mockRestore();
+      await earlyCloseRuntime.closeAllSessions();
+    }
+  });
+
   it("never exceeds the configured session cap during concurrent initialization", async () => {
     const cappedRuntime = createHttpRuntime(
       { ...testConfig, maxSessions: 1, maxUnvalidatedSessions: 2 },
@@ -930,6 +1029,77 @@ describe("HTTP MCP server", () => {
     }
   });
 
+  it("handles explicit DELETE while a tool request is in flight", async () => {
+    let releaseCall!: () => void;
+    const callReleased = new Promise<void>((resolve) => {
+      releaseCall = resolve;
+    });
+    let markCallStarted!: () => void;
+    const callStarted = new Promise<void>((resolve) => {
+      markCallStarted = resolve;
+    });
+    const deleteRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      clientFactory: () =>
+        makeMockClient({
+          createQURL: vi.fn(async () => {
+            markRequestCredentialValidated();
+            markCallStarted();
+            await callReleased;
+            return { data: sampleCreateQURLData() };
+          }),
+        }),
+    });
+    const baseUrl = await start(deleteRuntime.app);
+    const token = "lv_live_concurrent_delete";
+
+    try {
+      const sessionId = await initialize(baseUrl, token);
+      await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "mcp-session-id": sessionId },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/initialized",
+          params: {},
+        }),
+      });
+      const toolRequest = fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "mcp-session-id": sessionId },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: {
+            name: "create_qurl",
+            arguments: { target_url: "https://example.com" },
+          },
+        }),
+      });
+      await callStarted;
+      const deleteRequest = fetch(`${baseUrl}/mcp`, {
+        method: "DELETE",
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "application/json, text/event-stream",
+          "mcp-session-id": sessionId,
+        },
+      });
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+      releaseCall();
+
+      const [toolOutcome, deleteOutcome] = await Promise.allSettled([toolRequest, deleteRequest]);
+      expect(toolOutcome.status).toBe("fulfilled");
+      expect(deleteOutcome.status).toBe("fulfilled");
+      if (deleteOutcome.status === "fulfilled") expect(deleteOutcome.value.status).toBe(200);
+      expect(deleteRuntime.getActiveSessionCount()).toBe(0);
+    } finally {
+      releaseCall();
+      await deleteRuntime.closeAllSessions();
+    }
+  });
+
   it("does not let a mismatched bearer delete another credential's session", async () => {
     const baseUrl = await start();
     const sessionId = await initialize(baseUrl, "lv_live_delete_owner");
@@ -1019,6 +1189,7 @@ describe("HTTP MCP server", () => {
     expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(response.headers.get("content-security-policy")).toContain(`'sha256-${styleHash}'`);
     expect(response.headers.get("content-security-policy")).not.toContain("'unsafe-inline'");
+    expect(response.headers.get("content-security-policy")).toContain("img-src 'none'");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
   });

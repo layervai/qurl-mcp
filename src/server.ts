@@ -32,8 +32,8 @@ import { rotateAccessPrompt } from "./prompts/rotate-access.js";
 export type ToolFactory = (
   client: IQURLClient,
   // Transport-sensitive tools consume this security context. Other factories
-  // intentionally ignore the optional second argument supplied by createServer.
-  runtime?: ToolRuntimeOptions,
+  // intentionally ignore the required second argument supplied by createServer.
+  runtime: ToolRuntimeOptions,
 ) => {
   name: string;
   title: string;

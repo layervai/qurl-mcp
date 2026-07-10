@@ -2,6 +2,7 @@ import {
   getDefaultConfigPath,
   isLoopbackHostname,
   loadRuntimeConfig,
+  normalizeAbsoluteFilePath,
   normalizePublicPath,
   parseAllowedHosts,
   parseConfigFile,
@@ -20,6 +21,7 @@ export interface HttpServerConfig {
   maxSessionsPerCredential: number;
   maxUnvalidatedSessions: number;
   sessionIdleTtlMs: number;
+  sessionAbsoluteTtlMs: number;
   unvalidatedSessionTtlMs: number;
   mcpRateLimitPerMinute: number;
   publicFileRateLimitPerMinute: number;
@@ -35,6 +37,7 @@ const DEFAULT_MAX_SESSIONS = 1000;
 const DEFAULT_MAX_SESSIONS_PER_CREDENTIAL = 20;
 const DEFAULT_MAX_UNVALIDATED_SESSIONS = 100;
 const DEFAULT_SESSION_IDLE_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_SESSION_ABSOLUTE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_UNVALIDATED_SESSION_TTL_MS = 60 * 1000;
 
 function parseBoundedInteger(
@@ -45,6 +48,9 @@ function parseBoundedInteger(
   maximum: number,
 ): number {
   if (value === undefined || value === "") return fallback;
+  if (typeof value === "string" && !/^\d+$/.test(value.trim())) {
+    throw new Error(`${fieldName} must be an integer between ${minimum} and ${maximum}.`);
+  }
   const parsed =
     typeof value === "number"
       ? value
@@ -108,7 +114,10 @@ function resolvePublicVideoFromHttpConfig(
   // Environment overrides are resolved through runtimeConfig.publicVideo,
   // which is preferred below. This fallback intentionally reads only the
   // HTTP file for deployments that keep media settings there.
-  const filePath = trimString(fileConfig.publicVideo?.filePath);
+  const filePath = normalizeAbsoluteFilePath(
+    fileConfig.publicVideo?.filePath,
+    "publicVideo.filePath",
+  );
   if (!filePath) return undefined;
 
   return {
@@ -194,6 +203,13 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
       "MCP_SESSION_IDLE_TTL_MS/sessionIdleTtlMs",
       10_000,
       24 * 60 * 60 * 1000,
+    ),
+    sessionAbsoluteTtlMs: parseBoundedInteger(
+      process.env.MCP_SESSION_ABSOLUTE_TTL_MS ?? fileConfig.sessionAbsoluteTtlMs,
+      DEFAULT_SESSION_ABSOLUTE_TTL_MS,
+      "MCP_SESSION_ABSOLUTE_TTL_MS/sessionAbsoluteTtlMs",
+      60_000,
+      30 * 24 * 60 * 60 * 1000,
     ),
     unvalidatedSessionTtlMs: parseBoundedInteger(
       process.env.MCP_UNVALIDATED_SESSION_TTL_MS ?? fileConfig.unvalidatedSessionTtlMs,

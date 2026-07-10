@@ -73,6 +73,7 @@ function getJsonBodyLimitBytes(maxUploadFileDataBytes: number): number {
 
 export interface HttpRuntimeOptions {
   clientFactory?: (bearerToken: string) => IQURLClient;
+  transportFactory?: () => StreamableHTTPServerTransport;
   runtimeConfigPath?: string;
   version: string;
 }
@@ -209,6 +210,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   async function sweepExpiredSessions(now = Date.now()): Promise<number> {
     const expiredIds = [...sessions.values()]
       .filter((session) => {
+        if (now - session.createdAt >= config.sessionAbsoluteTtlMs) {
+          // The absolute lifetime applies even to active tool/SSE requests so
+          // keepalives cannot pin a validated session slot indefinitely.
+          return true;
+        }
         if (
           session.activeRequests === 0 &&
           session.disconnectedAt !== undefined &&
@@ -522,11 +528,18 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
             version,
             "http",
           );
-          const transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => randomUUID(),
-          });
+          const transport =
+            options.transportFactory?.() ??
+            new StreamableHTTPServerTransport({
+              sessionIdGenerator: () => randomUUID(),
+            });
+          let closedBeforeRegistration = false;
 
           transport.onclose = () => {
+            if (!transport.sessionId || !sessions.has(transport.sessionId)) {
+              closedBeforeRegistration = true;
+              return;
+            }
             // Some clients/proxies reconnect the GET SSE stream with the same
             // session ID. Deleting the in-memory session record here can cause
             // a subsequent GET /mcp to be rejected as "unknown session" even
@@ -550,8 +563,12 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
             throw error;
           }
 
-          if (!transport.sessionId) {
-            console.warn("[mcp-http] initialize completed without session id");
+          if (!transport.sessionId || closedBeforeRegistration) {
+            console.warn(
+              closedBeforeRegistration
+                ? "[mcp-http] initialize transport closed before session registration"
+                : "[mcp-http] initialize completed without session id",
+            );
             await server.close();
             return;
           }
@@ -692,6 +709,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   };
 
   function getInlineStyleSources(html: string): string[] {
+    // Page renderers must keep style blocks static. Interpolating request or
+    // config data into CSS would make this live-content hash authorize it.
     return [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map(
       (match) => `'sha256-${createHash("sha256").update(match[1], "utf8").digest("base64")}'`,
     );
@@ -700,7 +719,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   function setPublicPageSecurityHeaders(res: express.Response, styleSources: string[] = []): void {
     const stylePolicy = styleSources.length > 0 ? styleSources.join(" ") : "'none'";
     res.set({
-      "Content-Security-Policy": `default-src 'none'; style-src ${stylePolicy}; img-src 'self' data:; media-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+      "Content-Security-Policy": `default-src 'none'; style-src ${stylePolicy}; img-src 'none'; media-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
       "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
@@ -744,7 +763,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   function startHttpServer(): Server {
     installTimestampedConsole();
     let sweepInProgress = false;
-    const shortestSessionTtlMs = Math.min(config.sessionIdleTtlMs, config.unvalidatedSessionTtlMs);
+    const shortestSessionTtlMs = Math.min(
+      config.sessionIdleTtlMs,
+      config.sessionAbsoluteTtlMs,
+      config.unvalidatedSessionTtlMs,
+    );
     const sweepTimer = setInterval(
       () => {
         if (sweepInProgress) return;

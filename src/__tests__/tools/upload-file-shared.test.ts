@@ -96,7 +96,12 @@ describe("file name validation", () => {
     expect(() =>
       validateFileSignature(Buffer.from("junk before %PDF-1.7"), "application/pdf"),
     ).toThrow("does not match");
-    expect(() => validateFileSignature(Buffer.from("%PDF-1.7"), "application/pdf")).not.toThrow();
+    expect(() =>
+      validateFileSignature(Buffer.from("%PDF-1.7\n%%EOF\n"), "application/pdf"),
+    ).not.toThrow();
+    expect(() =>
+      validateFileSignature(Buffer.from("%PDF-1.7\n%%EOF\ntrailing"), "application/pdf"),
+    ).toThrow("does not match");
     expect(() =>
       validateFileSignature(Buffer.from([0xa5, 0xd0, 0xc4, 0xc6, 0xad]), "application/pdf"),
     ).toThrow("does not match");
@@ -123,5 +128,21 @@ describe("file name validation", () => {
 
     expect(() => validateFileSignature(valid, "image/jpeg")).not.toThrow();
     expect(() => validateFileSignature(trailingPolyglot, "image/jpeg")).toThrow("does not match");
+  });
+
+  it("requires PNG and GIF files to end at their format trailers", () => {
+    const png = Buffer.from([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+    ]);
+    const gif = Buffer.from("GIF89a;", "latin1");
+
+    expect(() => validateFileSignature(png, "image/png")).not.toThrow();
+    expect(() =>
+      validateFileSignature(Buffer.concat([png, Buffer.from("x")]), "image/png"),
+    ).toThrow("does not match");
+    expect(() => validateFileSignature(gif, "image/gif")).not.toThrow();
+    expect(() =>
+      validateFileSignature(Buffer.concat([gif, Buffer.from("x")]), "image/gif"),
+    ).toThrow("does not match");
   });
 });

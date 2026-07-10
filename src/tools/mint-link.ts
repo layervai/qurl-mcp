@@ -63,7 +63,7 @@ export const mintLinkSchema = mintLinkBaseSchema.refine(
   { message: "Provide either expires_in or expires_at, not both" },
 );
 
-export function mintLinkTool(client: IQURLClient, runtime: ToolRuntimeOptions = { mode: "stdio" }) {
+export function mintLinkTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "mint_link",
     title: "Mint Access Link",

@@ -8,7 +8,7 @@ import { clearRuntimeConfigCache } from "../../config.js";
 import { makeMockClient } from "../helpers.js";
 import {
   uploadFileDataQurlSchema,
-  uploadFileDataQurlTool,
+  uploadFileDataQurlTool as uploadFileDataQurlToolFactory,
 } from "../../tools/upload-file-data-qurl.js";
 
 vi.mock("../../services/email.js", () => ({
@@ -16,6 +16,11 @@ vi.mock("../../services/email.js", () => ({
 }));
 
 import { sendEmailMessage } from "../../services/email.js";
+
+const uploadFileDataQurlTool = (
+  client: Parameters<typeof uploadFileDataQurlToolFactory>[0],
+  runtime: Parameters<typeof uploadFileDataQurlToolFactory>[1] = { mode: "stdio" },
+) => uploadFileDataQurlToolFactory(client, runtime);
 
 const fixturePath = resolve("src/__tests__/fixtures/sample.pdf");
 const fixtureBase64 = readFileSync(fixturePath).toString("base64");
@@ -305,7 +310,7 @@ describe("uploadFileDataQurlTool", () => {
       expect(parsed.file_name).toBe("sample.pdf");
     });
 
-    it("rejects mixed standard and URL-safe base64 alphabets", async () => {
+    it("normalizes mixed standard and URL-safe base64 alphabets", async () => {
       globalThis.fetch = vi.fn();
       const tool = uploadFileDataQurlTool(makeMockClient());
 
@@ -315,7 +320,7 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toThrow("valid base64-encoded content");
+      ).rejects.toThrow("does not match declared content_type");
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 

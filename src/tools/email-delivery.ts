@@ -62,6 +62,8 @@ export function uploadEmailDetailLines(details: UploadEmailDetails): string[] {
   ];
 }
 
+// Match toStructuredContent's plain-object boundary; `length?: never` keeps
+// arrays from being silently spread into numeric object keys.
 export function toEmailAugmentedResult<T extends object & { length?: never }>(
   base: T,
   emailResult: EmailDeliveryResult | undefined,
