@@ -484,6 +484,43 @@ describe("HTTP MCP server", () => {
     expect((await fetch(`${baseUrl}/legal/privacy`)).status).toBe(429);
   });
 
+  it("wires the configured public video routes with matching CSP and media headers", async () => {
+    const fixturePath = fileURLToPath(new URL("./fixtures/sample.pdf", import.meta.url));
+    const publicRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        publicVideo: {
+          title: "Runtime Video Test",
+          pagePath: "/custom/video",
+          filePath: fixturePath,
+        },
+      },
+      { version: "0.0.0-test" },
+    );
+    const baseUrl = await start(publicRuntime.app);
+
+    const pageResponse = await fetch(`${baseUrl}/custom/video`);
+    const html = await pageResponse.text();
+    const inlineStyle = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1];
+    if (!inlineStyle) throw new Error("Expected inline video-page styles");
+    const styleHash = createHash("sha256").update(inlineStyle, "utf8").digest("base64");
+
+    expect(pageResponse.status).toBe(200);
+    expect(pageResponse.headers.get("content-security-policy")).toContain(`'sha256-${styleHash}'`);
+    expect(pageResponse.headers.get("content-security-policy")).not.toContain("'unsafe-inline'");
+    expect(pageResponse.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(html).toContain('src="http://127.0.0.1:3000/custom/video/file"');
+
+    const fileResponse = await fetch(`${baseUrl}/custom/video/file`, {
+      headers: { range: "bytes=0-3" },
+    });
+    expect(fileResponse.status).toBe(206);
+    expect(fileResponse.headers.get("content-type")).toBe("video/mp4");
+    expect(fileResponse.headers.get("cross-origin-resource-policy")).toBe("same-origin");
+    expect(fileResponse.headers.get("x-content-type-options")).toBe("nosniff");
+    expect((await fileResponse.arrayBuffer()).byteLength).toBe(4);
+  });
+
   it("binds sessions to the bearer token that initialized them", async () => {
     const baseUrl = await start();
     const sessionId = await initialize(baseUrl, "lv_live_owner");

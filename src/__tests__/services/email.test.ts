@@ -457,7 +457,7 @@ describe("sendEmailMessage", () => {
     nodemailerMocks.sendMail.mockResolvedValue({ messageId: "msg-1" });
 
     const result = await sendEmailMessage({
-      to: ["allowed@example.com", "blocked@mail.example.com", "blocked@elsewhere.test"],
+      to: ["Allowed@ExAmPlE.CoM", "blocked@mail.example.com", "blocked@elsewhere.test"],
       subject: "Secure link ready",
       text: "Body",
     });

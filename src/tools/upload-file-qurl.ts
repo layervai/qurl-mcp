@@ -108,7 +108,8 @@ export async function uploadLocalFileAndMint(
   const sourcePath = resolve(input.file_path);
   // O_NOFOLLOW protects the final component. Intermediate directory symlinks
   // still follow normal filesystem semantics; this tool is stdio-only and the
-  // local user explicitly chooses the server-host path to share.
+  // local user explicitly chooses the server-host path to share. Callers must
+  // never expose this helper to HTTP input or pass an HTTP caller-controlled path.
   const fileName = normalizeFileName(input.file_name ?? sourcePath);
   const contentType = input.content_type ?? inferContentType(fileName);
   if (!contentType) {
