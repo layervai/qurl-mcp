@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { isControlCodePoint } from "../text.js";
@@ -29,9 +29,12 @@ function sanitizePdfText(input: string, fallback: string): string {
 
 function ensurePdfFileName(input: string | undefined): string {
   const baseName = basename(sanitizePdfText(input ?? "content", "content")) || "content";
+  const sourceExtension = extname(baseName);
   const withoutExt = baseName.toLowerCase().endsWith(".pdf")
     ? baseName.slice(0, -4)
-    : baseName.replace(/\..*$/, "");
+    : sourceExtension
+      ? baseName.slice(0, -sourceExtension.length)
+      : baseName;
   const normalizedStem = withoutExt.replace(/\.+$/, "");
   const safeStem = normalizedStem || "content";
   return `${safeStem}.pdf`;

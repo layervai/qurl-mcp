@@ -176,6 +176,8 @@ export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: UploadFileQurlInput) => {
+      // getToolFactoriesForMode also omits this factory from HTTP registration;
+      // retain the handler guard for direct embedding and future registry changes.
       if (runtime.mode !== "stdio") {
         throw new Error("upload_file_qurl is available only in stdio mode");
       }

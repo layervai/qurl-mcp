@@ -81,6 +81,7 @@ describe("file name validation", () => {
     expect(normalizeFileName("../../private/sample.pdf")).toBe("sample.pdf");
     expect(normalizeFileName("..\\..\\private\\sample.pdf")).toBe("sample.pdf");
     expect(() => normalizeFileName("sample\u0000.pdf")).toThrow("control characters");
+    expect(() => normalizeFileName(`${"界".repeat(84)}.png`)).toThrow("255 UTF-8 bytes");
   });
 
   it("rejects misleading or unsupported extensions", () => {

@@ -36,7 +36,7 @@ describe("createTextPdfTempFile", () => {
   it("normalizes chained source extensions to one PDF extension", async () => {
     const result = await createTextPdfTempFile({ content: "safe", fileName: "archive.tar.gz" });
 
-    expect(result.fileName).toBe("archive.pdf");
+    expect(result.fileName).toBe("archive.tar.pdf");
     await result.cleanup();
   });
 

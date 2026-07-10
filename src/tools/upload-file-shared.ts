@@ -105,8 +105,8 @@ export function normalizeFileName(input: string) {
     const codePoint = character.codePointAt(0) ?? 0;
     return isControlCodePoint(codePoint);
   });
-  if (name.length > 255 || hasControlCharacter) {
-    throw new Error("file_name must be at most 255 characters and contain no control characters");
+  if (Buffer.byteLength(name, "utf8") > 255 || hasControlCharacter) {
+    throw new Error("file_name must be at most 255 UTF-8 bytes and contain no control characters");
   }
   return name;
 }
