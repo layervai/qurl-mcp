@@ -193,6 +193,13 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
     1,
     maxSessions,
   );
+  const maxUnvalidatedSessions = parseBoundedInteger(
+    process.env.MCP_MAX_UNVALIDATED_SESSIONS ?? fileConfig.maxUnvalidatedSessions,
+    Math.min(DEFAULT_MAX_UNVALIDATED_SESSIONS, maxSessions),
+    "MCP_MAX_UNVALIDATED_SESSIONS/maxUnvalidatedSessions",
+    1,
+    maxSessions,
+  );
   const sessionIdleTtlMs = parseBoundedInteger(
     process.env.MCP_SESSION_IDLE_TTL_MS ?? fileConfig.sessionIdleTtlMs,
     DEFAULT_SESSION_IDLE_TTL_MS,
@@ -225,13 +232,7 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
     ),
     maxSessions,
     maxSessionsPerCredential,
-    maxUnvalidatedSessions: parseBoundedInteger(
-      process.env.MCP_MAX_UNVALIDATED_SESSIONS ?? fileConfig.maxUnvalidatedSessions,
-      DEFAULT_MAX_UNVALIDATED_SESSIONS,
-      "MCP_MAX_UNVALIDATED_SESSIONS/maxUnvalidatedSessions",
-      1,
-      1000,
-    ),
+    maxUnvalidatedSessions,
     sessionIdleTtlMs,
     sessionAbsoluteTtlMs,
     unvalidatedSessionTtlMs: parseBoundedInteger(

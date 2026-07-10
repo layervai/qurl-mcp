@@ -349,6 +349,10 @@ deployments must set the correct hop count or all callers behind the proxy will
 share the proxy's single IP bucket. The credential bucket also prevents one
 key from bypassing the request allowance by rotating source IPs, while
 `maxSessionsPerCredential` prevents it from occupying the full session pool.
+Each distinct bearer value retains one credential-bucket entry for the current
+one-minute window. The IP limiter runs first, so token rotation from one source
+cannot create entries faster than `mcpRateLimitPerMinute`; hostile distributed
+traffic still requires the documented shared edge limit.
 Bearer credentials are conclusively validated by the first successful
 downstream qURL API call. Until then, sessions use the smaller pending-session
 cap and one-minute validation deadline, so arbitrary non-empty bearer strings
@@ -444,10 +448,12 @@ The `/mcp` endpoint requires `Authorization: Bearer <qURL API key>` on every
 request. The bearer token is bound to the resulting MCP session, so a session
 ID cannot be reused with a different credential.
 
-Initialization accepts any non-empty bearer token and defers authoritative key
-validation to the first downstream qURL API call. Unvalidated-session caps, a
-short validation deadline, and request rate limits bound that pre-validation
-state; the supplied token is forwarded only to the configured qURL API.
+**Operator authentication boundary:** initialization accepts any non-empty
+bearer token and allows the public tools/resources/prompts catalog to be read
+before authoritative validation by the first downstream qURL API call.
+Unvalidated-session caps, a short validation deadline, and request rate limits
+bound that pre-validation state; the supplied token is forwarded only to the
+configured qURL API.
 Introspection-only sessions therefore remain unvalidated and are closed at
 `unvalidatedSessionTtlMs`; clients can re-initialize if they need a longer-lived
 session. A session is promoted only after a successful qURL API call—rejected

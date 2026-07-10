@@ -148,6 +148,15 @@ describe("HTTP listener config", () => {
     expect(() => loadHttpServerConfig(configPath)).toThrow("between 1 and 50");
   });
 
+  it("keeps the unvalidated-session cap within the global session cap", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(configPath, JSON.stringify({ maxSessions: 50 }));
+    expect(loadHttpServerConfig(configPath).maxUnvalidatedSessions).toBe(50);
+
+    writeFileSync(configPath, JSON.stringify({ maxSessions: 50, maxUnvalidatedSessions: 51 }));
+    expect(() => loadHttpServerConfig(configPath)).toThrow("between 1 and 50");
+  });
+
   it("requires the absolute session lifetime to cover the idle window", () => {
     const configPath = join(tempDir, "http.json");
     writeFileSync(
