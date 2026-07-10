@@ -137,7 +137,7 @@ export function validateFileNameContentType(fileName: string, contentType: strin
       "file_name must include a basename and supported PDF or raster image extension (for example, image.png); content_type does not replace the required filename extension.",
     );
   }
-  if (inferred && inferred !== contentType) {
+  if (inferred !== contentType) {
     throw new Error(`content_type ${contentType} does not match the filename extension.`);
   }
 }

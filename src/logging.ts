@@ -21,8 +21,11 @@ export function logInfo(message: string): void {
 
 function redactAndFlattenLogValue(value: string): string {
   let redacted = value;
-  for (const credential of new Set([getRequestQurlApiKey(), process.env.QURL_API_KEY])) {
-    if (credential) redacted = redacted.replaceAll(credential, "[REDACTED]");
+  const credentials = [getRequestQurlApiKey(), process.env.QURL_API_KEY].filter(
+    (credential): credential is string => Boolean(credential),
+  );
+  for (const credential of new Set(credentials)) {
+    redacted = redacted.replaceAll(credential, "[REDACTED]");
   }
   return redacted
     .replace(BEARER_CREDENTIAL_PATTERN, "Bearer [REDACTED]")

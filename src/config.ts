@@ -174,7 +174,7 @@ export function parseConfigFile(configPath: string): UncheckedConfigFileShape {
     }
     return parsed as UncheckedConfigFileShape;
   } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    if (hasErrorCode(error, "ENOENT")) {
       return {};
     }
     const detail = error instanceof Error ? error.message : "unknown configuration error";
@@ -504,6 +504,9 @@ function resolveSmtpConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpCon
   const allowedRecipientValues = parseCsvList(
     process.env.QURL_SMTP_ALLOWED_RECIPIENTS ?? fileConfig?.allowedRecipients,
   );
+  // parseCsvList deduplicates raw spellings. Deduplicate again after case,
+  // IDNA, and root-dot normalization because distinct inputs can collapse to
+  // the same enforcement principal.
   const allowedRecipients = allowedRecipientValues
     ? Array.from(new Set(allowedRecipientValues.map(normalizeEmailAddress)))
     : undefined;

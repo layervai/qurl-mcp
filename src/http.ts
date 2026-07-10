@@ -1040,6 +1040,8 @@ if (isMainModule) {
   } catch (error) {
     installTimestampedConsole();
     console.error(`qURL MCP HTTP startup failed (${formatErrorForLog(error)})`);
+    // Startup failed before a server or sweep timer was retained. Preserve
+    // stderr flushing and let the empty event loop terminate with this status.
     process.exitCode = 1;
   }
 }
