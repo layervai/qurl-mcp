@@ -83,6 +83,17 @@ describe("HTTP listener config", () => {
     expect(loadHttpServerConfig(configPath).allowedHosts).toEqual(["[::1]"]);
   });
 
+  it("normalizes the environment Host allowlist with the shared parser", () => {
+    const configPath = join(tempDir, "http.json");
+    process.env.MCP_ALLOWED_HOSTS = " MCP.Example.com, [::1],mcp.example.com ";
+    writeFileSync(
+      configPath,
+      JSON.stringify({ host: "0.0.0.0", baseUrl: "https://mcp.example.com" }),
+    );
+
+    expect(loadHttpServerConfig(configPath).allowedHosts).toEqual(["mcp.example.com", "[::1]"]);
+  });
+
   it("rejects pathological Host allowlists", () => {
     const configPath = join(tempDir, "http.json");
     writeFileSync(

@@ -7,7 +7,6 @@ import {
   loadRuntimeConfig,
   normalizeAbsoluteFilePath,
   normalizePublicPath,
-  parseAllowedHosts,
   parseConfigFile,
   trimString,
   type PublicVideoConfig,
@@ -68,14 +67,16 @@ function parseBoundedInteger(
 
 function normalizeAllowedHosts(hosts: unknown): string[] | undefined {
   if (!hosts) return undefined;
-  if (!Array.isArray(hosts) || hosts.some((host) => typeof host !== "string")) {
-    throw new Error("allowedHosts must be an array of hostnames or IPs.");
+  const values = typeof hosts === "string" ? hosts.split(",") : hosts;
+  if (!Array.isArray(values) || values.some((host) => typeof host !== "string")) {
+    throw new Error("allowedHosts must be an array or comma-separated list of hostnames or IPs.");
   }
-  if (hosts.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
+  if (values.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
     throw new Error(`allowedHosts must contain at most ${MAX_CONFIG_ALLOWLIST_ENTRIES} entries.`);
   }
+  const stringValues = values.filter((host): host is string => typeof host === "string");
   const normalized = Array.from(
-    new Set(hosts.map((host) => host.trim().toLowerCase()).filter(Boolean)),
+    new Set(stringValues.map((host) => host.trim().toLowerCase()).filter(Boolean)),
   );
   const invalid = normalized.some((host) => {
     if (!/^[a-z0-9.:[\]-]+$/.test(host)) return true;
@@ -164,7 +165,7 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
     process.env.MCP_BASE_URL ?? fileConfig.baseUrl ?? `http://127.0.0.1:${port}`,
   );
   const allowedHosts = normalizeAllowedHosts(
-    parseAllowedHosts(process.env.MCP_ALLOWED_HOSTS) ?? fileConfig.allowedHosts,
+    process.env.MCP_ALLOWED_HOSTS ?? fileConfig.allowedHosts,
   );
   if (!isLoopbackHostname(host) && !allowedHosts) {
     throw new Error("allowedHosts is required when the HTTP listener is not bound to loopback.");

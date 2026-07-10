@@ -167,18 +167,6 @@ export function parseConfigFile(configPath: string): ConfigFileShape {
   }
 }
 
-export function parseAllowedHosts(value: string | undefined): string[] | undefined {
-  if (!value) return undefined;
-  const hosts = value
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-  if (hosts.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
-    throw new Error(`allowedHosts must contain at most ${MAX_CONFIG_ALLOWLIST_ENTRIES} entries.`);
-  }
-  return hosts.length > 0 ? hosts : undefined;
-}
-
 export function parseSizeBytes(value: unknown, fallback: number, fieldName: string): number {
   if (value === undefined) return fallback;
   if (typeof value === "number") {

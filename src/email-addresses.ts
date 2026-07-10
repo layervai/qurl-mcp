@@ -13,6 +13,9 @@ export function normalizeEmailDomain(value: string): string {
 }
 
 export function normalizeEmailAddress(value: string): string {
+  // This is a total canonicalizer for deduplication, not a validator. Invalid
+  // input is returned in normalized form so callers can report it consistently;
+  // delivery/config boundaries pair it with isEmailAddress before use.
   const normalized = value.trim().normalize("NFC");
   const separator = normalized.lastIndexOf("@");
   if (separator < 1) return normalized.toLowerCase();

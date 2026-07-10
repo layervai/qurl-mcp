@@ -855,7 +855,20 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       }
       logInfo("HTTP and runtime config loaded.");
       logInfo(`Public legal pages enabled: ${legalDocuments.length}`);
-      if (config.publicVideo) logInfo("Public video page enabled.");
+      if (config.publicVideo) {
+        logInfo("Public video page enabled.");
+        void stat(config.publicVideo.filePath)
+          .then((stats) => {
+            if (!stats.isFile()) {
+              console.warn("[public-video] configured path is not a regular file at startup");
+            } else if (stats.size === 0) {
+              console.warn("[public-video] configured video file is empty at startup");
+            }
+          })
+          .catch(() => {
+            console.warn("[public-video] configured video file is unavailable at startup");
+          });
+      }
       if (defaultQurlConnectorUrl) logInfo("qURL Connector uploads enabled.");
       const smtpInspection = inspectSmtpConfig(runtimeConfigPath);
       logInfo(
