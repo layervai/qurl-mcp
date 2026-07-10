@@ -125,11 +125,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   });
   const credentialRateLimitKeys = new WeakMap<express.Request, string>();
   const getCredentialRateLimitKey = (req: express.Request): string => {
-    const key = credentialRateLimitKeys.get(req);
-    if (!key) {
-      throw new Error("Credential rate limiter invoked without an authenticated key.");
-    }
-    return key;
+    // The wrapper below rejects tokenless requests and installs the digest
+    // synchronously. If that coupling ever regresses, collapse requests into
+    // one fail-closed bucket instead of throwing inside express-rate-limit.
+    return credentialRateLimitKeys.get(req) ?? "missing-authenticated-credential";
   };
   const credentialRateLimiterCore = rateLimit({
     windowMs: 60_000,

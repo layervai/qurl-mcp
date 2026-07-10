@@ -10,8 +10,8 @@
     "password": "",
     "fromEmail": "",
     "fromName": "qURL",
-    "allowedRecipients": [],
-    "allowedRecipientDomains": [],
+    "allowedRecipients": ["recipient@example.com"],
+    "allowedRecipientDomains": ["example.com"],
     "maxRecipientsPerMessage": 10,
     "maxRecipientsPerHour": 100
   },

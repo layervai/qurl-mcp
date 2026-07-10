@@ -8,6 +8,7 @@ import {
   MAX_ACCESS_POLICY_IP_CHARACTERS,
   MAX_ACCESS_POLICY_GEO_CHARACTERS,
   MAX_AI_AGENT_CATEGORY_CHARACTERS,
+  MAX_RESOURCE_TYPE_CHARACTERS,
   MAX_USER_AGENT_REGEX_CHARACTERS,
 } from "../../tools/create-qurl.js";
 import { makeMockClient, sampleCreateQURLData } from "../helpers.js";
@@ -55,6 +56,15 @@ describe("createQurlTool", () => {
         target_url: "https://example.com",
       });
       expect(result.success).toBe(true);
+    });
+
+    it("bounds the integration resource type", () => {
+      expect(
+        createQurlSchema.safeParse({
+          target_url: "https://example.com",
+          type: "x".repeat(MAX_RESOURCE_TYPE_CHARACTERS + 1),
+        }).success,
+      ).toBe(false);
     });
 
     it("accepts all optional fields", () => {

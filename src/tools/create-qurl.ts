@@ -17,6 +17,7 @@ export const MAX_ACCESS_POLICY_LIST_ITEMS = 1000;
 export const MAX_ACCESS_POLICY_IP_CHARACTERS = 64;
 export const MAX_ACCESS_POLICY_GEO_CHARACTERS = 8;
 export const MAX_AI_AGENT_CATEGORY_CHARACTERS = 128;
+export const MAX_RESOURCE_TYPE_CHARACTERS = 64;
 
 const boundedPolicyList = (item: z.ZodString) => z.array(item).max(MAX_ACCESS_POLICY_LIST_ITEMS);
 
@@ -62,8 +63,11 @@ export const accessPolicySchema = z.object({
 export const createQurlSchema = z.object({
   type: z
     .string()
+    .max(MAX_RESOURCE_TYPE_CHARACTERS)
     .optional()
-    .describe("Resource type for integrations allowed to mint non-url qURLs. Defaults to url."),
+    .describe(
+      `Resource type for integrations allowed to mint non-url qURLs (max ${MAX_RESOURCE_TYPE_CHARACTERS} chars). Defaults to url.`,
+    ),
   target_url: z.string().url().describe("The URL to protect with qURL"),
   label: z
     .string()
