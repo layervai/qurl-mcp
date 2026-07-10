@@ -596,16 +596,17 @@ listener directly when proxy trust is enabled.
 
 ## Common Commands
 
-| Command                | Purpose               |
-| ---------------------- | --------------------- |
-| `npm run build`        | Compile TypeScript    |
-| `npm test`             | Run tests             |
-| `npm run lint`         | Run ESLint            |
-| `npm run dev`          | TypeScript watch mode |
-| `npm run format`       | Format source code    |
-| `npm run format:check` | Check formatting      |
-| `npm run start`        | Start stdio mode      |
-| `npm run start:http`   | Start HTTP mode       |
+| Command                 | Purpose               |
+| ----------------------- | --------------------- |
+| `npm run build`         | Compile TypeScript    |
+| `npm test`              | Run tests             |
+| `npm run test:coverage` | Run enforced coverage |
+| `npm run lint`          | Run ESLint            |
+| `npm run dev`           | TypeScript watch mode |
+| `npm run format`        | Format source code    |
+| `npm run format:check`  | Check formatting      |
+| `npm run start`         | Start stdio mode      |
+| `npm run start:http`    | Start HTTP mode       |
 
 ## Recommended Deployment Order
 

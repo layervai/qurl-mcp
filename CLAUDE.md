@@ -119,6 +119,9 @@ npm run lint
 # Test
 npm test
 
+# Test with enforced coverage thresholds
+npm run test:coverage
+
 # Format
 npm run format
 ```
@@ -219,7 +222,7 @@ feat(tools)!: rename resolve_qurl to resolve tool
 | `resources` | MCP resources                                              |
 | `prompts`   | MCP prompts                                                |
 | `http`      | HTTP transport, public routes, and remote-server lifecycle |
-| `security`  | Cross-cutting authentication, validation, and hardening     |
+| `security`  | Cross-cutting authentication, validation, and hardening    |
 | `ci`        | GitHub Actions workflows                                   |
 | `deps`      | Dependencies                                               |
 

@@ -77,6 +77,7 @@ export function createUploadFileDataQurlSchema(
 }
 
 export const uploadFileDataQurlSchema = createUploadFileDataQurlSchema();
+type UploadFileDataQurlInput = z.infer<typeof uploadFileDataQurlSchema>;
 
 /**
  * Normalize and validate base64 input for file upload.
@@ -227,7 +228,7 @@ export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntime
       idempotentHint: false,
       openWorldHint: true,
     },
-    handler: withMissingApiKeyHandler(async (input: z.infer<typeof inputSchema>) => {
+    handler: withMissingApiKeyHandler(async (input: UploadFileDataQurlInput) => {
       const allowServerApiKeyFallback = allowsServerApiKeyFallback(runtime);
       // Preflight connector config before decoding payloads so auth/config errors fail fast.
       const connectorConfig = getConnectorConfig(allowServerApiKeyFallback);
