@@ -339,6 +339,24 @@ describe("HTTP MCP server", () => {
     expect(getActiveSessionCount()).toBe(1);
   });
 
+  it("replaces an attacker-supplied session ID during initialization", async () => {
+    const baseUrl = await start();
+    const suppliedSessionId = "attacker-selected-session";
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        ...bearerHeaders("lv_live_no_session_fixation"),
+        "mcp-session-id": suppliedSessionId,
+      },
+      body: JSON.stringify(initializeBody),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("mcp-session-id")).toBeTruthy();
+    expect(response.headers.get("mcp-session-id")).not.toBe(suppliedSessionId);
+    expect(getActiveSessionCount()).toBe(1);
+  });
+
   it("rejects a mixed initialization batch without retaining a session", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/mcp`, {
@@ -1103,7 +1121,7 @@ describe("HTTP MCP server", () => {
     }
   });
 
-  it("returns 409 when a session closes during transport handling", async () => {
+  it("returns a bounded non-oracular error when a session closes during transport handling", async () => {
     let expiringRuntime!: ReturnType<typeof createHttpRuntime>;
     let requestCount = 0;
     expiringRuntime = createHttpRuntime(testConfig, {
@@ -1150,11 +1168,11 @@ describe("HTTP MCP server", () => {
         }),
       });
 
-      expect(response.status).toBe(409);
+      expect(response.status).toBe(500);
       expect(await response.json()).toEqual(
         expect.objectContaining({
           error: expect.objectContaining({
-            message: "Session closed during request. Please re-initialize.",
+            message: "Internal server error.",
           }),
         }),
       );
@@ -1205,8 +1223,8 @@ describe("HTTP MCP server", () => {
         body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
       });
 
-      expect(response.status).toBe(409);
-      expect(await response.text()).toContain("Session closed during request");
+      expect(response.status).toBe(500);
+      expect(await response.text()).toContain("Internal server error");
       expect(guardedRuntime.getActiveSessionCount()).toBe(1);
     } finally {
       await guardedRuntime.closeAllSessions();

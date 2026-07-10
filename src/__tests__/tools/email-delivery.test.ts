@@ -42,6 +42,20 @@ describe("maybeDeliverToolEmail", () => {
     ]);
   });
 
+  it("flattens control characters in generated upload detail values", () => {
+    const lines = uploadEmailDetailLines({
+      intro: "Ready",
+      fileName: "sample\r\nBcc.pdf",
+      contentType: "application/pdf",
+      qurlLink: "https://qurl.link/example",
+      label: "Example\u2028Injected",
+    });
+
+    expect(lines).toContain("File Name: sample  Bcc.pdf");
+    expect(lines).toContain("Label: Example Injected");
+    expect(lines.join("\n")).not.toMatch(/[\r\u2028]/u);
+  });
+
   it("passes the same normalized unique recipients used by delivery reporting", async () => {
     vi.mocked(sendEmailMessage).mockResolvedValueOnce({
       attempted: true,

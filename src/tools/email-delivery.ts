@@ -4,6 +4,7 @@ import { EmailDeliverySetupError } from "../email-types.js";
 import type { EmailDeliveryResult } from "../email-types.js";
 import { formatErrorForLog } from "../logging.js";
 import { sendEmailMessage } from "../services/email.js";
+import { isControlCodePoint } from "../text.js";
 import { toStructuredContent } from "./_shared.js";
 
 export const emailDeliveryInputSchema = z.object({
@@ -51,15 +52,21 @@ export interface UploadEmailDetails {
   extraLines?: string[];
 }
 
+function singleLineEmailDetail(value: string): string {
+  return [...value]
+    .map((character) => (isControlCodePoint(character.codePointAt(0) ?? 0) ? " " : character))
+    .join("");
+}
+
 export function uploadEmailDetailLines(details: UploadEmailDetails): string[] {
   return [
     details.intro,
-    `File Name: ${details.fileName}`,
-    `Content Type: ${details.contentType}`,
-    `Secure Link: ${details.qurlLink}`,
-    ...(details.expiresAt ? [`Expires At: ${details.expiresAt}`] : []),
-    ...(details.qurlSite ? [`qURL Site: ${details.qurlSite}`] : []),
-    ...(details.label ? [`Label: ${details.label}`] : []),
+    `File Name: ${singleLineEmailDetail(details.fileName)}`,
+    `Content Type: ${singleLineEmailDetail(details.contentType)}`,
+    `Secure Link: ${singleLineEmailDetail(details.qurlLink)}`,
+    ...(details.expiresAt ? [`Expires At: ${singleLineEmailDetail(details.expiresAt)}`] : []),
+    ...(details.qurlSite ? [`qURL Site: ${singleLineEmailDetail(details.qurlSite)}`] : []),
+    ...(details.label ? [`Label: ${singleLineEmailDetail(details.label)}`] : []),
     ...(details.extraLines ?? []),
   ];
 }

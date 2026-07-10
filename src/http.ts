@@ -675,12 +675,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       }
       console.error(`Error handling MCP POST request (${formatErrorForLog(error)})`);
       if (!res.headersSent) {
-        const requestedSessionId = getSessionId(req);
-        if (requestedSessionId && !findAuthorizedSession(req)) {
-          rejectJsonRpc(res, 409, "Session closed during request. Please re-initialize.");
-        } else {
-          rejectJsonRpc(res, 500, "Internal server error.");
-        }
+        // Keep every unexpected transport failure identical. Branching on a
+        // caller-provided session ID or bearer here would reintroduce a
+        // session-existence oracle on the error path.
+        rejectJsonRpc(res, 500, "Internal server error.");
       }
     }
   };

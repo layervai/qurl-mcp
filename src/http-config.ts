@@ -133,6 +133,9 @@ export function getDefaultHttpConfigPath(): string {
 }
 
 export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): HttpServerConfig {
+  // parseConfigFile returns an intentionally unchecked JSON shape. Treat every
+  // value below as untrusted at runtime: the normalizers and bounded parsers
+  // accept unknown inputs and must remain the validation boundary.
   const fileConfig = parseConfigFile(configPath);
   const runtimeConfig = loadRuntimeConfig(getDefaultConfigPath());
   const port = parseBoundedInteger(
