@@ -461,7 +461,7 @@ export function normalizePublicVideoConfig(
   }
 
   return {
-    title: normalizePublicVideoTitle(trimString(rawConfig?.title)),
+    title: normalizePublicVideoTitle(rawConfig?.title),
     pagePath: normalizePublicPath(rawConfig?.pagePath, DEFAULT_PUBLIC_VIDEO_PAGE_PATH),
     filePath,
   };
