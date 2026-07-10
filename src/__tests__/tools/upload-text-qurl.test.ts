@@ -230,7 +230,9 @@ describe("uploadTextQurlTool", () => {
         recipients: ["alice@example.com"],
         sent: 1,
         failed: 0,
-        results: [{ email: "alice@example.com", success: true, message_id: "msg-1" }],
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+        ],
       });
 
       const tool = uploadTextQurlTool(

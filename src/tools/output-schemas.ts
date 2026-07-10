@@ -127,8 +127,8 @@ export const createQurlOutputSchema = z.object({
     .string()
     .optional()
     .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
-  qurl_site: z.string(),
-  expires_at: z.string(),
+  qurl_site: z.string().optional(),
+  expires_at: z.string().optional(),
   label: z.string().optional(),
   type: z.string().optional().describe("Resource type echoed from the create request"),
   email_delivery: emailDeliveryResultSchema.optional(),
@@ -182,7 +182,7 @@ export const mintLinkOutputSchema = z.object({
     .string()
     .optional()
     .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
-  expires_at: z.string(),
+  expires_at: z.string().optional(),
   type: z.string().optional().describe("Resource type echoed from the underlying resource"),
   email_delivery: emailDeliveryResultSchema.optional(),
 });

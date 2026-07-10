@@ -259,8 +259,8 @@ describe("createQurlTool", () => {
         sent: 2,
         failed: 0,
         results: [
-          { email: "alice@example.com", success: true, message_id: "msg-1" },
-          { email: "bob@example.com", success: true, message_id: "msg-2" },
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+          { email: "bob@example.com", success: true, skipped: false, message_id: "msg-2" },
         ],
       });
       const client = makeMockClient({ createQURL: mockCreate });
@@ -283,8 +283,8 @@ describe("createQurlTool", () => {
         sent: 2,
         failed: 0,
         results: [
-          { email: "alice@example.com", success: true, message_id: "msg-1" },
-          { email: "bob@example.com", success: true, message_id: "msg-2" },
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+          { email: "bob@example.com", success: true, skipped: false, message_id: "msg-2" },
         ],
       });
     });
@@ -299,11 +299,13 @@ describe("createQurlTool", () => {
         recipients: ["alice@example.com"],
         sent: 1,
         failed: 0,
-        results: [{ email: "alice@example.com", success: true, message_id: "msg-1" }],
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+        ],
       });
       const tool = createQurlTool(makeMockClient({ createQURL: mockCreate }), { mode: "http" });
 
-      await tool.handler({
+      const result = await tool.handler({
         target_url: "https://example.com/protected",
         email_delivery: { to: ["alice@example.com"] },
       });
@@ -314,6 +316,7 @@ describe("createQurlTool", () => {
         }),
         { allowServerApiKeyFallback: false },
       );
+      expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
       expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledWith(
         expect.objectContaining({
           text: expect.not.stringContaining("Expires At: undefined"),

@@ -12,6 +12,7 @@ import {
   type PublicVideoConfig,
 } from "./config.js";
 import { resolve } from "node:path";
+import { isIP } from "node:net";
 
 export interface HttpServerConfig {
   port: number;
@@ -118,6 +119,25 @@ function normalizeBaseUrl(value: unknown): string {
   return url.toString().replace(/\/$/, "");
 }
 
+function normalizeBindHost(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new Error("MCP_HOST/host must be a hostname or IP address without a port.");
+  }
+  const host = value.trim().toLowerCase();
+  const unbracketed = host.replace(/^\[(.*)\]$/, "$1");
+  if (isIP(unbracketed) !== 0) return unbracketed;
+  if (!host || host.includes(":")) {
+    throw new Error("MCP_HOST/host must be a hostname or IP address without a port.");
+  }
+  try {
+    const parsed = new URL(`http://${host}`);
+    if (parsed.hostname !== host || parsed.port !== "") throw new Error("invalid host");
+  } catch {
+    throw new Error("MCP_HOST/host must be a hostname or IP address without a port.");
+  }
+  return host;
+}
+
 function resolvePublicVideoFromHttpConfig(
   fileConfig: ReturnType<typeof parseConfigFile>,
 ): PublicVideoConfig | undefined {
@@ -154,21 +174,17 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
     65535,
   );
   const hostValue = process.env.MCP_HOST ?? fileConfig.host ?? DEFAULT_HOST;
-  if (typeof hostValue !== "string") {
-    throw new Error("MCP_HOST/host must be a hostname or IP address without a port.");
-  }
-  const host = hostValue.trim().toLowerCase();
-  if (!/^[A-Za-z0-9.:[\]-]+$/.test(host)) {
-    throw new Error("MCP_HOST/host must be a hostname or IP address without a port.");
-  }
-  const baseUrl = normalizeBaseUrl(
-    process.env.MCP_BASE_URL ?? fileConfig.baseUrl ?? `http://127.0.0.1:${port}`,
-  );
+  const host = normalizeBindHost(hostValue);
+  const configuredBaseUrl = process.env.MCP_BASE_URL ?? fileConfig.baseUrl;
+  const baseUrl = normalizeBaseUrl(configuredBaseUrl ?? `http://127.0.0.1:${port}`);
   const allowedHosts = normalizeAllowedHosts(
     process.env.MCP_ALLOWED_HOSTS ?? fileConfig.allowedHosts,
   );
   if (!isLoopbackHostname(host) && !allowedHosts) {
     throw new Error("allowedHosts is required when the HTTP listener is not bound to loopback.");
+  }
+  if (!isLoopbackHostname(host) && configuredBaseUrl === undefined) {
+    throw new Error("baseUrl is required when the HTTP listener is not bound to loopback.");
   }
   const publicVideo = runtimeConfig.publicVideo ?? resolvePublicVideoFromHttpConfig(fileConfig);
   const maxSessions = parseBoundedInteger(

@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { hkdf, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { getRequestQurlApiKey } from "../auth/request-context.js";
-import { loadRuntimeConfig, type RuntimeConfig } from "../config.js";
+import { loadRuntimeConfig, type RuntimeConfig, type SmtpConfig } from "../config.js";
 import { isEmailAddress, uniqueRecipients } from "../email-addresses.js";
 import { EmailDeliverySetupError } from "../email-types.js";
 import type { EmailDeliveryRecipientResult, EmailDeliveryResult } from "../email-types.js";
@@ -36,6 +36,17 @@ const emailQuotaByPrincipal = new Map<string, EmailQuota>();
 // policy should enforce it at the SMTP provider or gateway across replicas.
 const EMAIL_QUOTA_WINDOW_MS = 60 * 60 * 1000;
 const EMAIL_QUOTA_SALT = randomBytes(16);
+
+function formatSmtpErrorForLog(error: unknown, smtp: SmtpConfig): string {
+  if (!(error instanceof Error)) return formatErrorForLog(error);
+  let message = error.message;
+  for (const credential of [smtp.username, smtp.password]) {
+    if (credential) message = message.replaceAll(credential, "[REDACTED]");
+  }
+  const redacted = new Error(message);
+  redacted.name = error.name;
+  return formatErrorForLog(redacted);
+}
 
 export function clearEmailQuotaState(): void {
   emailQuotaByPrincipal.clear();
@@ -277,7 +288,9 @@ export async function sendEmailMessage(
           message_id: sent.messageId,
         });
       } catch (error) {
-        console.error(`Email delivery to one recipient failed (${formatErrorForLog(error)})`);
+        console.error(
+          `Email delivery to one recipient failed (${formatSmtpErrorForLog(error, smtp)})`,
+        );
         results.push({
           email: recipient,
           success: false,
@@ -291,7 +304,7 @@ export async function sendEmailMessage(
       transporter.close();
     } catch (error) {
       // Transport cleanup must never replace the delivery outcome.
-      console.error(`SMTP transport cleanup failed (${formatErrorForLog(error)})`);
+      console.error(`SMTP transport cleanup failed (${formatSmtpErrorForLog(error, smtp)})`);
     }
   }
 

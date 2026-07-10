@@ -1304,6 +1304,7 @@ describe("public video range streaming", () => {
       "bytes=-0",
       "bytes=0-1,2-3",
       "items=0-1",
+      "bytes=99999999999999999999-",
     ]) {
       const response = await fetch(`${baseUrl}/file`, { headers: { range } });
       expect(response.status).toBe(416);

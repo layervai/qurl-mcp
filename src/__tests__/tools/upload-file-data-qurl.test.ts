@@ -373,8 +373,8 @@ describe("uploadFileDataQurlTool", () => {
         sent: 2,
         failed: 0,
         results: [
-          { email: "alice@example.com", success: true, message_id: "msg-1" },
-          { email: "bob@example.com", success: true, message_id: "msg-2" },
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+          { email: "bob@example.com", success: true, skipped: false, message_id: "msg-2" },
         ],
       });
 
@@ -416,8 +416,8 @@ describe("uploadFileDataQurlTool", () => {
         sent: 2,
         failed: 0,
         results: [
-          { email: "alice@example.com", success: true, message_id: "msg-1" },
-          { email: "bob@example.com", success: true, message_id: "msg-2" },
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+          { email: "bob@example.com", success: true, skipped: false, message_id: "msg-2" },
         ],
       });
     });

@@ -175,6 +175,9 @@ export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: UploadFileQurlInput) => {
+      if (runtime.mode !== "stdio") {
+        throw new Error("upload_file_qurl is available only in stdio mode");
+      }
       const allowServerApiKeyFallback = allowsServerApiKeyFallback(runtime);
       const connectorConfig = getConnectorConfig(allowServerApiKeyFallback);
       const result = await uploadLocalFileAndMint(client, input, connectorConfig);

@@ -209,8 +209,8 @@ describe("mintLinkTool", () => {
         sent: 2,
         failed: 0,
         results: [
-          { email: "alice@example.com", success: true, message_id: "msg-1" },
-          { email: "bob@example.com", success: true, message_id: "msg-2" },
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+          { email: "bob@example.com", success: true, skipped: false, message_id: "msg-2" },
         ],
       });
       const client = makeMockClient({ mintLink: mockMint });
@@ -238,11 +238,13 @@ describe("mintLinkTool", () => {
         recipients: ["alice@example.com"],
         sent: 1,
         failed: 0,
-        results: [{ email: "alice@example.com", success: true, message_id: "msg-1" }],
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+        ],
       });
       const tool = mintLinkTool(makeMockClient({ mintLink: mockMint }));
 
-      await tool.handler({
+      const result = await tool.handler({
         resource_id: validResourceId,
         email_delivery: { to: ["alice@example.com"] },
       });
@@ -251,6 +253,7 @@ describe("mintLinkTool", () => {
         expect.objectContaining({ text: expect.not.stringContaining("Expires At: undefined") }),
         expect.anything(),
       );
+      expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
     });
   });
 });

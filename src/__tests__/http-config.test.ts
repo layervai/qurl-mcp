@@ -167,5 +167,20 @@ describe("HTTP listener config", () => {
 
     writeFileSync(configPath, JSON.stringify({ allowedHosts: ["mcp.example.com:443"] }));
     expect(() => loadHttpServerConfig(configPath)).toThrow("without ports or URL schemes");
+
+    writeFileSync(configPath, JSON.stringify({ host: "127.0.0.1:3000" }));
+    expect(() => loadHttpServerConfig(configPath)).toThrow("without a port");
+  });
+
+  it("requires an explicit public base URL for non-loopback listeners", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ host: "0.0.0.0", allowedHosts: ["mcp.example.com"] }),
+    );
+
+    expect(() => loadHttpServerConfig(configPath)).toThrow(
+      "baseUrl is required when the HTTP listener is not bound to loopback",
+    );
   });
 });

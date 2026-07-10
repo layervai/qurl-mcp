@@ -181,7 +181,9 @@ describe("uploadFileQurlTool", () => {
         recipients: ["alice@example.com"],
         sent: 1,
         failed: 0,
-        results: [{ email: "alice@example.com", success: true, message_id: "msg-1" }],
+        results: [
+          { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
+        ],
       });
       const tool = uploadFileQurlTool(
         makeMockClient({
@@ -252,8 +254,8 @@ describe("uploadFileQurlTool", () => {
       globalThis.fetch = vi.fn();
       const tool = uploadFileQurlTool(makeMockClient(), { mode: "http" });
 
-      await expect(tool.handler({ file_path: fixturePath })).resolves.toEqual(
-        expect.objectContaining({ isError: true }),
+      await expect(tool.handler({ file_path: fixturePath })).rejects.toThrow(
+        "available only in stdio mode",
       );
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });

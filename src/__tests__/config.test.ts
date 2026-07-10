@@ -14,6 +14,7 @@ describe("service URL security helpers", () => {
   it("rejects public IPv4 and IPv6 hosts from the loopback set", () => {
     expect(isLoopbackHostname("192.0.2.1")).toBe(false);
     expect(isLoopbackHostname("2001:db8::1")).toBe(false);
+    expect(isLoopbackHostname("::ffff:8.8.8.8")).toBe(false);
   });
 
   it.each([
