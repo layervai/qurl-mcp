@@ -427,27 +427,30 @@ export function normalizePublicVideoTitle(value: string | undefined): string {
   return title;
 }
 
-function resolvePublicVideoConfig(
-  fileConfig: Partial<PublicVideoConfig> | undefined,
+export function normalizePublicVideoConfig(
+  rawConfig: Partial<PublicVideoConfig> | undefined,
 ): PublicVideoConfig | undefined {
-  const filePath = normalizeAbsoluteFilePath(
-    process.env.QURL_PUBLIC_VIDEO_FILE_PATH ?? fileConfig?.filePath,
-    "publicVideo.filePath",
-  );
+  const filePath = normalizeAbsoluteFilePath(rawConfig?.filePath, "publicVideo.filePath");
   if (!filePath) {
     return undefined;
   }
 
   return {
-    title: normalizePublicVideoTitle(
-      trimString(process.env.QURL_PUBLIC_VIDEO_TITLE) ?? trimString(fileConfig?.title),
-    ),
-    pagePath: normalizePublicPath(
-      trimString(process.env.QURL_PUBLIC_VIDEO_PAGE_PATH) ?? trimString(fileConfig?.pagePath),
-      DEFAULT_PUBLIC_VIDEO_PAGE_PATH,
-    ),
+    title: normalizePublicVideoTitle(trimString(rawConfig?.title)),
+    pagePath: normalizePublicPath(rawConfig?.pagePath, DEFAULT_PUBLIC_VIDEO_PAGE_PATH),
     filePath,
   };
+}
+
+function resolvePublicVideoConfig(
+  fileConfig: Partial<PublicVideoConfig> | undefined,
+): PublicVideoConfig | undefined {
+  return normalizePublicVideoConfig({
+    filePath: process.env.QURL_PUBLIC_VIDEO_FILE_PATH ?? fileConfig?.filePath,
+    title: trimString(process.env.QURL_PUBLIC_VIDEO_TITLE) ?? trimString(fileConfig?.title),
+    pagePath:
+      trimString(process.env.QURL_PUBLIC_VIDEO_PAGE_PATH) ?? trimString(fileConfig?.pagePath),
+  });
 }
 
 function resolveSmtpConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpConfig | undefined {

@@ -3,10 +3,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { rateLimit } from "express-rate-limit";
 import { createHash } from "node:crypto";
-import { statSync, type ReadStream } from "node:fs";
+import { mkdtempSync, rmSync, statSync, writeFileSync, type ReadStream } from "node:fs";
 import { createServer as createNodeServer, request, type Server } from "node:http";
 import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { markRequestCredentialValidated } from "../auth/request-context.js";
 import { QURLAPIError } from "../client.js";
@@ -1576,6 +1578,21 @@ describe("public video range streaming", () => {
     const baseUrl = await start(videoApp);
 
     expect((await fetch(`${baseUrl}/file`)).status).toBe(404);
+  });
+
+  it("returns 404 when the configured video file is empty", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "qurl-empty-video-test-"));
+    const emptyFile = join(tempDir, "empty.mp4");
+    writeFileSync(emptyFile, "");
+    const videoApp = express();
+    videoApp.get("/file", (req, res) => streamPublicVideo(req, res, emptyFile));
+
+    try {
+      const baseUrl = await start(videoApp);
+      expect((await fetch(`${baseUrl}/file`)).status).toBe(404);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("destroys the response when the video stream fails after inspection", async () => {

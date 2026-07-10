@@ -34,7 +34,7 @@ describe("logging", () => {
     );
   });
 
-  it("redacts credentials and flattens untrusted error text", () => {
+  it("redacts documented qURL key shapes and flattens untrusted error text", () => {
     expect(sanitizeLogValue("Bearer secret-token\nlv_live_secret")).toBe(
       "Bearer [REDACTED] [REDACTED]",
     );
@@ -43,6 +43,9 @@ describe("logging", () => {
     );
     expect(sanitizeLogValue("Bearer opaque:token;tail next")).toBe("Bearer [REDACTED] next");
     expect(sanitizeLogValue("prefixlv_live_secret suffix")).toBe("prefix[REDACTED] suffix");
+    for (const documentedKey of ["lv_live_AbC123_-", "lv_test_987zyx-_"]) {
+      expect(sanitizeLogValue(`SDK-format key ${documentedKey}`)).toBe("SDK-format key [REDACTED]");
+    }
   });
 
   it("bounds every untrusted string log value to 512 characters", () => {
@@ -68,6 +71,34 @@ describe("logging", () => {
       expect(typeof rendered).toBe("string");
       expect(rendered).toHaveLength("2026-07-10 06:30:45.123 UTC ".length + 512);
       expect(rendered).not.toContain("lv_live_secret");
+    } finally {
+      for (const method of methods) {
+        const descriptor = descriptors.get(method);
+        if (descriptor) Object.defineProperty(console, method, descriptor);
+      }
+      delete (console as typeof console & { [patchFlag]?: boolean })[patchFlag];
+    }
+  });
+
+  it("collapses structured console context instead of deep-formatting credentials", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-07-10T06:30:45.123Z"));
+    const methods = ["log", "info", "debug", "warn", "error"] as const;
+    const descriptors = new Map(
+      methods.map((method) => [method, Object.getOwnPropertyDescriptor(console, method)]),
+    );
+    const patchFlag = Symbol.for("qurl-mcp.consoleTimestampPatched");
+    const sink = vi.fn();
+
+    Object.defineProperty(console, "error", { configurable: true, value: sink, writable: true });
+    try {
+      installTimestampedConsole();
+      console.error("request failed", { apiKey: "lv_live_nested_secret" });
+
+      expect(sink).toHaveBeenCalledWith(
+        "2026-07-10 06:30:45.123 UTC request failed [object Object]",
+      );
+      expect(sink.mock.calls.flat().join(" ")).not.toContain("lv_live_nested_secret");
     } finally {
       for (const method of methods) {
         const descriptor = descriptors.get(method);

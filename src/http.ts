@@ -364,7 +364,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       res.status(404).send("Configured video file was not found.");
       return;
     }
-    if (!stats.isFile()) {
+    if (!stats.isFile() || stats.size === 0) {
       res.status(404).send("Configured video file was not found.");
       return;
     }

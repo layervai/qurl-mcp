@@ -1,15 +1,11 @@
 import {
-  DEFAULT_PUBLIC_VIDEO_PAGE_PATH,
   MAX_CONFIG_ALLOWLIST_ENTRIES,
   getDefaultConfigPath,
   isLoopbackHostname,
   loadRuntimeConfig,
-  normalizeAbsoluteFilePath,
-  normalizePublicPath,
-  normalizePublicVideoTitle,
+  normalizePublicVideoConfig,
   normalizeServiceBaseUrl,
   parseConfigFile,
-  trimString,
   type PublicVideoConfig,
 } from "./config.js";
 import { resolve } from "node:path";
@@ -130,25 +126,6 @@ function normalizeBindHost(value: unknown): string {
   return host;
 }
 
-function resolvePublicVideoFromHttpConfig(
-  fileConfig: ReturnType<typeof parseConfigFile>,
-): PublicVideoConfig | undefined {
-  // Environment overrides are resolved through runtimeConfig.publicVideo,
-  // which is preferred below. This fallback intentionally reads only the
-  // HTTP file for deployments that keep media settings there.
-  const filePath = normalizeAbsoluteFilePath(
-    fileConfig.publicVideo?.filePath,
-    "publicVideo.filePath",
-  );
-  if (!filePath) return undefined;
-
-  return {
-    title: normalizePublicVideoTitle(trimString(fileConfig.publicVideo?.title)),
-    pagePath: normalizePublicPath(fileConfig.publicVideo?.pagePath, DEFAULT_PUBLIC_VIDEO_PAGE_PATH),
-    filePath,
-  };
-}
-
 const DEFAULT_HTTP_CONFIG_PATH = "qurl-mcp.http.json";
 
 export function getDefaultHttpConfigPath(): string {
@@ -178,7 +155,10 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
   if (!isLoopbackHostname(host) && configuredBaseUrl === undefined) {
     throw new Error("baseUrl is required when the HTTP listener is not bound to loopback.");
   }
-  const publicVideo = runtimeConfig.publicVideo ?? resolvePublicVideoFromHttpConfig(fileConfig);
+  // Environment/shared-runtime settings remain authoritative. The fallback
+  // reads only the HTTP file, but both paths use one shared normalizer.
+  const publicVideo =
+    runtimeConfig.publicVideo ?? normalizePublicVideoConfig(fileConfig.publicVideo);
   const maxSessions = parseBoundedInteger(
     process.env.MCP_MAX_SESSIONS ?? fileConfig.maxSessions,
     DEFAULT_MAX_SESSIONS,
