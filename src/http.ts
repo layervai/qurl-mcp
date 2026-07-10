@@ -48,6 +48,10 @@ type SessionContext = {
   sessionId: string;
   transport: StreamableHTTPServerTransport;
   server: ReturnType<typeof createServer>;
+  // The per-session client already retains this credential for downstream
+  // calls. Keep the same value here only so asynchronous teardown errors run
+  // through exact-credential redaction; never render or expose it.
+  bearerTokenForRedaction: string;
   bearerTokenDigest: Buffer;
   createdAt: number;
   lastActivityAt: number;
@@ -230,11 +234,14 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     const session = sessions.get(sessionId);
     if (!session) return;
     sessions.delete(sessionId);
-    try {
-      await session.server.close();
-    } catch (error) {
-      console.error(`[mcp-http] session close failed (${formatErrorForLog(error)})`);
-    }
+    await withRequestAuth(session.sessionId, session.bearerTokenForRedaction, async () => {
+      try {
+        await session.server.close();
+      } catch (error) {
+        // Format while the credential-scoped redaction context is still active.
+        console.error(`[mcp-http] session close failed (${formatErrorForLog(error)})`);
+      }
+    });
   }
 
   async function sweepExpiredSessions(now = Date.now()): Promise<number> {
@@ -623,6 +630,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
             sessionId: transport.sessionId,
             transport,
             server,
+            bearerTokenForRedaction: bearerToken,
             bearerTokenDigest,
             createdAt,
             lastActivityAt: createdAt,

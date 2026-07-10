@@ -450,5 +450,14 @@ describe("public video config", () => {
       JSON.stringify({ defaultQurlApiUrl: "https://api.example.com/#fragment" }),
     );
     expect(() => loadRuntimeConfig(configPath)).toThrow("a fragment");
+    clearRuntimeConfigCache();
+
+    for (const field of ["defaultQurlApiUrl", "defaultQurlConnectorUrl"] as const) {
+      writeFileSync(configPath, JSON.stringify({ [field]: { unexpected: true } }));
+      expect(() => loadRuntimeConfig(configPath)).toThrow(
+        "Configuration string fields must be strings",
+      );
+      clearRuntimeConfigCache();
+    }
   });
 });

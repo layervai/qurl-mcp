@@ -580,12 +580,14 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     throw new Error("maxUploadFileDataBytes must not exceed 100mb.");
   }
   const defaultQurlApiUrl = normalizeServiceBaseUrl(
-    trimString(process.env.QURL_API_URL) || fileConfig.defaultQurlApiUrl || DEFAULT_QURL_API_URL,
+    trimString(process.env.QURL_API_URL) ||
+      trimString(fileConfig.defaultQurlApiUrl) ||
+      DEFAULT_QURL_API_URL,
     "QURL_API_URL/defaultQurlApiUrl",
     true,
   );
   const connectorUrlValue =
-    trimString(process.env.QURL_CONNECTOR_URL) || fileConfig.defaultQurlConnectorUrl;
+    trimString(process.env.QURL_CONNECTOR_URL) || trimString(fileConfig.defaultQurlConnectorUrl);
   const defaultQurlConnectorUrl = connectorUrlValue
     ? normalizeServiceBaseUrl(connectorUrlValue, "QURL_CONNECTOR_URL/defaultQurlConnectorUrl", true)
     : undefined;

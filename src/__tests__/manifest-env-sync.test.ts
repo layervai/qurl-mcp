@@ -42,7 +42,9 @@ describe("published stdio environment manifests", () => {
     expect([smitherySchemaDefault, smitheryCommandDefault, serverDefault, runtimeDefault]).toEqual(
       Array(4).fill("https://api.layerv.ai"),
     );
-    expect(runtimeConfigSource).toContain("fileConfig.defaultQurlApiUrl || DEFAULT_QURL_API_URL");
+    expect(runtimeConfigSource).toMatch(
+      /trimString\(fileConfig\.defaultQurlApiUrl\)\s*\|\|\s*DEFAULT_QURL_API_URL/,
+    );
   });
 
   it("keeps documented commit scopes aligned with the bug-report component list", () => {

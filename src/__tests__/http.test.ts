@@ -151,6 +151,21 @@ describe("HTTP MCP server", () => {
     expect(response.headers.get("www-authenticate")).toContain("Bearer");
   });
 
+  it("rejects a non-Bearer Authorization scheme before parsing JSON", async () => {
+    const baseUrl = await start();
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: "Basic opaque-credential",
+        "content-type": "application/json",
+      },
+      body: "{not-json",
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain("Bearer");
+  });
+
   it("returns a bounded JSON-RPC error for malformed authenticated JSON", async () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/mcp`, {
@@ -546,7 +561,9 @@ describe("HTTP MCP server", () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list", params: {} }),
     });
     expect(listed.status).toBe(200);
-    expect(await listed.text()).toContain('"name":"create_qurl"');
+    const catalog = await listed.text();
+    expect(catalog).toContain('"name":"create_qurl"');
+    expect(catalog).not.toContain("lv_live_owner");
   });
 
   it("rejects missing and mismatched bearer tokens on session GET requests", async () => {
@@ -1363,6 +1380,26 @@ describe("HTTP MCP server", () => {
     }
   });
 
+  it("redacts arbitrary bearer formats from asynchronous session-close errors", async () => {
+    const baseUrl = await start();
+    const token = "future.secret+format";
+    await initialize(baseUrl, token);
+    const close = vi
+      .spyOn(McpServer.prototype, "close")
+      .mockRejectedValueOnce(new Error(`cleanup exposed ${token}`));
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      await closeAllSessions();
+      expect(error).toHaveBeenCalledWith(
+        "[mcp-http] session close failed (Error: cleanup exposed [REDACTED])",
+      );
+    } finally {
+      close.mockRestore();
+      error.mockRestore();
+    }
+  });
+
   it("handles explicit DELETE while a tool request is in flight", async () => {
     let releaseCall!: () => void;
     const callReleased = new Promise<void>((resolve) => {
@@ -1500,7 +1537,7 @@ describe("HTTP MCP server", () => {
         ...testConfig,
         host: "0.0.0.0",
         baseUrl: "https://mcp.example.com",
-        allowedHosts: ["mcp.example.com"],
+        allowedHosts: ["mcp.example.com", "alias.example.com", "127.0.0.1"],
       },
       { version: "0.0.0-test" },
     );
@@ -1509,6 +1546,22 @@ describe("HTTP MCP server", () => {
     expect(await requestWithHost(`${baseUrl}/healthz`, "mcp.example.com")).toBe(200);
     expect(await requestWithHost(`${baseUrl}/healthz`, "mcp.example.com:8443")).toBe(200);
     expect(await requestWithHost(`${baseUrl}/healthz`, "attacker.example")).toBe(403);
+    expect(
+      (
+        await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: { origin: "https://mcp.example.com" },
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: { origin: "https://alias.example.com" },
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it("adds defensive headers to public legal pages", async () => {
