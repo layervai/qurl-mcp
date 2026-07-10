@@ -90,6 +90,7 @@ describe("file name validation", () => {
     expect(() => validateFileNameContentType("document", "application/pdf")).toThrow(
       "supported PDF or raster image extension",
     );
+    expect(() => validateFileNameContentType(".png", "image/png")).toThrow("include a basename");
   });
 
   it("requires the PDF signature at the start of the file", () => {

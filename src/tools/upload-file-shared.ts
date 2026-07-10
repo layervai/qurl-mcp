@@ -124,7 +124,9 @@ export function getMaxUploadFileBytes(): number {
 export function validateFileNameContentType(fileName: string, contentType: string): void {
   const inferred = inferContentType(fileName);
   if (!inferred) {
-    throw new Error("file_name must use a supported PDF or raster image extension.");
+    throw new Error(
+      "file_name must include a basename and supported PDF or raster image extension (for example, image.png); content_type does not replace the required filename extension.",
+    );
   }
   if (inferred && inferred !== contentType) {
     throw new Error(`content_type ${contentType} does not match the filename extension.`);
