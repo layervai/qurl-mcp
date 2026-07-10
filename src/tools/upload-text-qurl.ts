@@ -15,7 +15,7 @@ import {
 } from "./email-delivery.js";
 import { uploadFileQurlOutputSchema } from "./output-schemas.js";
 import { getConnectorConfig } from "./upload-file-shared.js";
-import { uploadLocalFileAndMint } from "./upload-file-qurl.js";
+import { uploadGeneratedFileAndMint } from "./upload-file-qurl.js";
 import { uploadMintOptionsShape } from "./upload-mint-options.js";
 
 const supportedTextPayloadTypes = ["text", "markdown", "html", "json"] as const;
@@ -61,7 +61,7 @@ export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       "In v1 the tool does not apply markdown rich-text rendering; it writes the provided content into a plain-text PDF, uploads it to `${QURL_CONNECTOR_URL}/api/upload`, then mints a qURL from the returned `resource_id`. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` to match the uploaded-content sharing flow. " +
       "Requires `QURL_CONNECTOR_URL`; stdio reads `QURL_API_KEY` from server config, while HTTP uses the caller's bearer credential. " +
-      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
+      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
     inputSchema: uploadTextQurlSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {
@@ -91,7 +91,7 @@ export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       });
 
       try {
-        const result = await uploadLocalFileAndMint(
+        const result = await uploadGeneratedFileAndMint(
           client,
           {
             file_path: pdfFile.filePath,

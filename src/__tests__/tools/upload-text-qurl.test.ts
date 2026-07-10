@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -47,18 +47,20 @@ describe("uploadTextQurlTool", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     cleanupSpy.mockClear();
+    tempDir = mkdtempSync(join(tmpdir(), "qurl-upload-text-test-"));
+    const generatedFixturePath = join(tempDir, "generated.pdf");
+    copyFileSync(fixturePath, generatedFixturePath);
     vi.mocked(createTextPdfTempFile).mockImplementation(
       async ({ fileName }: { fileName?: string }) => ({
         cleanup: cleanupSpy,
         fileName: fileName?.replace(/\.[^.]+$/, ".pdf") ?? "content.pdf",
-        filePath: fixturePath,
+        filePath: generatedFixturePath,
         sizeBytes: fixtureSize,
       }),
     );
     process.env.QURL_API_KEY = "lv_live_test";
     process.env.QURL_CONNECTOR_URL = "https://connector.test";
     delete process.env.QURL_MCP_CONFIG;
-    tempDir = mkdtempSync(join(tmpdir(), "qurl-upload-text-test-"));
   });
 
   afterEach(() => {

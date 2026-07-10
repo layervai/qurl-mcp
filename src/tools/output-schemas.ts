@@ -199,7 +199,7 @@ export const uploadFileQurlOutputSchema = z.object({
     .string()
     .optional()
     .describe("Resource site URL when it could be read back from get_qurl"),
-  expires_at: z.string(),
+  expires_at: z.string().optional(),
   file_name: z.string().describe("Filename registered with the connector"),
   content_type: z.string().describe("MIME type used for the uploaded file"),
   size_bytes: z.number().describe("Uploaded file size in bytes"),

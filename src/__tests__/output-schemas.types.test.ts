@@ -20,6 +20,7 @@ import {
   qurlSchema,
   resolveQurlOutputSchema,
   updateQurlTokenOutputSchema,
+  uploadFileQurlOutputSchema,
 } from "../tools/output-schemas.js";
 import { sampleAccessToken, sampleQURL } from "./helpers.js";
 
@@ -50,6 +51,19 @@ describe("output schema <-> client type alignment", () => {
 
   it("mintLinkOutputSchema matches MintLinkOutput", () => {
     expectTypeOf<z.infer<typeof mintLinkOutputSchema>>().toEqualTypeOf<MintLinkOutput>();
+  });
+
+  it("allows upload mint responses to omit expires_at like mint_link", () => {
+    expect(
+      uploadFileQurlOutputSchema.safeParse({
+        resource_id: "r_upload12345",
+        qurl_id: "q_upload12345",
+        qurl_link: "https://qurl.link/#at_upload",
+        file_name: "sample.pdf",
+        content_type: "application/pdf",
+        size_bytes: 123,
+      }).success,
+    ).toBe(true);
   });
 
   it("accessTokenOutputSchema matches AccessToken", () => {

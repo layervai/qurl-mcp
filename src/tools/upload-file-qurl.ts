@@ -1,7 +1,8 @@
 import { Buffer } from "node:buffer";
 import { constants } from "node:fs";
 import { open, type FileHandle } from "node:fs/promises";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import {
@@ -99,7 +100,7 @@ export async function readFileWithinLimit(
   return buffer.subarray(0, totalBytesRead);
 }
 
-export async function uploadLocalFileAndMint(
+async function uploadLocalFileAndMint(
   client: IQURLClient,
   input: UploadFileQurlInput,
   connectorConfig: ConnectorConfig,
@@ -152,6 +153,23 @@ export async function uploadLocalFileAndMint(
   );
 }
 
+export async function uploadGeneratedFileAndMint(
+  client: IQURLClient,
+  input: UploadFileQurlInput,
+  connectorConfig: ConnectorConfig,
+) {
+  const sourcePath = resolve(input.file_path);
+  const relativeToTemp = relative(resolve(tmpdir()), sourcePath);
+  if (
+    isAbsolute(relativeToTemp) ||
+    relativeToTemp === ".." ||
+    relativeToTemp.startsWith(`..${sep}`)
+  ) {
+    throw new Error("Generated upload files must remain inside the server temporary directory.");
+  }
+  return uploadLocalFileAndMint(client, { ...input, file_path: sourcePath }, connectorConfig);
+}
+
 export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "upload_file_qurl",
@@ -165,7 +183,7 @@ export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       "The tool reads `file_path`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints a qURL from the returned `resource_id`. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +
       "Requires both `QURL_API_KEY` and `QURL_CONNECTOR_URL` in the server environment or runtime config. " +
-      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
+      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
     inputSchema: uploadFileQurlSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {

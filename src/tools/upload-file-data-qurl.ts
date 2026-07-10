@@ -148,6 +148,17 @@ function normalizeBase64Input(input: string): {
 }
 
 function decodeBase64File(input: string, maxBytes: number, contentType: string): Uint8Array {
+  const tooLargeMessage =
+    "Decoded file exceeds the allowed upload size. Reduce the file size and try again.";
+  const encodedCharacterLimit = Math.ceil((maxBytes * 4) / 3);
+  // Allow normal MIME line wrapping plus a bounded data-URL prefix, but reject
+  // runtime-oversized strings before trim/replace normalization copies them.
+  const rawCharacterLimit =
+    encodedCharacterLimit + Math.ceil(encodedCharacterLimit / 4) + MAX_DATA_URL_PREFIX_CHARACTERS;
+  if (input.length > rawCharacterLimit) {
+    throw new Error(tooLargeMessage);
+  }
+
   const normalized = normalizeBase64Input(input);
   if (normalized.dataUrlContentType && normalized.dataUrlContentType !== contentType) {
     throw new Error("Data URL media type does not match content_type.");
@@ -157,8 +168,6 @@ function decodeBase64File(input: string, maxBytes: number, contentType: string):
     : normalized.base64.endsWith("=")
       ? 1
       : 0;
-  const tooLargeMessage =
-    "Decoded file exceeds the allowed upload size. Reduce the file size and try again.";
   const decodedByteLength = (normalized.base64.length / 4) * 3 - paddingBytes;
   if (decodedByteLength > maxBytes) {
     throw new Error(tooLargeMessage);
@@ -194,7 +203,7 @@ export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntime
       "Supported MIME types are application/pdf, image/png, image/jpeg, image/webp, and image/gif. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +
       "Requires `QURL_CONNECTOR_URL`; stdio reads `QURL_API_KEY` from server config, while HTTP uses the caller's bearer credential. " +
-      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
+      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
     inputSchema: uploadFileDataQurlSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {

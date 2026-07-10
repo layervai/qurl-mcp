@@ -8,6 +8,7 @@ import { clearRuntimeConfigCache } from "../../config.js";
 import { makeMockClient } from "../helpers.js";
 import {
   readFileWithinLimit,
+  uploadGeneratedFileAndMint,
   uploadFileQurlSchema,
   uploadFileQurlTool as uploadFileQurlToolFactory,
 } from "../../tools/upload-file-qurl.js";
@@ -72,6 +73,16 @@ describe("uploadFileQurlTool", () => {
   });
 
   describe("handler", () => {
+    it("rejects generated-file helper paths outside the server temporary directory", async () => {
+      await expect(
+        uploadGeneratedFileAndMint(
+          makeMockClient(),
+          { file_path: fixturePath },
+          { uploadUrl: "https://connector.test/api/upload", apiKey: "lv_live_test" },
+        ),
+      ).rejects.toThrow("must remain inside the server temporary directory");
+    });
+
     it("rejects a file that grows beyond the limit after its initial stat", async () => {
       const filePath = join(tempDir!, "growing.pdf");
       writeFileSync(filePath, "%PDF-");
