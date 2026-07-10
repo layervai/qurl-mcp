@@ -1,4 +1,5 @@
 import { escapeHtml, escapeHttpUrlAttribute, REFERENCE_SITE_URL } from "./html.js";
+import { LEGAL_HTTP_PATH_PREFIX } from "../http-routes.js";
 
 type LegalDocument = {
   description: string;
@@ -9,7 +10,7 @@ type LegalDocument = {
 
 const legalDocuments: LegalDocument[] = [
   {
-    path: "/legal/privacy",
+    path: `${LEGAL_HTTP_PATH_PREFIX}/privacy`,
     title: "Privacy Policy",
     description: "Privacy Policy for qURL",
     markdown: `# Privacy Policy for qURL
@@ -74,7 +75,7 @@ If you have questions about this Privacy Policy, contact us at:
 `,
   },
   {
-    path: "/legal/terms",
+    path: `${LEGAL_HTTP_PATH_PREFIX}/terms`,
     title: "Terms of Service",
     description: "Terms of Service for qURL",
     markdown: `# Terms of Service for qURL

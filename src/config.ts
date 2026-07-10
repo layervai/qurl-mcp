@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { isIP } from "node:net";
 import { extname, isAbsolute, normalize, resolve } from "node:path";
 import { isEmailAddress, normalizeEmailAddress, normalizeEmailDomain } from "./email-addresses.js";
+import { RESERVED_PUBLIC_PATH_PREFIXES } from "./http-routes.js";
 
 export interface SmtpConfig {
   host: string;
@@ -377,7 +378,7 @@ export function normalizePublicPath(
     !/^\/[A-Za-z0-9._~/-]+$/.test(path) ||
     path.includes("//") ||
     segments.some((segment) => segment === "." || segment === "..") ||
-    ["/mcp", "/healthz", "/legal"].some(
+    RESERVED_PUBLIC_PATH_PREFIXES.some(
       (reserved) => path === reserved || path.startsWith(`${reserved}/`),
     )
   ) {

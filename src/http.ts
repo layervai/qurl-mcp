@@ -40,6 +40,7 @@ import {
   loadHttpServerConfig,
   type HttpServerConfig,
 } from "./http-config.js";
+import { HEALTH_HTTP_PATH, MCP_HTTP_PATH } from "./http-routes.js";
 import { getLegalDocuments, renderLegalDocumentHtml } from "./services/legal-pages.js";
 import { getPublicVideoFileRoute, renderPublicVideoPageHtml } from "./services/video-page.js";
 import { createServer } from "./server.js";
@@ -168,7 +169,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   // This is the complete stateful browser-route set today. Add any future
   // state-changing browser route here rather than assuming this check is global.
   app.use((req, res, next) => {
-    if (req.path !== "/mcp") {
+    if (req.path !== MCP_HTTP_PATH) {
       next();
       return;
     }
@@ -683,9 +684,15 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
   };
 
-  app.post("/mcp", mcpRateLimiter, ...authenticatedMcpMiddleware, parseMcpJsonBody, handleMcpPost);
+  app.post(
+    MCP_HTTP_PATH,
+    mcpRateLimiter,
+    ...authenticatedMcpMiddleware,
+    parseMcpJsonBody,
+    handleMcpPost,
+  );
 
-  app.get("/mcp", mcpRateLimiter, ...authenticatedMcpMiddleware, async (req, res) => {
+  app.get(MCP_HTTP_PATH, mcpRateLimiter, ...authenticatedMcpMiddleware, async (req, res) => {
     const authorizedSession = resolveAuthorizedSession(req);
     if (!authorizedSession) {
       res.status(404).send(REINITIALIZE_MESSAGE);
@@ -711,7 +718,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
   });
 
-  app.delete("/mcp", mcpRateLimiter, ...authenticatedMcpMiddleware, async (req, res) => {
+  app.delete(MCP_HTTP_PATH, mcpRateLimiter, ...authenticatedMcpMiddleware, async (req, res) => {
     const authorizedSession = resolveAuthorizedSession(req);
     if (!authorizedSession) {
       res.status(404).send(REINITIALIZE_MESSAGE);
@@ -836,14 +843,14 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     });
   }
 
-  app.get("/healthz", healthRateLimiter, (_req, res) => {
+  app.get(HEALTH_HTTP_PATH, healthRateLimiter, (_req, res) => {
     res.json({ ok: true });
   });
 
   // Keep JSON-RPC error envelopes scoped to the protocol route. Public pages
   // use a plain-text fallback so an unrelated handler failure cannot return a
   // misleading JSON-RPC response (or Express's default stack-bearing HTML).
-  app.use("/mcp", jsonBodyErrorHandler);
+  app.use(MCP_HTTP_PATH, jsonBodyErrorHandler);
   app.use(((error, _req, res, next) => {
     if (res.headersSent) {
       next(error);
