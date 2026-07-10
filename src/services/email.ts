@@ -51,6 +51,10 @@ async function settleBeforeDeliveryDeadline<T>(
   remainingMs: number,
 ): Promise<T> {
   if (remainingMs <= 0) throw new EmailDeliveryDeadlineError();
+  // Promise.race observes both branches, but keep an explicit rejection
+  // observer on the underlying Nodemailer operation as defense in depth when
+  // the deadline wins and transporter.close() settles that operation later.
+  void operation.catch(() => undefined);
   let timeout: ReturnType<typeof globalThis.setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
     timeout = globalThis.setTimeout(() => reject(new EmailDeliveryDeadlineError()), remainingMs);
@@ -63,7 +67,7 @@ async function settleBeforeDeliveryDeadline<T>(
   }
 }
 
-function formatSmtpErrorForLog(error: unknown, smtp: SmtpConfig): string {
+export function formatSmtpErrorForLog(error: unknown, smtp: SmtpConfig): string {
   if (!(error instanceof Error)) return formatErrorForLog(error);
   let message = error.message;
   for (const credential of [smtp.username, smtp.password]) {

@@ -4,6 +4,7 @@ import { accessPolicySchema } from "./create-qurl.js";
 import {
   emailDeliveryInputSchema,
   maybeDeliverToolEmail,
+  singleLineEmailDetail,
   toEmailAugmentedResult,
 } from "./email-delivery.js";
 import {
@@ -96,11 +97,13 @@ export function mintLinkTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
         defaultSubject: "Your qURL access link is ready",
         detailLines: [
           "A new qURL access link has been minted for you.",
-          `Resource ID: ${resource_id}`,
-          `Secure Link: ${result.data.qurl_link}`,
-          ...(result.data.expires_at ? [`Expires At: ${result.data.expires_at}`] : []),
-          ...(body.label ? [`Label: ${body.label}`] : []),
-          ...(result.data.type ? [`Type: ${result.data.type}`] : []),
+          `Resource ID: ${singleLineEmailDetail(resource_id)}`,
+          `Secure Link: ${singleLineEmailDetail(result.data.qurl_link)}`,
+          ...(result.data.expires_at
+            ? [`Expires At: ${singleLineEmailDetail(result.data.expires_at)}`]
+            : []),
+          ...(body.label ? [`Label: ${singleLineEmailDetail(body.label)}`] : []),
+          ...(result.data.type ? [`Type: ${singleLineEmailDetail(result.data.type)}`] : []),
         ],
       });
       return toEmailAugmentedResult(result.data, emailResult);

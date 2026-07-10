@@ -11,7 +11,7 @@ const bundledFontPath = fileURLToPath(
 );
 export const MAX_TEXT_PDF_CONTENT_CHARACTERS = 100_000;
 
-function sanitizePdfText(input: string, fallback: string): string {
+export function sanitizePdfText(input: string, fallback: string): string {
   let sanitized = "";
   let replacingControlCharacters = false;
   for (const character of input) {
@@ -27,7 +27,7 @@ function sanitizePdfText(input: string, fallback: string): string {
   return sanitized.trim() || fallback;
 }
 
-function ensurePdfFileName(input: string | undefined): string {
+export function ensurePdfFileName(input: string | undefined): string {
   const baseName = basename(sanitizePdfText(input ?? "content", "content")) || "content";
   const sourceExtension = extname(baseName);
   // extname(".pdf") is empty because it treats the value as a dotfile. Keep

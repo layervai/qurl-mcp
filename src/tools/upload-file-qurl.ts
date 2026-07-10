@@ -48,7 +48,7 @@ export const uploadFileQurlSchema = z
       .enum(supportedMimeTypes)
       .optional()
       .describe(
-        "Optional MIME type override. Supported: application/pdf, image/png, image/jpeg, image/webp, image/gif",
+        "Optional MIME type confirmation. It must match the filename extension. Supported: application/pdf, image/png, image/jpeg, image/webp, image/gif",
       ),
     email_delivery: emailDeliveryInputSchema
       .optional()

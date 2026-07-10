@@ -110,6 +110,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const mcpRateLimiter = rateLimit({
     windowMs: 60_000,
     limit: config.mcpRateLimitPerMinute,
+    // Pin express-rate-limit's IPv6 privacy-address aggregation policy rather
+    // than inheriting a library-default change on upgrade.
+    ipv6Subnet: 56,
     // `identifier` names the draft-8 RateLimit policy; request IP remains the
     // default key. The credential policy below supplies its own keyGenerator.
     identifier: "ip",
@@ -117,7 +120,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     legacyHeaders: false,
     handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
   });
-  const credentialRateLimiter = rateLimit({
+  const credentialRateLimitKeys = new WeakMap<express.Request, string>();
+  const credentialRateLimiterCore = rateLimit({
     windowMs: 60_000,
     // The matching threshold is intentional: the IP policy bounds aggregate
     // traffic from one network (including shared egress), while this policy
@@ -125,11 +129,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     // must satisfy both independent abuse controls.
     limit: config.mcpRateLimitPerMinute,
     identifier: "credential",
-    keyGenerator: (req) => {
-      const token = getAuthenticatedBearerToken(req);
-      if (!token) throw new Error("Credential rate limiter reached without authenticated bearer");
-      return digestBearerToken(token).toString("hex");
-    },
+    // The enclosing credentialRateLimiter wrapper always installs this value
+    // synchronously before invoking the core limiter.
+    keyGenerator: (req) => credentialRateLimitKeys.get(req)!,
     standardHeaders: "draft-8",
     legacyHeaders: false,
     handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
@@ -138,6 +140,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     rateLimit({
       windowMs: 60_000,
       limit: config.publicFileRateLimitPerMinute,
+      ipv6Subnet: 56,
       standardHeaders: "draft-8",
       legacyHeaders: false,
       handler: (_req, res) => {
@@ -154,22 +157,18 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     verifier: createPassthroughBearerVerifier(),
     requiredScopes: ["mcp:tools"],
   });
-  const requireRateLimitCredential: express.RequestHandler = (req, res, next) => {
-    if (!getAuthenticatedBearerToken(req)) {
+  const credentialRateLimiter: express.RequestHandler = (req, res, next) => {
+    const token = getAuthenticatedBearerToken(req);
+    if (!token) {
       rejectJsonRpc(res, 401, "Bearer authentication required.");
       return;
     }
-    next();
+    credentialRateLimitKeys.set(req, digestBearerToken(token).toString("hex"));
+    credentialRateLimiterCore(req, res, next);
   };
-  // Security invariant: keep the credential guard immediately before the
-  // credential-keyed limiter. The key generator deliberately throws instead
-  // of sharing a fallback bucket if a future middleware edit violates this
-  // order; tokenless requests must be rejected outright by the guard.
-  const authenticatedMcpMiddleware = [
-    bearerAuthMiddleware,
-    requireRateLimitCredential,
-    credentialRateLimiter,
-  ];
+  // The credential guard and limiter core are one middleware, so a future
+  // array reorder cannot make tokenless requests reach the keyed store.
+  const authenticatedMcpMiddleware = [bearerAuthMiddleware, credentialRateLimiter];
 
   if (config.allowedHosts?.length) {
     app.use(hostHeaderValidation(config.allowedHosts));
@@ -344,7 +343,12 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   }
 
   function getAuthenticatedBearerToken(req: express.Request): string | undefined {
-    const token = req.auth?.token?.trim();
+    // Narrow the SDK-installed field locally instead of depending on its
+    // ambient Express Request augmentation remaining source-compatible.
+    const auth = (req as express.Request & { auth?: unknown }).auth;
+    if (typeof auth !== "object" || auth === null || !("token" in auth)) return undefined;
+    const rawToken = auth.token;
+    const token = typeof rawToken === "string" ? rawToken.trim() : undefined;
     return token ? token : undefined;
   }
 

@@ -21,6 +21,7 @@ import { clearRuntimeConfigCache } from "../../config.js";
 import {
   clearEmailQuotaState,
   EMAIL_DELIVERY_DEADLINE_MS,
+  formatSmtpErrorForLog,
   hasEmailQuotaTrackingCapacity,
   sendEmailMessage,
 } from "../../services/email.js";
@@ -38,6 +39,25 @@ describe("sendEmailMessage", () => {
   const originalAllowedRecipientDomains = process.env.QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS;
   const originalApiKey = process.env.QURL_API_KEY;
   let tempDir: string | undefined;
+
+  it("directly redacts raw and encoded SMTP credentials from error logs", () => {
+    const formatted = formatSmtpErrorForLog(
+      new Error("mail+er mail%2Ber bWFpbCtlcg== s ecret s%20ecret cyBlY3JldA=="),
+      {
+        host: "smtp.example.com",
+        port: 587,
+        secure: false,
+        username: "mail+er",
+        password: "s ecret",
+        fromEmail: "noreply@example.com",
+        maxRecipientsPerMessage: 10,
+        maxRecipientsPerHour: 100,
+      },
+    );
+
+    expect(formatted).not.toMatch(/mail\+er|mail%2Ber|bWFpbCtlcg==|s ecret|s%20ecret|cyBlY3JldA==/);
+    expect(formatted).toContain("[REDACTED]");
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -546,7 +566,12 @@ describe("sendEmailMessage", () => {
       }),
     );
     process.env.QURL_MCP_CONFIG = configPath;
-    nodemailerMocks.sendMail.mockReturnValueOnce(new Promise(() => undefined));
+    let rejectLateSend!: (error: Error) => void;
+    nodemailerMocks.sendMail.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectLateSend = reject;
+      }),
+    );
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
 
     try {
@@ -576,6 +601,8 @@ describe("sendEmailMessage", () => {
         }),
       ]);
       expect(nodemailerMocks.close).toHaveBeenCalledOnce();
+      rejectLateSend(new Error("transport settled after deadline"));
+      await new Promise<void>((resolve) => globalThis.setImmediate(resolve));
     } finally {
       vi.useRealTimers();
     }

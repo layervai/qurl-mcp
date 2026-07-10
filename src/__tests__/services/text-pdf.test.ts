@@ -4,13 +4,29 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { Writable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createTextPdfTempFile, resolveFontPath } from "../../services/text-pdf.js";
+import {
+  createTextPdfTempFile,
+  ensurePdfFileName,
+  resolveFontPath,
+  sanitizePdfText,
+} from "../../services/text-pdf.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
 describe("createTextPdfTempFile", () => {
+  it("directly sanitizes PDF metadata controls and fallback-only values", () => {
+    expect(sanitizePdfText("Quarterly\u0000\n\u2028Report", "fallback")).toBe("Quarterly Report");
+    expect(sanitizePdfText("\u0000\n", "fallback")).toBe("fallback");
+  });
+
+  it("directly normalizes basename, extension, and empty-stem filename cases", () => {
+    expect(ensurePdfFileName("../REPORT.PDF")).toBe("REPORT.pdf");
+    expect(ensurePdfFileName("archive.tar.gz")).toBe("archive.tar.pdf");
+    expect(ensurePdfFileName("..pdf")).toBe("content.pdf");
+  });
+
   it("creates a pdf, normalizes the file name, and cleans it up", async () => {
     const result = await createTextPdfTempFile({
       content: "窗前明月光",

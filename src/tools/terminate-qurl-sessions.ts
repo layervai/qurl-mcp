@@ -49,7 +49,9 @@ export function terminateQurlSessionsTool(
             resource_id: input.resource_id,
             session_id: input.session_id,
             // The API returns 204 for a single session delete, so the tool
-            // synthesizes the count from the successful operation.
+            // synthesizes the count from the successful operation. This means
+            // `terminated: 1` confirms accepted idempotent deletion semantics;
+            // it cannot prove that the session still existed at request time.
             terminated: 1,
             message: `qURL session ${input.session_id} is terminated.`,
           };

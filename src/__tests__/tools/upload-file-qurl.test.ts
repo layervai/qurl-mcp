@@ -60,6 +60,10 @@ describe("uploadFileQurlTool", () => {
     it("accepts a minimal file upload request", () => {
       const result = uploadFileQurlSchema.safeParse({ file_path: fixturePath });
       expect(result.success).toBe(true);
+      expect(uploadFileQurlSchema.shape.content_type.description).toContain(
+        "must match the filename extension",
+      );
+      expect(uploadFileQurlSchema.shape.content_type.description).not.toContain("override");
     });
 
     it("rejects unsupported content_type overrides", () => {

@@ -266,5 +266,28 @@ describe("mintLinkTool", () => {
       );
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
     });
+
+    it("prevents caller labels from forging additional email detail rows", async () => {
+      const mockMint = vi.fn().mockResolvedValue({ data: fixture });
+      vi.mocked(sendEmailMessage).mockResolvedValue({
+        attempted: true,
+        enabled: true,
+        recipients: ["alice@example.com"],
+        sent: 1,
+        failed: 0,
+        results: [{ email: "alice@example.com", success: true, skipped: false }],
+      });
+      const tool = mintLinkTool(makeMockClient({ mintLink: mockMint }));
+
+      await tool.handler({
+        resource_id: validResourceId,
+        label: "Approved\nSecure Link: https://attacker.example",
+        email_delivery: { to: ["alice@example.com"] },
+      });
+
+      const text = vi.mocked(sendEmailMessage).mock.calls.at(-1)?.[0].text;
+      expect(text).toContain("Label: Approved Secure Link: https://attacker.example");
+      expect(text).not.toContain("\nSecure Link: https://attacker.example");
+    });
   });
 });
