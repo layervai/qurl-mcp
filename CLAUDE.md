@@ -114,13 +114,19 @@ npm run format
 
 ## Configuration
 
-| Variable               | Required  | Description                                                          | Default                 |
-| ---------------------- | --------- | -------------------------------------------------------------------- | ----------------------- |
-| `QURL_API_KEY`         | Yes       | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes | —                       |
-| `QURL_API_URL`         | No        | qURL API base URL                                                    | `https://api.layerv.ai` |
-| `QURL_CONNECTOR_URL`   | Uploads   | HTTPS connector base URL                                             | —                       |
-| `QURL_MCP_CONFIG`      | No        | Shared runtime config path                                           | `qurl-mcp.config.json`  |
-| `QURL_MCP_HTTP_CONFIG` | HTTP only | HTTP listener config path                                            | `qurl-mcp.http.json`    |
+| Variable                                                            | Required  | Description                                                          | Default                 |
+| ------------------------------------------------------------------- | --------- | -------------------------------------------------------------------- | ----------------------- |
+| `QURL_API_KEY`                                                      | Yes       | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes | —                       |
+| `QURL_API_URL`                                                      | No        | qURL API base URL                                                    | `https://api.layerv.ai` |
+| `QURL_CONNECTOR_URL`                                                | Uploads   | HTTPS connector base URL                                             | —                       |
+| `QURL_MCP_CONFIG`                                                   | No        | Shared runtime config path                                           | `qurl-mcp.config.json`  |
+| `QURL_MCP_HTTP_CONFIG`                                              | HTTP only | HTTP listener config path                                            | `qurl-mcp.http.json`    |
+| `MCP_HOST`, `MCP_PORT`                                              | HTTP only | Listener address and port                                            | `127.0.0.1`, `3000`     |
+| `MCP_BASE_URL`, `MCP_ALLOWED_HOSTS`, `MCP_TRUST_PROXY_HOPS`         | HTTP only | Public origin, Host allowlist, and exact trusted proxy count         | See `README.md`         |
+| `MCP_MAX_SESSIONS*`, `MCP_SESSION_*`, `MCP_*_RATE_LIMIT_PER_MINUTE` | HTTP only | Session caps/TTLs and request limits                                 | See `README.md`         |
+| `MCP_MAX_UPLOAD_FILE_DATA_BYTES`                                    | No        | Decoded attachment limit                                             | `10485760`              |
+| `QURL_SMTP_*`                                                       | Email     | SMTP credentials, sender, allowlists, and quotas                     | Disabled                |
+| `QURL_PUBLIC_VIDEO_*`                                               | HTTP only | Optional public video page/file settings                             | Disabled                |
 
 See `README.md` and the two tracked `*.example.json` files for the complete
 SMTP, upload-limit, proxy, session, and public-page settings.
