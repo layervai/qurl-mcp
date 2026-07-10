@@ -157,6 +157,25 @@ describe("public video config", () => {
     );
   });
 
+  it("rejects an implicit-TLS SMTP port configured without secure mode", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 465,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+        },
+      }),
+    );
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow("port 465 requires smtp.secure to be true");
+  });
+
   it("rejects pathological SMTP recipient allowlists", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(

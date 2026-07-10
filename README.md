@@ -262,7 +262,8 @@ each delivery batch. Failed SMTP attempts still consume quota—including when a
 transient outage results in zero delivered messages—so repeated failures cannot
 bypass the abuse limit.
 Transport encryption is mandatory: `smtp.secure: true` uses implicit TLS,
-while `smtp.secure: false` requires a successful STARTTLS upgrade.
+while `smtp.secure: false` requires a successful STARTTLS upgrade. Port 465 is
+reserved for implicit TLS and therefore requires `smtp.secure: true`.
 Hourly quota state is maintained per server process: it resets on restart and
 is not shared across replicas. Operators running multiple instances should
 enforce a corresponding aggregate limit at the SMTP provider or gateway.

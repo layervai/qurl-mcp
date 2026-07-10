@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { domainToASCII } from "node:url";
 
-const emailAddressSchema = z.email();
-
-export function isEmailAddress(value: string): boolean {
-  return emailAddressSchema.safeParse(normalizeEmailAddress(value)).success;
-}
-
 export function normalizeEmailDomain(value: string): string {
   const normalized = value.trim().normalize("NFC").toLowerCase().replace(/\.$/, "");
   return domainToASCII(normalized);
@@ -22,6 +16,15 @@ export function normalizeEmailAddress(value: string): string {
   const localPart = normalized.slice(0, separator).toLowerCase();
   const domain = normalizeEmailDomain(normalized.slice(separator + 1));
   return `${localPart}@${domain}`;
+}
+
+export const normalizedEmailAddressSchema = z
+  .string()
+  .transform(normalizeEmailAddress)
+  .pipe(z.email());
+
+export function isEmailAddress(value: string): boolean {
+  return normalizedEmailAddressSchema.safeParse(value).success;
 }
 
 export function uniqueRecipients(recipients: string[]): string[] {

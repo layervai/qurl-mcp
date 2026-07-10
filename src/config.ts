@@ -417,6 +417,9 @@ function resolveSmtpConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpCon
   if (!host || !port || secure === undefined || !username || !password || !fromEmail) {
     return undefined;
   }
+  if (port === 465 && !secure) {
+    throw new Error("SMTP port 465 requires smtp.secure to be true.");
+  }
 
   if (/[\r\n]/.test(fromEmail)) {
     throw new Error("SMTP fromEmail must be a single line.");

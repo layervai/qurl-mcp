@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { uniqueRecipients } from "../email-addresses.js";
+import { normalizedEmailAddressSchema, uniqueRecipients } from "../email-addresses.js";
 import { EmailDeliverySetupError } from "../email-types.js";
 import type { EmailDeliveryResult } from "../email-types.js";
 import { formatErrorForLog } from "../logging.js";
@@ -8,7 +8,7 @@ import { toStructuredContent } from "./_shared.js";
 
 export const emailDeliveryInputSchema = z.object({
   to: z
-    .array(z.email())
+    .array(normalizedEmailAddressSchema)
     .min(1)
     .max(100)
     .describe(

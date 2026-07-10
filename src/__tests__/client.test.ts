@@ -220,15 +220,21 @@ describe("QURLClient adapter", () => {
         ],
         request_id: "req_fail",
       });
-      const out = await newClient().batchCreate({
-        items: [{ target_url: "ftp://a" }, { target_url: "ftp://b" }],
-      });
+      let credentialValidated = false;
+      const out = await runWithRequestAuthContext(
+        { markCredentialValidated: () => (credentialValidated = true) },
+        () =>
+          newClient().batchCreate({
+            items: [{ target_url: "ftp://a" }, { target_url: "ftp://b" }],
+          }),
+      );
 
       expect(out.data.succeeded).toBe(0);
       expect(out.data.failed).toBe(2);
       expect(out.data.results).toHaveLength(2);
       expect(out.data.results[0].success).toBe(false);
       expect(out.meta.request_id).toBe("req_fail");
+      expect(credentialValidated).toBe(true);
     });
 
     it("listResourceSessions maps sessions → data", async () => {

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { maybeDeliverToolEmail, uploadEmailDetailLines } from "../../tools/email-delivery.js";
+import {
+  emailDeliveryInputSchema,
+  maybeDeliverToolEmail,
+  uploadEmailDetailLines,
+} from "../../tools/email-delivery.js";
 
 vi.mock("../../services/email.js", () => ({
   sendEmailMessage: vi.fn(),
@@ -8,6 +12,12 @@ vi.mock("../../services/email.js", () => ({
 import { sendEmailMessage } from "../../services/email.js";
 
 describe("maybeDeliverToolEmail", () => {
+  it("normalizes IDNA recipients through the shared email schema", () => {
+    expect(emailDeliveryInputSchema.parse({ to: [" Alice@BÜCHER.Example. "] }).to).toEqual([
+      "alice@xn--bcher-kva.example",
+    ]);
+  });
+
   it("formats shared upload details in a stable order", () => {
     expect(
       uploadEmailDetailLines({
