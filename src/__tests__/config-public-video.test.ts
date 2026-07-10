@@ -189,8 +189,12 @@ describe("public video config", () => {
   it.each([
     ["host", "smtp.example.com\r\nattacker.example.com", "SMTP host"],
     ["host", "smtp_example.com", "SMTP host"],
+    ["host", `${"a".repeat(64)}.example.com`, "SMTP host"],
+    ["host", "-smtp.example.com", "SMTP host"],
     ["username", "mailer\nadmin", "SMTP username"],
+    ["username", "u".repeat(321), "SMTP username"],
     ["password", "secret\r\nnext", "SMTP password"],
+    ["password", "p".repeat(4097), "SMTP password"],
   ])("rejects malformed SMTP %s values", (field, value, message) => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(

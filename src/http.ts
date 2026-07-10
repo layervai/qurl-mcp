@@ -200,6 +200,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       session?.credentialValidated === true &&
       bearerToken !== undefined &&
       bearerTokenMatches(bearerToken, session.bearerTokenDigest);
+    // Session lookup alone is not authorization: the digest re-check prevents
+    // a guessed or leaked session ID from unlocking the larger parser ceiling.
     // This is a memory-amplification gate, not a qURL scope boundary. Any key
     // authenticated by a successful API call may use the configured parser;
     // each subsequent operation still enforces its own downstream scopes.
@@ -565,6 +567,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
           const transport =
             options.transportFactory?.() ??
             new StreamableHTTPServerTransport({
+              // The SDK's duplicate Host/Origin options are deprecated in
+              // favor of external middleware. Our checks run globally before
+              // auth, parsing, or any route can reach this transport.
               sessionIdGenerator: () => randomUUID(),
             });
           let closedBeforeRegistration = false;
@@ -864,7 +869,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       }
       if (config.trustProxyHops === 0 && !isLoopbackHostname(host)) {
         console.warn(
-          "Warning: non-loopback HTTP listener has trustProxyHops=0; clients behind a reverse proxy will share the proxy's rate-limit bucket. Set the exact trusted hop count.",
+          "Warning: non-loopback HTTP listener has trustProxyHops=0, which is valid only for direct connections. Clients behind a reverse proxy will share the proxy's rate-limit bucket; set the exact trusted hop count.",
         );
       }
       logInfo("HTTP and runtime config loaded.");

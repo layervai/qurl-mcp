@@ -44,6 +44,7 @@ describe("parseSizeBytes", () => {
     expect(parseSizeBytes("2kb", 1, "size")).toBe(2 * 1024);
     expect(parseSizeBytes("1.5mb", 1, "size")).toBe(1.5 * 1024 * 1024);
     expect(() => parseSizeBytes("1.5b", 1, "size")).toThrow("whole number of bytes");
+    expect(() => parseSizeBytes("1.1mb", 1, "size")).toThrow("whole number of bytes");
   });
 
   it("rejects zero, negative, and malformed sizes", () => {

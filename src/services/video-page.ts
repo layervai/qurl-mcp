@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import type { PublicVideoConfig } from "../config.js";
-import { escapeHtml, REFERENCE_SITE_URL } from "./html.js";
+import { escapeHtml, escapeHttpUrlAttribute, REFERENCE_SITE_URL } from "./html.js";
 
 export function getPublicVideoFileRoute(pagePath: string): string {
   // pagePath has already passed normalizePublicPath at configuration load.
@@ -19,7 +19,7 @@ export function renderPublicVideoPageHtml(config: PublicVideoConfig, baseUrl: st
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(config.title)} | LayerV</title>
     <meta name="description" content="${escapeHtml(config.title)} video playback page served by qURL." />
-    <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />
+    <link rel="canonical" href="${escapeHttpUrlAttribute(canonicalUrl)}" />
     <style>
       :root {
         color-scheme: dark;
@@ -260,11 +260,11 @@ export function renderPublicVideoPageHtml(config: PublicVideoConfig, baseUrl: st
   <body>
     <div class="shell">
       <header class="topbar">
-        <a class="brand" href="${escapeHtml(REFERENCE_SITE_URL)}" aria-label="LayerV Home">
+        <a class="brand" href="${escapeHttpUrlAttribute(REFERENCE_SITE_URL)}" aria-label="LayerV Home">
           <span class="brand-mark" aria-hidden="true"></span>
           <span>LayerV Media</span>
         </a>
-        <a class="home-link" href="${escapeHtml(REFERENCE_SITE_URL)}">Back to layerv.ai</a>
+        <a class="home-link" href="${escapeHttpUrlAttribute(REFERENCE_SITE_URL)}">Back to layerv.ai</a>
       </header>
 
       <section class="hero">
@@ -294,19 +294,19 @@ export function renderPublicVideoPageHtml(config: PublicVideoConfig, baseUrl: st
         </div>
         <div class="video-frame">
           <video controls playsinline preload="metadata">
-            <source src="${escapeHtml(videoUrl)}" type="video/mp4" />
+            <source src="${escapeHttpUrlAttribute(videoUrl)}" type="video/mp4" />
             Your browser does not support the MP4 video element.
           </video>
         </div>
         <div class="video-meta">
           <span>Route: ${escapeHtml(config.pagePath)}</span>
-          <a href="${escapeHtml(videoUrl)}">Open raw video stream</a>
+          <a href="${escapeHttpUrlAttribute(videoUrl)}">Open raw video stream</a>
         </div>
       </section>
 
       <footer class="footer">
         <span>LayerV public media page</span>
-        <a href="${escapeHtml(REFERENCE_SITE_URL)}">${escapeHtml(REFERENCE_SITE_URL)}</a>
+        <a href="${escapeHttpUrlAttribute(REFERENCE_SITE_URL)}">${escapeHtml(REFERENCE_SITE_URL)}</a>
       </footer>
     </div>
   </body>

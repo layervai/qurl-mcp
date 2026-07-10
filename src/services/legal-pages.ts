@@ -1,4 +1,4 @@
-import { escapeHtml, REFERENCE_SITE_URL } from "./html.js";
+import { escapeHtml, escapeHttpUrlAttribute, REFERENCE_SITE_URL } from "./html.js";
 
 type LegalDocument = {
   description: string;
@@ -262,7 +262,7 @@ function renderLegalShell(document: LegalDocument, baseUrl: string): string {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${escapeHtml(document.description)} | LayerV</title>
     <meta name="description" content="${escapeHtml(document.description)}" />
-    <link rel="canonical" href="${escapeHtml(canonicalUrl)}" />
+    <link rel="canonical" href="${escapeHttpUrlAttribute(canonicalUrl)}" />
     <style>
       :root {
         color-scheme: dark;
@@ -542,11 +542,11 @@ function renderLegalShell(document: LegalDocument, baseUrl: string): string {
   <body>
     <div class="shell">
       <header class="topbar">
-        <a class="brand" href="${escapeHtml(REFERENCE_SITE_URL)}" aria-label="LayerV Home">
+        <a class="brand" href="${escapeHttpUrlAttribute(REFERENCE_SITE_URL)}" aria-label="LayerV Home">
           <span class="brand-mark" aria-hidden="true"></span>
           <span>LayerV Legal</span>
         </a>
-        <a class="home-link" href="${escapeHtml(REFERENCE_SITE_URL)}">Back to layerv.ai</a>
+        <a class="home-link" href="${escapeHttpUrlAttribute(REFERENCE_SITE_URL)}">Back to layerv.ai</a>
       </header>
 
       <section class="hero">
@@ -581,7 +581,7 @@ function renderLegalShell(document: LegalDocument, baseUrl: string): string {
 
       <footer class="footer">
         <span>LayerV legal pages</span>
-        <a href="${escapeHtml(REFERENCE_SITE_URL)}">${escapeHtml(REFERENCE_SITE_URL)}</a>
+        <a href="${escapeHttpUrlAttribute(REFERENCE_SITE_URL)}">${escapeHtml(REFERENCE_SITE_URL)}</a>
       </footer>
     </div>
   </body>
