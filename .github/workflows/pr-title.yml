@@ -32,7 +32,6 @@ jobs:
             client
             resources
             prompts
-            http
             ci
             deps
           requireScope: false
