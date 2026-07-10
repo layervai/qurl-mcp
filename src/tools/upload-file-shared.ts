@@ -295,6 +295,17 @@ async function readConnectorResponseBody(response: Response): Promise<string> {
 async function processConnectorResponse(response: Response): Promise<ConnectorUploadResponse> {
   const requestId = response.headers.get("x-request-id") ?? undefined;
   const raw = await readConnectorResponseBody(response);
+  const contentType = response.headers.get("content-type")?.toLowerCase();
+  if (response.ok && contentType && !contentType.includes("json")) {
+    throw new QURLAPIError(
+      0,
+      "unexpected_response",
+      "Connector upload succeeded with a non-JSON response.",
+      undefined,
+      undefined,
+      requestId,
+    );
+  }
   const parsed = parseJsonBody(raw);
 
   if (!response.ok) {

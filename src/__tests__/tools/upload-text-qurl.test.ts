@@ -89,6 +89,12 @@ describe("uploadTextQurlTool", () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it("rejects an empty upload label", () => {
+      expect(
+        uploadTextQurlSchema.safeParse({ type: "text", content: "hello", label: "" }).success,
+      ).toBe(false);
+    });
   });
 
   describe("handler", () => {

@@ -4,6 +4,7 @@ import { accessPolicySchema } from "./create-qurl.js";
 export const uploadMintOptionsShape = {
   label: z
     .string()
+    .min(1)
     .max(500)
     .optional()
     .describe("Human-readable label identifying who this qURL is for (max 500 chars)"),

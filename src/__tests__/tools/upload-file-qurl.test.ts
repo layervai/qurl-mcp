@@ -292,6 +292,22 @@ describe("uploadFileQurlTool", () => {
       });
     });
 
+    it("rejects a successful connector response with a non-JSON content type", async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+      const tool = uploadFileQurlTool(makeMockClient());
+
+      await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject<QURLAPIError>({
+        statusCode: 0,
+        code: "unexpected_response",
+        message: "Connector upload succeeded with a non-JSON response.",
+      });
+    });
+
     it("distinguishes malformed connector resource IDs from missing fields", async () => {
       globalThis.fetch = vi.fn().mockResolvedValue(
         new Response(JSON.stringify({ resource_id: "wrong-shape" }), {
