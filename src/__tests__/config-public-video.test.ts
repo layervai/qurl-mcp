@@ -176,6 +176,25 @@ describe("public video config", () => {
     expect(() => loadRuntimeConfig(configPath)).toThrow("port 465 requires smtp.secure to be true");
   });
 
+  it("rejects a present but malformed SMTP secure value", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: "tru",
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+        },
+      }),
+    );
+
+    expect(() => loadRuntimeConfig(configPath)).toThrow("SMTP secure must be true or false");
+  });
+
   it("rejects pathological SMTP recipient allowlists", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(

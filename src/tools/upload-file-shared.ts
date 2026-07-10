@@ -70,10 +70,9 @@ export function getConnectorConfig(allowServerApiKeyFallback = true): ConnectorC
     );
   }
 
-  const normalizedConnectorURL = connectorURL.replace(/\/$/, "");
   // Validate operator configuration during preflight, before callers decode
   // or read a potentially large upload payload.
-  const uploadUrl = getConnectorUploadUrl(normalizedConnectorURL);
+  const uploadUrl = getConnectorUploadUrl(connectorURL);
 
   return { apiKey, uploadUrl };
 }
@@ -221,10 +220,19 @@ function extractConnectorError(parsed: unknown): {
  */
 function throwConnectorError(response: Response, parsed: unknown, requestId?: string): never {
   const { code, detail, type, instance } = extractConnectorError(parsed);
+  const safeDetail = detail
+    ? Array.from(detail, (character) =>
+        isControlCodePoint(character.codePointAt(0) ?? 0) ? " " : character,
+      )
+        .join("")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 1024)
+    : undefined;
   throw new QURLAPIError(
     response.status,
     code,
-    detail || `Connector upload failed with HTTP ${response.status}`,
+    safeDetail || `Connector upload failed with HTTP ${response.status}`,
     type,
     instance,
     requestId,

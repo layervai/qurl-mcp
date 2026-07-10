@@ -69,13 +69,19 @@ function parseBoundedInteger(
 function normalizeAllowedHosts(hosts: unknown): string[] | undefined {
   if (!hosts) return undefined;
   const values = typeof hosts === "string" ? hosts.split(",") : hosts;
-  if (!Array.isArray(values) || values.some((host) => typeof host !== "string")) {
+  if (!Array.isArray(values)) {
     throw new Error("allowedHosts must be an array or comma-separated list of hostnames or IPs.");
   }
   if (values.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
     throw new Error(`allowedHosts must contain at most ${MAX_CONFIG_ALLOWLIST_ENTRIES} entries.`);
   }
-  const stringValues = values.filter((host): host is string => typeof host === "string");
+  const stringValues: string[] = [];
+  for (const host of values) {
+    if (typeof host !== "string") {
+      throw new Error("allowedHosts must contain only hostnames or IPs.");
+    }
+    stringValues.push(host);
+  }
   const normalized = Array.from(
     new Set(stringValues.map((host) => host.trim().toLowerCase()).filter(Boolean)),
   );

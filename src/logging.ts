@@ -34,20 +34,6 @@ export function formatErrorForLog(error: unknown): string {
   return `${name}: ${message}`;
 }
 
-export function sanitizeConsoleArgument(arg: unknown): unknown {
-  if (typeof arg === "string") return sanitizeLogValue(arg);
-  if (arg instanceof Error) return formatErrorForLog(arg);
-  if (arg === null || ["number", "boolean", "bigint"].includes(typeof arg)) return arg;
-  // Do not let console format arbitrary objects because nested credential
-  // fields would bypass string redaction. Call sites that need structure must
-  // select and sanitize the fields they intend to log.
-  try {
-    return sanitizeLogValue(String(arg));
-  } catch {
-    return "[unprintable]";
-  }
-}
-
 function sanitizeConsoleArgumentWithoutTruncation(arg: unknown): string {
   if (typeof arg === "string") return redactAndFlattenLogValue(arg);
   if (arg instanceof Error) {
@@ -56,6 +42,9 @@ function sanitizeConsoleArgumentWithoutTruncation(arg: unknown): string {
     return `${name}: ${message}`;
   }
   if (arg === null || ["number", "boolean", "bigint"].includes(typeof arg)) return String(arg);
+  // Do not let console format arbitrary objects because nested credential
+  // fields would bypass string redaction. Call sites that need structure must
+  // select and sanitize the fields they intend to log.
   try {
     return redactAndFlattenLogValue(String(arg));
   } catch {

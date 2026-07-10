@@ -274,7 +274,10 @@ describe("uploadFileQurlTool", () => {
       globalThis.fetch = vi.fn().mockResolvedValue(
         new Response(
           JSON.stringify({
-            error: { code: "connector_upload_failed", detail: "upload rejected" },
+            error: {
+              code: "connector_upload_failed",
+              detail: `upload\r\nrejected${"x".repeat(2_000)}`,
+            },
           }),
           { status: 400, headers: { "content-type": "application/json" } },
         ),
@@ -285,7 +288,7 @@ describe("uploadFileQurlTool", () => {
       await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject<QURLAPIError>({
         statusCode: 400,
         code: "connector_upload_failed",
-        message: "upload rejected",
+        message: `upload rejected${"x".repeat(1_009)}`,
       });
     });
 

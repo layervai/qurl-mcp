@@ -44,7 +44,10 @@ export interface SmtpConfigInspection {
   fromName?: string;
 }
 
-export type ConfigFileShape = Partial<{
+// This describes recognized keys for downstream parsing, not validated data.
+// Every consumer must still narrow/parse its field after this unchecked JSON
+// boundary.
+export type UncheckedConfigFileShape = Partial<{
   port: number;
   host: string;
   baseUrl: string;
@@ -139,7 +142,7 @@ const SIZE_UNITS = new Map<string, number>([
   ["gb", 1024 * 1024 * 1024],
 ]);
 
-export function parseConfigFile(configPath: string): ConfigFileShape {
+export function parseConfigFile(configPath: string): UncheckedConfigFileShape {
   try {
     const content = readFileSync(configPath, "utf8");
     const parsed = JSON.parse(content) as unknown;
@@ -156,7 +159,7 @@ export function parseConfigFile(configPath: string): ConfigFileShape {
         throw new Error(`${field} must be a JSON object.`);
       }
     }
-    return parsed as ConfigFileShape;
+    return parsed as UncheckedConfigFileShape;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return {};
@@ -220,13 +223,16 @@ export function getDefaultConfigPath(): string {
 }
 
 function parseBoolean(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
   if (typeof value === "boolean") return value;
-  if (typeof value !== "string") return undefined;
+  if (typeof value !== "string") {
+    throw new Error("SMTP secure must be a boolean.");
+  }
   const normalized = value.trim().toLowerCase();
   if (!normalized) return undefined;
   if (["true", "1", "yes", "on"].includes(normalized)) return true;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
-  return undefined;
+  throw new Error("SMTP secure must be true or false.");
 }
 
 function parsePositiveInteger(value: unknown, fieldName: string): number | undefined {

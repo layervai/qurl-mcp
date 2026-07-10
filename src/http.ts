@@ -100,6 +100,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const mcpRateLimiter = rateLimit({
     windowMs: 60_000,
     limit: config.mcpRateLimitPerMinute,
+    // `identifier` names the draft-8 RateLimit policy; request IP remains the
+    // default key. The credential policy below supplies its own keyGenerator.
     identifier: "ip",
     standardHeaders: "draft-8",
     legacyHeaders: false,
@@ -150,6 +152,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   // requests intentionally use the single canonical public origin in baseUrl.
   // Do not widen this check merely because allowedHosts contains extra names.
   const allowedOrigin = new URL(baseUrl).origin;
+  // This is the complete stateful browser-route set today. Add any future
+  // state-changing browser route here rather than assuming this check is global.
   app.use((req, res, next) => {
     if (req.path !== "/mcp") {
       next();
@@ -193,6 +197,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       session?.credentialValidated === true &&
       bearerToken !== undefined &&
       bearerTokenMatches(bearerToken, session.bearerTokenDigest);
+    // This is a memory-amplification gate, not a qURL scope boundary. Any key
+    // authenticated by a successful API call may use the configured parser;
+    // each subsequent operation still enforces its own downstream scopes.
     const locals = res.locals as McpResponseLocals;
     locals.usingUnvalidatedBodyLimit = !mayUseConfiguredLimit;
     const parser = mayUseConfiguredLimit ? parseConfiguredMcpJsonBody : parseUnvalidatedMcpJsonBody;
