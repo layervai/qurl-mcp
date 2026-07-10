@@ -217,13 +217,18 @@ describe("createQurlTool", () => {
         .mockRejectedValue(new QURLAPIError(0, "missing_api_key", "QURL_API_KEY is not set."));
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
+      vi.mocked(sendEmailMessage).mockClear();
 
-      const result = await tool.handler({ target_url: "https://example.com" });
+      const result = await tool.handler({
+        target_url: "https://example.com",
+        email_delivery: { to: ["alice@example.com"] },
+      });
 
       expect(result).toEqual({
         isError: true,
         content: [{ type: "text", text: "QURL_API_KEY is not set." }],
       });
+      expect(sendEmailMessage).not.toHaveBeenCalled();
     });
 
     it("passes all optional fields to the client", async () => {

@@ -118,10 +118,13 @@ describe("file name validation", () => {
     valid.write("VP8X", 12, "ascii");
     const invalid = Buffer.from(valid);
     invalid.write("WAVE", 12, "ascii");
+    const wrongSize = Buffer.from(valid);
+    wrongSize.writeUInt32LE(valid.length, 4);
     const trailingPolyglot = Buffer.concat([valid, Buffer.from("trailing")]);
 
     expect(() => validateFileSignature(valid, "image/webp")).not.toThrow();
     expect(() => validateFileSignature(invalid, "image/webp")).toThrow("does not match");
+    expect(() => validateFileSignature(wrongSize, "image/webp")).toThrow("does not match");
     expect(() => validateFileSignature(trailingPolyglot, "image/webp")).toThrow("does not match");
   });
 
@@ -140,6 +143,7 @@ describe("file name validation", () => {
     const gif = Buffer.from("GIF89a;", "latin1");
 
     expect(() => validateFileSignature(png, "image/png")).not.toThrow();
+    expect(() => validateFileSignature(png.subarray(0, 8), "image/png")).toThrow("does not match");
     expect(() =>
       validateFileSignature(Buffer.concat([png, Buffer.from("x")]), "image/png"),
     ).toThrow("does not match");

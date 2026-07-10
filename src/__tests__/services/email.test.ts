@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { runWithRequestAuthContext } from "../../auth/request-context.js";
 
 const nodemailerMocks = vi.hoisted(() => {
   const sendMail = vi.fn();
@@ -567,5 +568,77 @@ describe("sendEmailMessage", () => {
     expect(second.skipped_reason).toContain("hourly limit of 1");
     expect(afterWindow.sent).toBe(1);
     expect(nodemailerMocks.sendMail).toHaveBeenCalledTimes(2);
+    now.mockRestore();
+  });
+
+  it("tracks two request-scoped principals independently", async () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+          maxRecipientsPerHour: 1,
+        },
+      }),
+    );
+    process.env.QURL_MCP_CONFIG = configPath;
+    nodemailerMocks.sendMail.mockResolvedValue({ messageId: "msg-principal" });
+    const sendAs = (qurlApiKey: string, to: string) =>
+      runWithRequestAuthContext({ qurlApiKey }, () =>
+        sendEmailMessage(
+          { to: [to], subject: "Secure link", text: "Body" },
+          { allowServerApiKeyFallback: false },
+        ),
+      );
+
+    const [firstPrincipal, secondPrincipal] = await Promise.all([
+      sendAs("lv_live_principal_a", "alice@example.com"),
+      sendAs("lv_live_principal_b", "bob@example.com"),
+    ]);
+    const repeatedFirstPrincipal = await sendAs("lv_live_principal_a", "alice-again@example.com");
+
+    expect(firstPrincipal.sent).toBe(1);
+    expect(secondPrincipal.sent).toBe(1);
+    expect(repeatedFirstPrincipal.attempted).toBe(false);
+    expect(repeatedFirstPrincipal.skipped_reason).toContain("hourly limit of 1");
+    expect(nodemailerMocks.sendMail).toHaveBeenCalledTimes(2);
+  });
+
+  it("reserves same-principal quota atomically across concurrent calls", async () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        smtp: {
+          host: "smtp.example.com",
+          port: 587,
+          secure: false,
+          username: "mailer",
+          password: "secret",
+          fromEmail: "noreply@example.com",
+          maxRecipientsPerHour: 1,
+        },
+      }),
+    );
+    process.env.QURL_MCP_CONFIG = configPath;
+    nodemailerMocks.sendMail.mockResolvedValue({ messageId: "msg-concurrent" });
+    const send = (to: string) =>
+      runWithRequestAuthContext({ qurlApiKey: "lv_live_same_principal" }, () =>
+        sendEmailMessage(
+          { to: [to], subject: "Secure link", text: "Body" },
+          { allowServerApiKeyFallback: false },
+        ),
+      );
+
+    const results = await Promise.all([send("first@example.com"), send("second@example.com")]);
+
+    expect(results.map((result) => result.sent).sort()).toEqual([0, 1]);
+    expect(nodemailerMocks.sendMail).toHaveBeenCalledOnce();
   });
 });

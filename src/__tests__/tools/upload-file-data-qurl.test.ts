@@ -244,6 +244,13 @@ describe("uploadFileDataQurlTool", () => {
         content_type: "application/pdf",
       });
       expect(JSON.parse(parameterizedDataUrlResult.content[0].text).file_name).toBe("sample.pdf");
+
+      const whitespaceResult = await tool.handler({
+        file_base64: fixtureBase64.replace(/(.{40})/g, "$1\n"),
+        file_name: "sample.pdf",
+        content_type: "application/pdf",
+      });
+      expect(JSON.parse(whitespaceResult.content[0].text).file_name).toBe("sample.pdf");
     });
 
     it("rejects mismatched data URL, filename, and file signatures before upload", async () => {
@@ -321,6 +328,20 @@ describe("uploadFileDataQurlTool", () => {
           content_type: "application/pdf",
         }),
       ).rejects.toThrow("does not match declared content_type");
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+    });
+
+    it("rejects impossible base64 padding lengths", async () => {
+      globalThis.fetch = vi.fn();
+      const tool = uploadFileDataQurlTool(makeMockClient());
+
+      await expect(
+        tool.handler({
+          file_base64: "A",
+          file_name: "sample.pdf",
+          content_type: "application/pdf",
+        }),
+      ).rejects.toThrow("valid base64-encoded content");
       expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 

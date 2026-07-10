@@ -205,6 +205,9 @@ export async function sendEmailMessage(
     skipped_reason: skippedReason,
   });
   const principal = await deriveEmailQuotaPrincipal(principalKey);
+  // From this await through quota increment/map update there are no further
+  // await points. Same-process requests therefore cannot both observe and
+  // reserve the same stale quota value on the JavaScript event loop.
   const now = Date.now();
   for (const [key, quota] of emailQuotaByPrincipal) {
     if (now - quota.windowStartedAt >= EMAIL_QUOTA_WINDOW_MS) emailQuotaByPrincipal.delete(key);

@@ -208,6 +208,8 @@ client request supplies its own qURL API key as a bearer token.
 because qURL API keys and data are bearer-sent to that destination. Plain HTTP
 is accepted only for literal loopback development endpoints. Upload connector
 URLs follow the same HTTPS-except-loopback rule.
+Loopback means `127.0.0.0/8` or `::1`; wildcard bind addresses such as
+`0.0.0.0` and `::` are intentionally not accepted as outbound HTTP targets.
 Connector destinations are trusted operator configuration rather than caller
 input; private addresses and DNS resolution are therefore permitted. Pin the
 connector hostname in deployment DNS and do not point it at metadata services.
@@ -243,6 +245,8 @@ These settings are used when email delivery is requested by tools such as:
 
 If either recipient allowlist is configured, only an exact address or domain
 match is delivered. If both are empty, the message and hourly caps still apply.
+Domain entries are exact: `example.com` does not implicitly allow
+`mail.example.com`; list each permitted subdomain explicitly.
 Addresses and domains are normalized to lowercase NFC/IDNA ASCII form and a
 trailing DNS root dot is removed before comparison and delivery.
 In HTTP mode, any caller with a valid qURL API key can request a server-side

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isLoopbackHostname, parseSizeBytes } from "../config.js";
+import { isLoopbackHostname, normalizeServiceBaseUrl, parseSizeBytes } from "../config.js";
 
 describe("service URL security helpers", () => {
   it("recognizes canonical, expanded, mapped, and numeric loopback forms", () => {
@@ -14,6 +14,25 @@ describe("service URL security helpers", () => {
   it("rejects public IPv4 and IPv6 hosts from the loopback set", () => {
     expect(isLoopbackHostname("192.0.2.1")).toBe(false);
     expect(isLoopbackHostname("2001:db8::1")).toBe(false);
+  });
+
+  it.each([
+    "https://user:pass@api.example.com",
+    "https://api.example.com?target=other",
+    "https://api.example.com/#fragment",
+    "https://api.example.com/tenant/../admin",
+    "https://api.example.com/tenant/%2e%2e/admin",
+  ])("rejects unsafe service URL form %s", (value) => {
+    expect(() => normalizeServiceBaseUrl(value, "serviceUrl", true)).toThrow();
+  });
+
+  it("allows HTTPS and literal loopback HTTP service URLs", () => {
+    expect(normalizeServiceBaseUrl("https://api.example.com/v1/", "serviceUrl", true)).toBe(
+      "https://api.example.com/v1",
+    );
+    expect(normalizeServiceBaseUrl("http://127.0.0.1:8080", "serviceUrl", true)).toBe(
+      "http://127.0.0.1:8080",
+    );
   });
 });
 

@@ -59,7 +59,7 @@ export const uploadFileQurlSchema = z
 
 export type UploadFileQurlInput = z.infer<typeof uploadFileQurlSchema>;
 
-async function readFileWithinLimit(
+export async function readFileWithinLimit(
   fileHandle: FileHandle,
   maxBytes: number,
   initialSize: number,
@@ -67,6 +67,8 @@ async function readFileWithinLimit(
   // Read at most one byte beyond the limit. Unlike FileHandle.readFile(), this
   // remains bounded if the file grows after the initial stat. Start near the
   // observed size so a small file does not reserve the full configured limit.
+  // allocUnsafe is safe because only the initialized prefix is returned below;
+  // never return `buffer` without slicing it to totalBytesRead.
   let buffer = Buffer.allocUnsafe(Math.min(maxBytes + 1, Math.max(1, initialSize + 1)));
   let totalBytesRead = 0;
 

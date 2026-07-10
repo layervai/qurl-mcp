@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { open } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import { QURLAPIError } from "../../client.js";
 import { clearRuntimeConfigCache } from "../../config.js";
 import { makeMockClient } from "../helpers.js";
 import {
+  readFileWithinLimit,
   uploadFileQurlSchema,
   uploadFileQurlTool as uploadFileQurlToolFactory,
 } from "../../tools/upload-file-qurl.js";
@@ -70,6 +72,22 @@ describe("uploadFileQurlTool", () => {
   });
 
   describe("handler", () => {
+    it("rejects a file that grows beyond the limit after its initial stat", async () => {
+      const filePath = join(tempDir!, "growing.pdf");
+      writeFileSync(filePath, "%PDF-");
+      const fileHandle = await open(filePath, "r");
+      const initialSize = (await fileHandle.stat()).size;
+      appendFileSync(filePath, "x".repeat(32));
+
+      try {
+        await expect(readFileWithinLimit(fileHandle, 8, initialSize)).rejects.toThrow(
+          "configured upload size limit",
+        );
+      } finally {
+        await fileHandle.close();
+      }
+    });
+
     it("uploads the file, mints a qURL, and returns a structured result", async () => {
       globalThis.fetch = vi.fn().mockResolvedValue(
         new Response(JSON.stringify({ resource_id: "r_upload12345" }), {

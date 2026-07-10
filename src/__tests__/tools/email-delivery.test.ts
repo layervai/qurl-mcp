@@ -1,5 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { maybeDeliverToolEmail, uploadEmailDetailLines } from "../../tools/email-delivery.js";
+
+vi.mock("../../services/email.js", () => ({
+  sendEmailMessage: vi.fn(),
+}));
+
+import { sendEmailMessage } from "../../services/email.js";
 
 describe("maybeDeliverToolEmail", () => {
   it("formats shared upload details in a stable order", () => {
@@ -44,5 +50,27 @@ describe("maybeDeliverToolEmail", () => {
           "Email delivery was not attempted because the assembled message exceeds 10,000 characters.",
       }),
     );
+  });
+
+  it("sanitizes delivery setup failures after link creation", async () => {
+    vi.mocked(sendEmailMessage).mockRejectedValueOnce(new Error("smtp.private refused"));
+
+    const result = await maybeDeliverToolEmail({
+      allowServerApiKeyFallback: false,
+      delivery: { to: ["alice@example.com"] },
+      defaultSubject: "Secure link ready",
+      detailLines: ["Secure Link: https://qurl.link/one-shot"],
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        attempted: false,
+        enabled: true,
+        sent: 0,
+        failed: 1,
+        skipped_reason: "Email delivery was not attempted because delivery setup failed.",
+      }),
+    );
+    expect(JSON.stringify(result)).not.toContain("smtp.private");
   });
 });

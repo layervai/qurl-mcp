@@ -47,9 +47,10 @@ export type ConnectorConfig = {
 };
 
 export function getConnectorConfig(allowServerApiKeyFallback = true): ConnectorConfig {
-  const runtimeConfig = loadRuntimeConfig();
+  let runtimeConfig: ReturnType<typeof loadRuntimeConfig> | undefined;
+  const getRuntimeConfig = () => (runtimeConfig ??= loadRuntimeConfig());
   const serverApiKey = allowServerApiKeyFallback
-    ? (process.env.QURL_API_KEY?.trim() ?? runtimeConfig.qurlApiKey)
+    ? (process.env.QURL_API_KEY?.trim() ?? getRuntimeConfig().qurlApiKey)
     : undefined;
   const apiKey = getRequestQurlApiKey() ?? serverApiKey ?? "";
   if (!apiKey) {
@@ -59,7 +60,7 @@ export function getConnectorConfig(allowServerApiKeyFallback = true): ConnectorC
   const connectorURL =
     getRequestQurlConnectorUrl() ??
     process.env.QURL_CONNECTOR_URL?.trim() ??
-    runtimeConfig.defaultQurlConnectorUrl ??
+    getRuntimeConfig().defaultQurlConnectorUrl ??
     "";
   if (!connectorURL) {
     throw new QURLAPIError(

@@ -107,6 +107,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     identifier: "credential",
     keyGenerator: (req) => {
       const token = getAuthenticatedBearerToken(req);
+      // Bearer middleware runs first, so "missing" is a fail-closed fallback
+      // for unexpected middleware composition rather than a normal route.
       return token ? digestBearerToken(token).toString("hex") : "missing";
     },
     standardHeaders: "draft-8",
@@ -123,6 +125,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         res.status(429).send("Too many requests.");
       },
     });
+  // One aggregate bucket intentionally covers every legal/video surface for a
+  // client IP; health probes get their own isolated limiter instance below.
   const publicRouteRateLimiter = createPublicRateLimiter();
   const healthRateLimiter = createPublicRateLimiter();
   const bearerAuthMiddleware = requireBearerAuth({

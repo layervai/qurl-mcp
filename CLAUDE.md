@@ -13,11 +13,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Follow this process for all code changes:
 
 1. **Switch to main and fetch latest**
+
    ```bash
    git checkout main && git pull origin main
    ```
 
 2. **Create branch for code change**
+
    ```bash
    git checkout -b <type>/<short-description>
    ```
@@ -25,11 +27,13 @@ Follow this process for all code changes:
 3. **Make code changes** - Think deeply about the implementation. Consider edge cases, error handling, and maintainability.
 
 4. **Run checks before committing**
+
    ```bash
    npm run build && npm run lint && npm test
    ```
 
 5. **Create a PR**
+
    ```bash
    git push -u origin <branch>
    gh pr create --title "<type>(scope): description" --body "..."
@@ -110,13 +114,13 @@ npm run format
 
 ## Configuration
 
-| Variable | Required | Description | Default |
-|----------|----------|-------------|---------|
-| `QURL_API_KEY` | Yes | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes | — |
-| `QURL_API_URL` | No | qURL API base URL | `https://api.layerv.ai` |
-| `QURL_CONNECTOR_URL` | Uploads | HTTPS connector base URL | — |
-| `QURL_MCP_CONFIG` | No | Shared runtime config path | `qurl-mcp.config.json` |
-| `QURL_MCP_HTTP_CONFIG` | HTTP only | HTTP listener config path | `qurl-mcp.http.json` |
+| Variable               | Required  | Description                                                          | Default                 |
+| ---------------------- | --------- | -------------------------------------------------------------------- | ----------------------- |
+| `QURL_API_KEY`         | Yes       | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes | —                       |
+| `QURL_API_URL`         | No        | qURL API base URL                                                    | `https://api.layerv.ai` |
+| `QURL_CONNECTOR_URL`   | Uploads   | HTTPS connector base URL                                             | —                       |
+| `QURL_MCP_CONFIG`      | No        | Shared runtime config path                                           | `qurl-mcp.config.json`  |
+| `QURL_MCP_HTTP_CONFIG` | HTTP only | HTTP listener config path                                            | `qurl-mcp.http.json`    |
 
 See `README.md` and the two tracked `*.example.json` files for the complete
 SMTP, upload-limit, proxy, session, and public-page settings.
@@ -137,17 +141,24 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 
 ## Tools
 
-| Tool | Scope Required | Description |
-|------|---------------|-------------|
-| `create_qurl` | `qurl:write` | Create a protected link |
-| `resolve_qurl` | `qurl:resolve` | Resolve token + grant network access |
-| `list_qurls` | `qurl:read` | List qURLs with filtering |
-| `get_qurl` | `qurl:read` | Get qURL details |
-| `delete_qurl` | `qurl:write` | Revoke a qURL |
-| `extend_qurl` | `qurl:write` | Extend expiration (shorthand alias for `update_qurl`) |
-| `update_qurl` | `qurl:write` | Update expiration, tags, description |
-| `mint_link` | `qurl:write` | Mint a new access link for an existing resource |
-| `batch_create_qurls` | `qurl:write` | Create multiple qURLs at once |
+| Tool                      | Scope Required | Description                                             |
+| ------------------------- | -------------- | ------------------------------------------------------- |
+| `create_qurl`             | `qurl:write`   | Create a protected link                                 |
+| `resolve_qurl`            | `qurl:resolve` | Resolve token + grant network access                    |
+| `list_qurls`              | `qurl:read`    | List qURLs with filtering                               |
+| `get_qurl`                | `qurl:read`    | Get qURL details                                        |
+| `delete_qurl`             | `qurl:write`   | Revoke a qURL                                           |
+| `extend_qurl`             | `qurl:write`   | Extend expiration (shorthand alias for `update_qurl`)   |
+| `update_qurl`             | `qurl:write`   | Update expiration, tags, description                    |
+| `mint_link`               | `qurl:write`   | Mint a new access link for an existing resource         |
+| `batch_create_qurls`      | `qurl:write`   | Create multiple qURLs at once                           |
+| `revoke_qurl_token`       | `qurl:write`   | Revoke one access token                                 |
+| `update_qurl_token`       | `qurl:write`   | Update one access token                                 |
+| `list_qurl_sessions`      | `qurl:read`    | List active resource sessions                           |
+| `terminate_qurl_sessions` | `qurl:write`   | Terminate one or all resource sessions                  |
+| `upload_file_qurl`        | `qurl:write`   | Upload a server-local file and mint a qURL (stdio only) |
+| `upload_file_data_qurl`   | `qurl:write`   | Upload base64 file content and mint a qURL              |
+| `upload_text_qurl`        | `qurl:write`   | Render text to PDF, upload it, and mint a qURL          |
 
 ## Commit Convention (Release Please)
 
@@ -161,18 +172,18 @@ type(scope): description
 
 ### Commit Types and Version Impact
 
-| Type | Description | Version Bump |
-|------|-------------|--------------|
-| `feat` | New feature | **Minor** (0.X.0) |
-| `fix` | Bug fix | **Patch** (0.0.X) |
-| `docs` | Documentation only | None |
-| `style` | Code style (formatting) | None |
-| `refactor` | Code change that neither fixes nor adds | None |
-| `perf` | Performance improvement | **Patch** |
-| `test` | Adding or updating tests | None |
-| `build` | Build system or dependencies | None |
-| `ci` | CI configuration | None |
-| `chore` | Maintenance tasks | None |
+| Type       | Description                             | Version Bump      |
+| ---------- | --------------------------------------- | ----------------- |
+| `feat`     | New feature                             | **Minor** (0.X.0) |
+| `fix`      | Bug fix                                 | **Patch** (0.0.X) |
+| `docs`     | Documentation only                      | None              |
+| `style`    | Code style (formatting)                 | None              |
+| `refactor` | Code change that neither fixes nor adds | None              |
+| `perf`     | Performance improvement                 | **Patch**         |
+| `test`     | Adding or updating tests                | None              |
+| `build`    | Build system or dependencies            | None              |
+| `ci`       | CI configuration                        | None              |
+| `chore`    | Maintenance tasks                       | None              |
 
 ### Breaking Changes (Major Version)
 
@@ -184,15 +195,15 @@ feat(tools)!: rename resolve_qurl to resolve tool
 
 ### Scopes
 
-| Scope | Component |
-|-------|-----------|
-| `tools` | MCP tool implementations |
-| `client` | API client |
-| `resources` | MCP resources |
-| `prompts` | MCP prompts |
-| `http` | HTTP transport, public routes, and remote-server lifecycle |
-| `ci` | GitHub Actions workflows |
-| `deps` | Dependencies |
+| Scope       | Component                                                  |
+| ----------- | ---------------------------------------------------------- |
+| `tools`     | MCP tool implementations                                   |
+| `client`    | API client                                                 |
+| `resources` | MCP resources                                              |
+| `prompts`   | MCP prompts                                                |
+| `http`      | HTTP transport, public routes, and remote-server lifecycle |
+| `ci`        | GitHub Actions workflows                                   |
+| `deps`      | Dependencies                                               |
 
 > Keep this table aligned with the Component dropdown in
 > `.github/ISSUE_TEMPLATE/bug_report.yml`. Convention only (not CI-
