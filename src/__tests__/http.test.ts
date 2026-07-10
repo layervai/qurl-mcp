@@ -4,6 +4,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { rateLimit } from "express-rate-limit";
 import { createHash } from "node:crypto";
 import {
+  mkdirSync,
   mkdtempSync,
   rmSync,
   statSync,
@@ -594,7 +595,7 @@ describe("HTTP MCP server", () => {
 
     const pageResponse = await fetch(`${baseUrl}/custom/video`);
     const html = await pageResponse.text();
-    const inlineStyle = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1];
+    const inlineStyle = /<style[^>]*>([\s\S]*?)<\/style>/i.exec(html)?.[1];
     if (!inlineStyle) throw new Error("Expected inline video-page styles");
     const styleHash = createHash("sha256").update(inlineStyle, "utf8").digest("base64");
 
@@ -1812,7 +1813,7 @@ describe("HTTP MCP server", () => {
     const baseUrl = await start();
     const response = await fetch(`${baseUrl}/legal/privacy`);
     const html = await response.text();
-    const inlineStyle = /<style>([\s\S]*?)<\/style>/.exec(html)?.[1];
+    const inlineStyle = /<style[^>]*>([\s\S]*?)<\/style>/i.exec(html)?.[1];
     if (!inlineStyle) throw new Error("Expected inline legal-page styles");
     const styleHash = createHash("sha256").update(inlineStyle, "utf8").digest("base64");
 
@@ -1934,6 +1935,32 @@ describe("public video range streaming", () => {
       try {
         const baseUrl = await start(videoApp);
         expect((await fetch(`${baseUrl}/file`)).status).toBe(404);
+      } finally {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(process.platform === "win32")(
+    "allows an operator-configured video through an intermediate directory symlink",
+    async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), "qurl-video-directory-symlink-test-"));
+      const targetDir = join(tempDir, "target");
+      const linkedDir = join(tempDir, "linked");
+      const videoFile = join(targetDir, "public.mp4");
+      mkdirSync(targetDir);
+      writeFileSync(videoFile, "operator video");
+      symlinkSync(targetDir, linkedDir, "dir");
+      const videoApp = express();
+      videoApp.get("/file", rateLimit({ windowMs: 60_000, limit: 100 }), (req, res) =>
+        streamPublicVideo(req, res, join(linkedDir, "public.mp4")),
+      );
+
+      try {
+        const baseUrl = await start(videoApp);
+        const response = await fetch(`${baseUrl}/file`);
+        expect(response.status).toBe(200);
+        expect(await response.text()).toBe("operator video");
       } finally {
         rmSync(tempDir, { recursive: true, force: true });
       }
