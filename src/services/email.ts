@@ -3,7 +3,7 @@ import { hkdf, randomBytes } from "node:crypto";
 import nodemailer from "nodemailer";
 import { getRequestQurlApiKey } from "../auth/request-context.js";
 import { loadRuntimeConfig, type RuntimeConfig } from "../config.js";
-import { isEmailAddress, uniqueRecipients } from "../email-addresses.js";
+import { isEmailAddress, normalizeEmailDomain, uniqueRecipients } from "../email-addresses.js";
 import { EmailDeliverySetupError } from "../email-types.js";
 import type { EmailDeliveryRecipientResult, EmailDeliveryResult } from "../email-types.js";
 import { formatErrorForLog } from "../logging.js";
@@ -162,7 +162,7 @@ export async function sendEmailMessage(
   for (const recipient of recipients) {
     // Recipient normalization and config parsing lowercase both sides before
     // this exact-address/domain comparison.
-    const domain = recipient.slice(recipient.lastIndexOf("@") + 1);
+    const domain = normalizeEmailDomain(recipient.slice(recipient.lastIndexOf("@") + 1));
     const isAllowed =
       !hasRecipientRestrictions || exactAllowlist.has(recipient) || domainAllowlist.has(domain);
     (isAllowed ? allowedRecipients : blockedRecipients).push(recipient);
@@ -233,8 +233,10 @@ export async function sendEmailMessage(
   // Count attempted recipients, not only successful sends. Refunding failures
   // would let a failing or adversarial SMTP destination bypass the abuse cap
   // by retrying indefinitely.
-  quota.recipients += allowedRecipients.length;
-  emailQuotaByPrincipal.set(principal, quota);
+  emailQuotaByPrincipal.set(principal, {
+    ...quota,
+    recipients: quota.recipients + allowedRecipients.length,
+  });
 
   const transporter = nodemailer.createTransport({
     host: smtp.host,

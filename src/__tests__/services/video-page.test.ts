@@ -4,7 +4,7 @@ import { getPublicVideoFileRoute, renderPublicVideoPageHtml } from "../../servic
 describe("video page", () => {
   it("derives the public file route from the page path", () => {
     expect(getPublicVideoFileRoute("/media/video")).toBe("/media/video/file");
-    expect(getPublicVideoFileRoute("/custom/video/")).toBe("/custom/video/file");
+    expect(getPublicVideoFileRoute("/custom/video")).toBe("/custom/video/file");
   });
 
   it("renders a public video playback page", () => {

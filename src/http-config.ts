@@ -178,6 +178,23 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
     1,
     maxSessions,
   );
+  const sessionIdleTtlMs = parseBoundedInteger(
+    process.env.MCP_SESSION_IDLE_TTL_MS ?? fileConfig.sessionIdleTtlMs,
+    DEFAULT_SESSION_IDLE_TTL_MS,
+    "MCP_SESSION_IDLE_TTL_MS/sessionIdleTtlMs",
+    10_000,
+    24 * 60 * 60 * 1000,
+  );
+  const sessionAbsoluteTtlMs = parseBoundedInteger(
+    process.env.MCP_SESSION_ABSOLUTE_TTL_MS ?? fileConfig.sessionAbsoluteTtlMs,
+    DEFAULT_SESSION_ABSOLUTE_TTL_MS,
+    "MCP_SESSION_ABSOLUTE_TTL_MS/sessionAbsoluteTtlMs",
+    60_000,
+    30 * 24 * 60 * 60 * 1000,
+  );
+  if (sessionAbsoluteTtlMs < sessionIdleTtlMs) {
+    throw new Error("sessionAbsoluteTtlMs must be greater than or equal to sessionIdleTtlMs.");
+  }
 
   return {
     port,
@@ -200,20 +217,8 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
       1,
       1000,
     ),
-    sessionIdleTtlMs: parseBoundedInteger(
-      process.env.MCP_SESSION_IDLE_TTL_MS ?? fileConfig.sessionIdleTtlMs,
-      DEFAULT_SESSION_IDLE_TTL_MS,
-      "MCP_SESSION_IDLE_TTL_MS/sessionIdleTtlMs",
-      10_000,
-      24 * 60 * 60 * 1000,
-    ),
-    sessionAbsoluteTtlMs: parseBoundedInteger(
-      process.env.MCP_SESSION_ABSOLUTE_TTL_MS ?? fileConfig.sessionAbsoluteTtlMs,
-      DEFAULT_SESSION_ABSOLUTE_TTL_MS,
-      "MCP_SESSION_ABSOLUTE_TTL_MS/sessionAbsoluteTtlMs",
-      60_000,
-      30 * 24 * 60 * 60 * 1000,
-    ),
+    sessionIdleTtlMs,
+    sessionAbsoluteTtlMs,
     unvalidatedSessionTtlMs: parseBoundedInteger(
       process.env.MCP_UNVALIDATED_SESSION_TTL_MS ?? fileConfig.unvalidatedSessionTtlMs,
       DEFAULT_UNVALIDATED_SESSION_TTL_MS,

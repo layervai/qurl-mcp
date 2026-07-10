@@ -125,6 +125,18 @@ describe("HTTP listener config", () => {
     expect(() => loadHttpServerConfig(configPath)).toThrow("between 1 and 50");
   });
 
+  it("requires the absolute session lifetime to cover the idle window", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({ sessionIdleTtlMs: 120_000, sessionAbsoluteTtlMs: 60_000 }),
+    );
+
+    expect(() => loadHttpServerConfig(configPath)).toThrow(
+      "must be greater than or equal to sessionIdleTtlMs",
+    );
+  });
+
   it("rejects unsafe public base URLs and Host entries with ports", () => {
     const configPath = join(tempDir, "http.json");
     writeFileSync(configPath, JSON.stringify({ baseUrl: "http://mcp.example.com" }));
