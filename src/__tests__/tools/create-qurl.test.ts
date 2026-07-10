@@ -4,6 +4,7 @@ import { EmailDeliverySetupError } from "../../email-types.js";
 import {
   createQurlTool as createQurlToolFactory,
   createQurlSchema,
+  MAX_USER_AGENT_REGEX_CHARACTERS,
 } from "../../tools/create-qurl.js";
 import { makeMockClient, sampleCreateQURLData } from "../helpers.js";
 
@@ -86,6 +87,24 @@ describe("createQurlTool", () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it.each(["user_agent_allow_regex", "user_agent_deny_regex"] as const)(
+      "bounds access_policy.%s to the API's regex limit",
+      (field) => {
+        expect(
+          createQurlSchema.safeParse({
+            target_url: "https://example.com",
+            access_policy: { [field]: "x".repeat(MAX_USER_AGENT_REGEX_CHARACTERS) },
+          }).success,
+        ).toBe(true);
+        expect(
+          createQurlSchema.safeParse({
+            target_url: "https://example.com",
+            access_policy: { [field]: "x".repeat(MAX_USER_AGENT_REGEX_CHARACTERS + 1) },
+          }).success,
+        ).toBe(false);
+      },
+    );
 
     it("rejects non-integer max_sessions", () => {
       const result = createQurlSchema.safeParse({

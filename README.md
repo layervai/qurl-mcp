@@ -460,7 +460,9 @@ After starting in `http` mode, the common routes are:
 
 `/healthz` is intentionally unauthenticated, exposes only `{ "ok": true }`, and
 uses the configured public-route request limit in a separate bucket so health
-probes cannot consume the legal/video route allowance.
+probes cannot consume the legal/video route allowance. A `429` from this route
+means the probe source exceeded `publicFileRateLimitPerMinute`, not that the
+application failed its liveness check; keep probe frequency below that limit.
 
 ## HTTP Authentication
 

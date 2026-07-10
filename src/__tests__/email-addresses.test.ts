@@ -18,4 +18,10 @@ describe("email address normalization", () => {
       "alice@xn--bcher-kva.example",
     ]);
   });
+
+  it("preserves IDNA-invalid domains so validators reject instead of collapsing them", () => {
+    expect(normalizeEmailDomain("[invalid]")).toBe("[invalid]");
+    expect(normalizeEmailAddress("a@[invalid]")).toBe("a@[invalid]");
+    expect(isEmailAddress("a@[invalid]")).toBe(false);
+  });
 });

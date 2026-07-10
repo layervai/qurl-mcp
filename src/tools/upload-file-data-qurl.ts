@@ -124,7 +124,9 @@ function normalizeBase64Input(input: string): {
 
   // Step 4: Convert URL-safe base64 to standard base64. URL-safe uses '-'
   // instead of '+' and '_' instead of '/'.
-  const normalized = withoutWhitespace.replace(/-/g, "+").replace(/_/g, "/");
+  const normalized = usesStandardAlphabet
+    ? withoutWhitespace
+    : withoutWhitespace.replace(/-/g, "+").replace(/_/g, "/");
 
   // Step 5: Validate and fix padding
   // Base64 length must be divisible by 4. Valid lengths mod 4 are: 0, 2, 3

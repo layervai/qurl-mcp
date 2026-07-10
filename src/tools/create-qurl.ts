@@ -24,6 +24,9 @@ export const aiAgentPolicySchema = z.object({
     .describe("AI agent categories to permit (all others blocked)"),
 });
 
+export const MAX_USER_AGENT_REGEX_CHARACTERS = 256;
+const userAgentRegexSchema = z.string().max(MAX_USER_AGENT_REGEX_CHARACTERS);
+
 export const accessPolicySchema = z.object({
   ip_allowlist: z.array(z.string()).optional().describe("Allowed IP addresses or CIDR ranges"),
   ip_denylist: z.array(z.string()).optional().describe("Denied IP addresses or CIDR ranges"),
@@ -35,8 +38,12 @@ export const accessPolicySchema = z.object({
     .array(z.string())
     .optional()
     .describe("Denied country codes (ISO 3166-1 alpha-2)"),
-  user_agent_allow_regex: z.string().optional().describe("Regex to allow matching user agents"),
-  user_agent_deny_regex: z.string().optional().describe("Regex to deny matching user agents"),
+  user_agent_allow_regex: userAgentRegexSchema
+    .optional()
+    .describe(`Regex to allow matching user agents (max ${MAX_USER_AGENT_REGEX_CHARACTERS} chars)`),
+  user_agent_deny_regex: userAgentRegexSchema
+    .optional()
+    .describe(`Regex to deny matching user agents (max ${MAX_USER_AGENT_REGEX_CHARACTERS} chars)`),
   ai_agent_policy: aiAgentPolicySchema.optional().describe("Structured AI agent access control"),
 });
 

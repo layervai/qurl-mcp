@@ -3,7 +3,11 @@ import { domainToASCII } from "node:url";
 
 export function normalizeEmailDomain(value: string): string {
   const normalized = value.trim().normalize("NFC").toLowerCase().replace(/\.$/, "");
-  return domainToASCII(normalized);
+  const ascii = domainToASCII(normalized);
+  // Node returns an empty string for IDNA-invalid input. Preserve that input
+  // so the caller's email/domain validator rejects it explicitly instead of
+  // silently turning an address such as "a@[invalid]" into "a@".
+  return ascii || normalized;
 }
 
 export function normalizeEmailAddress(value: string): string {

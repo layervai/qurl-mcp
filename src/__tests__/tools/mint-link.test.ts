@@ -4,6 +4,7 @@ import {
   mintLinkBaseSchema,
   mintLinkSchema,
 } from "../../tools/mint-link.js";
+import { MAX_USER_AGENT_REGEX_CHARACTERS } from "../../tools/create-qurl.js";
 import { makeMockClient } from "../helpers.js";
 
 vi.mock("../../services/email.js", () => ({
@@ -103,6 +104,16 @@ describe("mintLinkTool", () => {
         },
       });
       expect(result.success).toBe(true);
+    });
+
+    it("applies the shared user-agent regex bound", () => {
+      const result = mintLinkSchema.safeParse({
+        resource_id: validResourceId,
+        access_policy: {
+          user_agent_allow_regex: "x".repeat(MAX_USER_AGENT_REGEX_CHARACTERS + 1),
+        },
+      });
+      expect(result.success).toBe(false);
     });
 
     it("rejects max_sessions above 1000 (API hard limit)", () => {
