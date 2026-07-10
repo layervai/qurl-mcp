@@ -363,6 +363,28 @@ describe("HTTP MCP server", () => {
     expect((await fetch(`${baseUrl}/legal/privacy`)).status).toBe(429);
   });
 
+  it("isolates video range requests from the public page rate-limit bucket", async () => {
+    const fixturePath = fileURLToPath(new URL("./fixtures/sample.pdf", import.meta.url));
+    const publicRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        publicFileRateLimitPerMinute: 1,
+        publicVideo: {
+          title: "Rate Limit Test",
+          pagePath: "/media/video",
+          filePath: fixturePath,
+        },
+      },
+      { version: "0.0.0-test" },
+    );
+    const baseUrl = await start(publicRuntime.app);
+
+    expect((await fetch(`${baseUrl}/media/video/file`)).status).toBe(200);
+    expect((await fetch(`${baseUrl}/legal/privacy`)).status).toBe(200);
+    expect((await fetch(`${baseUrl}/media/video/file`)).status).toBe(429);
+    expect((await fetch(`${baseUrl}/legal/privacy`)).status).toBe(429);
+  });
+
   it("binds sessions to the bearer token that initialized them", async () => {
     const baseUrl = await start();
     const sessionId = await initialize(baseUrl, "lv_live_owner");
@@ -1238,9 +1260,15 @@ describe("public video range streaming", () => {
 
   it("serves explicit and suffix byte ranges", async () => {
     const baseUrl = await startVideoServer();
+    const complete = await fetch(`${baseUrl}/file`);
+    expect(complete.status).toBe(200);
+    expect(complete.headers.get("vary")).toContain("Range");
+    await complete.arrayBuffer();
+
     const explicit = await fetch(`${baseUrl}/file`, { headers: { range: "bytes=0-3" } });
     expect(explicit.status).toBe(206);
     expect(explicit.headers.get("content-range")).toBe(`bytes 0-3/${fixtureSize}`);
+    expect(explicit.headers.get("vary")).toContain("Range");
     expect(explicit.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(explicit.headers.get("x-frame-options")).toBe("DENY");
     expect((await explicit.arrayBuffer()).byteLength).toBe(4);
@@ -1280,6 +1308,8 @@ describe("public video range streaming", () => {
       const response = await fetch(`${baseUrl}/file`, { headers: { range } });
       expect(response.status).toBe(416);
       expect(response.headers.get("content-range")).toBe(`bytes */${fixtureSize}`);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("vary")).toContain("Range");
     }
   });
 

@@ -88,7 +88,7 @@ export async function sendEmailMessage(
       skipped_reason: "No email recipients were provided.",
     };
   }
-  if (recipients.some((recipient) => !isEmailAddress(recipient))) {
+  if (recipients.some((recipient) => recipient.length > 254 || !isEmailAddress(recipient))) {
     throw new EmailDeliverySetupError("input", "Email recipients must be valid addresses.");
   }
   if (!input.subject.trim() || input.subject.length > 200 || /[\r\n]/.test(input.subject)) {
@@ -242,6 +242,9 @@ export async function sendEmailMessage(
     host: smtp.host,
     port: smtp.port,
     secure: smtp.secure,
+    // Port 587-style connections must upgrade before credentials or qURL
+    // links are sent. Implicit-TLS transports are already encrypted.
+    requireTLS: !smtp.secure,
     auth: {
       user: smtp.username,
       pass: smtp.password,

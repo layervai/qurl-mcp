@@ -125,9 +125,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         res.status(429).send("Too many requests.");
       },
     });
-  // One aggregate bucket intentionally covers every legal/video surface for a
-  // client IP; health probes get their own isolated limiter instance below.
+  // Legal documents and the video page share an aggregate browser-page bucket.
+  // Video byte-range traffic and health probes use isolated instances so
+  // playback and liveness checks cannot starve the public documents.
   const publicRouteRateLimiter = createPublicRateLimiter();
+  const videoFileRateLimiter = createPublicRateLimiter();
   const healthRateLimiter = createPublicRateLimiter();
   const bearerAuthMiddleware = requireBearerAuth({
     verifier: createPassthroughBearerVerifier(),
@@ -369,6 +371,16 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     res.setHeader("Content-Type", "video/mp4");
     res.setHeader("Cache-Control", "public, max-age=300");
     res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    res.vary("Range");
+
+    const rejectRange = (): void => {
+      res.status(416);
+      res.setHeader("Content-Range", `bytes */${fileSize}`);
+      // Do not let a shared cache retain a malformed/unsatisfiable request's
+      // response under the public representation's cache policy.
+      res.setHeader("Cache-Control", "no-store");
+      res.end();
+    };
 
     if (!range) {
       res.setHeader("Content-Length", fileSize);
@@ -380,7 +392,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     // reject unsupported multi-range requests, which we answer with 416.
     const match = /^bytes=(\d*)-(\d*)$/.exec(range);
     if (!match) {
-      res.status(416).setHeader("Content-Range", `bytes */${fileSize}`).end();
+      rejectRange();
       return;
     }
 
@@ -391,7 +403,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       (parsedStart !== undefined && !Number.isSafeInteger(parsedStart)) ||
       (parsedEnd !== undefined && !Number.isSafeInteger(parsedEnd))
     ) {
-      res.status(416).setHeader("Content-Range", `bytes */${fileSize}`).end();
+      rejectRange();
       return;
     }
 
@@ -408,7 +420,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
 
     if (start < 0 || end < 0 || start >= fileSize || start > end) {
-      res.status(416).setHeader("Content-Range", `bytes */${fileSize}`).end();
+      rejectRange();
       return;
     }
 
@@ -624,7 +636,12 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       }
       console.error(`Error handling MCP POST request (${formatErrorForLog(error)})`);
       if (!res.headersSent) {
-        rejectJsonRpc(res, 500, "Internal server error.");
+        const requestedSessionId = getSessionId(req);
+        if (requestedSessionId && !sessions.has(requestedSessionId)) {
+          rejectJsonRpc(res, 409, "Session closed during request. Please re-initialize.");
+        } else {
+          rejectJsonRpc(res, 500, "Internal server error.");
+        }
       }
     }
   };
@@ -761,7 +778,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       res.type("html").send(videoPageHtml);
     });
 
-    app.get(videoFileRoute, publicRouteRateLimiter, async (req, res) => {
+    app.get(videoFileRoute, videoFileRateLimiter, async (req, res) => {
       await streamPublicVideo(req, res, publicVideo.filePath);
     });
   }

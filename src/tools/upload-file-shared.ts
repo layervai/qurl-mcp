@@ -118,7 +118,7 @@ export function inferContentType(filePath: string) {
 
 export function getMaxUploadFileBytes(): number {
   const requestScoped = getRequestMaxUploadFileDataBytes();
-  if (requestScoped) return requestScoped;
+  if (requestScoped !== undefined) return requestScoped;
   return loadRuntimeConfig().maxUploadFileDataBytes;
 }
 
@@ -136,9 +136,10 @@ export function validateFileSignature(fileData: Uint8Array, contentType: string)
   const bytes = Buffer.from(fileData.buffer, fileData.byteOffset, fileData.byteLength);
   // latin1 preserves byte values exactly; Node's ascii decoder masks the high
   // bit and would let non-ASCII bytes impersonate an ASCII magic header.
-  // These are bounded type-confusion guards rather than full decoders, but all
-  // supported formats must also end at their defined trailer/container marker
-  // so an otherwise-valid prefix cannot bless arbitrary appended content.
+  // These are bounded type-confusion guards rather than full decoders. Start
+  // and end framing rejects bytes appended after a terminal marker, but JPEG
+  // and GIF internals are not parsed; downstream connector validation and
+  // nosniff delivery remain the authoritative content boundary.
   const ascii = (start: number, end: number) => bytes.subarray(start, end).toString("latin1");
   const pdfEofIndex = bytes.lastIndexOf(PDF_EOF_MARKER);
   const hasPdfTrailer =

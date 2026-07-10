@@ -98,6 +98,13 @@ describe("sendEmailMessage", () => {
     ).rejects.toThrow("valid addresses");
     await expect(
       sendEmailMessage({
+        to: [`${"a".repeat(250)}@example.com`],
+        subject: "Hello",
+        text: "World",
+      }),
+    ).rejects.toThrow("valid addresses");
+    await expect(
+      sendEmailMessage({
         to: ["alice@example.com"],
         subject: "Hello\r\nBcc: attacker@example.com",
         text: "World",
@@ -262,6 +269,7 @@ describe("sendEmailMessage", () => {
       host: "smtp.example.com",
       port: 587,
       secure: false,
+      requireTLS: true,
       auth: {
         user: "mailer",
         pass: "secret",
@@ -341,7 +349,7 @@ describe("sendEmailMessage", () => {
     expect(result.sent).toBe(1);
     expect(log).toHaveBeenCalledWith(expect.stringContaining("SMTP transport cleanup failed"));
     expect(nodemailerMocks.createTransport).toHaveBeenCalledWith(
-      expect.objectContaining({ port: 465, secure: true }),
+      expect.objectContaining({ port: 465, secure: true, requireTLS: false }),
     );
   });
 

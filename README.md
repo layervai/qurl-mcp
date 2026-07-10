@@ -225,7 +225,7 @@ the configured service URL to its origin and optional path prefix.
 | ------------------------------ | ---------------------------------------------------------------------------- |
 | `smtp.host`                    | SMTP server hostname                                                         |
 | `smtp.port`                    | SMTP server port                                                             |
-| `smtp.secure`                  | Whether SMTP uses a secure connection                                        |
+| `smtp.secure`                  | `true` for implicit TLS; `false` for required STARTTLS                       |
 | `smtp.username`                | SMTP login username                                                          |
 | `smtp.password`                | SMTP login password or app-specific code                                     |
 | `smtp.fromEmail`               | Sender email address                                                         |
@@ -256,6 +256,8 @@ permit delivery to any syntactically valid address subject to the quotas.
 The SMTP transport uses bounded connection/socket timeouts and is closed after
 each delivery batch. Failed SMTP attempts still consume quota so repeated
 failures cannot bypass the abuse limit.
+Transport encryption is mandatory: `smtp.secure: true` uses implicit TLS,
+while `smtp.secure: false` requires a successful STARTTLS upgrade.
 Hourly quota state is maintained per server process: it resets on restart and
 is not shared across replicas. Operators running multiple instances should
 enforce a corresponding aggregate limit at the SMTP provider or gateway.
@@ -374,10 +376,11 @@ apply independently to each server process. A horizontally scaled deployment
 therefore has aggregate limits of roughly the configured value multiplied by
 its instance count; use shared edge limits or a single routed instance when a
 global cap is required.
-`/healthz` uses its own `publicFileRateLimitPerMinute` bucket, isolated from
-legal and video traffic. Keep load-balancer and liveness-probe frequency below
-that per-source-IP allowance (300 requests/minute by default), or raise it for
-deployments with unusually aggressive probes.
+`/healthz` and the public video-file endpoint each use their own
+`publicFileRateLimitPerMinute` bucket, isolated from legal/video-page traffic
+and from each other. Keep load-balancer, liveness-probe, and expected video
+range-request frequency below that per-source-IP allowance (300
+requests/minute by default), or raise it for unusually aggressive clients.
 
 ## Configuration Priority
 

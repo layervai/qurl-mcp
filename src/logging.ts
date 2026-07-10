@@ -53,13 +53,11 @@ function prefixArgs(args: unknown[]): unknown[] {
   // Make redaction the console boundary rather than a call-site convention.
   // Arbitrary objects are collapsed rather than delegated to console's deep
   // formatter, which could reveal nested credentials.
-  const safeArgs = args.map(sanitizeConsoleArgument);
-  const [first, ...rest] = safeArgs;
-  if (typeof first === "string") {
-    return [`${prefix}${first}`, ...rest];
-  }
-
-  return [prefix, first, ...rest];
+  // Collapse the complete call before applying the final bound. Limiting each
+  // argument independently would still allow an unbounded line when a caller
+  // supplies many arguments.
+  const message = args.map((arg) => String(sanitizeConsoleArgument(arg))).join(" ");
+  return [`${prefix}${sanitizeLogValue(message)}`];
 }
 
 export function installTimestampedConsole(): void {
