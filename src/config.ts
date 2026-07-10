@@ -36,6 +36,7 @@ export interface PublicVideoConfig {
 export interface SmtpConfigInspection {
   enabled: boolean;
   missingFields: string[];
+  securityWarnings: string[];
   host?: string;
   port?: number;
   secure?: boolean;
@@ -593,7 +594,7 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     smtp: resolveSmtpConfig(fileConfig.smtp),
     publicVideo: resolvePublicVideoConfig(fileConfig.publicVideo),
   };
-  const smtpInspection = inspectSmtpFileConfig(fileConfig.smtp);
+  const smtpInspection = inspectSmtpFileConfig(fileConfig.smtp, resolvedPath);
 
   runtimeConfigCache.set(resolvedPath, {
     environmentFingerprint,
@@ -612,7 +613,10 @@ export function clearRuntimeConfigCache(): void {
   runtimeConfigCache.clear();
 }
 
-function inspectSmtpFileConfig(fileConfig: Partial<SmtpConfig> | undefined): SmtpConfigInspection {
+function inspectSmtpFileConfig(
+  fileConfig: Partial<SmtpConfig> | undefined,
+  configPath: string,
+): SmtpConfigInspection {
   const { host, port, secure, username, password, fromEmail, fromName } =
     resolveSmtpFieldValues(fileConfig);
   const missingFields = [
@@ -623,10 +627,23 @@ function inspectSmtpFileConfig(fileConfig: Partial<SmtpConfig> | undefined): Smt
     !password ? "password" : undefined,
     !fromEmail ? "fromEmail" : undefined,
   ].filter((field): field is string => typeof field === "string");
+  const securityWarnings: string[] = [];
+  if (trimString(fileConfig?.password) && process.platform !== "win32") {
+    try {
+      if ((statSync(configPath).mode & 0o077) !== 0) {
+        securityWarnings.push(
+          "SMTP password is stored in a group/other-readable config file. Prefer QURL_SMTP_PASSWORD or restrict the file to owner-only permissions (for example, chmod 600).",
+        );
+      }
+    } catch (error) {
+      if ((error as { code?: string }).code !== "ENOENT") throw error;
+    }
+  }
 
   return {
     enabled: missingFields.length === 0,
     missingFields,
+    securityWarnings,
     host,
     port,
     secure,
@@ -643,5 +660,9 @@ export function inspectSmtpConfig(configPath = getDefaultConfigPath()): SmtpConf
   if (!inspection) {
     throw new Error(`SMTP configuration inspection failed for ${resolvedPath}.`);
   }
-  return { ...inspection, missingFields: [...inspection.missingFields] };
+  return {
+    ...inspection,
+    missingFields: [...inspection.missingFields],
+    securityWarnings: [...inspection.securityWarnings],
+  };
 }

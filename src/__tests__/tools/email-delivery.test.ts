@@ -42,6 +42,29 @@ describe("maybeDeliverToolEmail", () => {
     ]);
   });
 
+  it("passes the same normalized unique recipients used by delivery reporting", async () => {
+    vi.mocked(sendEmailMessage).mockResolvedValueOnce({
+      attempted: true,
+      enabled: true,
+      recipients: ["alice@example.com"],
+      sent: 1,
+      failed: 0,
+      results: [{ email: "alice@example.com", success: true }],
+    });
+
+    await maybeDeliverToolEmail({
+      allowServerApiKeyFallback: true,
+      delivery: { to: ["Alice@Example.com", "alice@example.com"] },
+      defaultSubject: "Secure link ready",
+      detailLines: ["Secure Link: https://qurl.link/example"],
+    });
+
+    expect(sendEmailMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ to: ["alice@example.com"] }),
+      expect.any(Object),
+    );
+  });
+
   it("reports an actionable skip before SMTP when the assembled body is oversized", async () => {
     const result = await maybeDeliverToolEmail({
       allowServerApiKeyFallback: true,

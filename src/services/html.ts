@@ -26,5 +26,5 @@ export function escapeHttpUrlAttribute(value: string): string {
   ) {
     throw new Error("HTML URL attributes must contain an absolute HTTP(S) URL.");
   }
-  return escapeHtml(value);
+  return escapeHtml(url.toString());
 }

@@ -895,6 +895,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
           ? "SMTP is configured."
           : `SMTP is not configured. Missing fields: ${smtpInspection.missingFields.join(", ") || "(unknown)"}`,
       );
+      for (const warning of smtpInspection.securityWarnings) console.warn(`Warning: ${warning}`);
       if (config.allowedHosts?.length) {
         logInfo(`Host allowlist enabled with ${config.allowedHosts.length} entries.`);
       }

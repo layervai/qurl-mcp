@@ -134,7 +134,7 @@ export async function maybeDeliverToolEmail(
   try {
     return await sendEmailMessage(
       {
-        to: input.delivery.to,
+        to: recipients,
         subject,
         text,
       },

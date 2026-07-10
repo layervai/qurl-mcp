@@ -47,7 +47,7 @@ function parseBoundedInteger(
   minimum: number,
   maximum: number,
 ): number {
-  if (value === undefined || value === "") return fallback;
+  if (value === undefined) return fallback;
   if (typeof value === "string" && !/^\d+$/.test(value.trim())) {
     throw new Error(`${fieldName} must be an integer between ${minimum} and ${maximum}.`);
   }
@@ -159,6 +159,9 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
   }
   if (!isLoopbackHostname(host) && configuredBaseUrl === undefined) {
     throw new Error("baseUrl is required when the HTTP listener is not bound to loopback.");
+  }
+  if (!isLoopbackHostname(host) && new URL(baseUrl).protocol !== "https:") {
+    throw new Error("baseUrl must use HTTPS when the HTTP listener is not bound to loopback.");
   }
   // Environment/shared-runtime settings remain authoritative. The fallback
   // reads only the HTTP file, but both paths use one shared normalizer.

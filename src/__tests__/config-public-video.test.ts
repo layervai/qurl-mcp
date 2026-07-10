@@ -1,9 +1,14 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadHttpServerConfig } from "../http-config.js";
-import { clearRuntimeConfigCache, getDefaultConfigPath, loadRuntimeConfig } from "../config.js";
+import {
+  clearRuntimeConfigCache,
+  getDefaultConfigPath,
+  inspectSmtpConfig,
+  loadRuntimeConfig,
+} from "../config.js";
 
 describe("public video config", () => {
   const originalConfigPath = process.env.QURL_MCP_CONFIG;
@@ -185,6 +190,32 @@ describe("public video config", () => {
 
     expect(() => loadRuntimeConfig(configPath)).toThrow("port 465 requires smtp.secure to be true");
   });
+
+  it.skipIf(process.platform === "win32")(
+    "warns when a config-file SMTP password is readable by group or others",
+    () => {
+      const configPath = join(tempDir!, "qurl-mcp.config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          smtp: {
+            host: "smtp.example.com",
+            port: 587,
+            secure: false,
+            username: "mailer",
+            password: "secret",
+            fromEmail: "noreply@example.com",
+          },
+        }),
+      );
+      chmodSync(configPath, 0o644);
+
+      expect(inspectSmtpConfig(configPath).securityWarnings).toHaveLength(1);
+      chmodSync(configPath, 0o600);
+      clearRuntimeConfigCache();
+      expect(inspectSmtpConfig(configPath).securityWarnings).toEqual([]);
+    },
+  );
 
   it.each([
     ["host", "smtp.example.com\r\nattacker.example.com", "SMTP host"],

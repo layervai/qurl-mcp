@@ -362,8 +362,8 @@ describe("sendEmailMessage", () => {
           host: "smtp.example.com",
           port: 587,
           secure: false,
-          username: "mailer",
-          password: "secret",
+          username: "mail+er",
+          password: "s ecret",
           fromEmail: "noreply@example.com",
         },
       }),
@@ -371,7 +371,7 @@ describe("sendEmailMessage", () => {
     process.env.QURL_MCP_CONFIG = configPath;
     nodemailerMocks.sendMail
       .mockRejectedValueOnce(
-        new Error("smtp.internal: mailer secret recipient mailbox unavailable"),
+        new Error("smtp.internal: mail%2Ber s%20ecret recipient mailbox unavailable"),
       )
       .mockResolvedValueOnce({ messageId: "msg-2" });
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -402,8 +402,8 @@ describe("sendEmailMessage", () => {
       }),
     );
     expect(log).toHaveBeenCalledWith(expect.stringContaining("recipient mailbox unavailable"));
-    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("mailer"));
-    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("secret"));
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("mail%2Ber"));
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("s%20ecret"));
     expect(JSON.stringify(result)).not.toContain("smtp.internal");
     expect(nodemailerMocks.close).toHaveBeenCalledOnce();
   });

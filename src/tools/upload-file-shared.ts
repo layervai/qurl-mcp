@@ -437,6 +437,8 @@ export async function uploadToConnector(
     new globalThis.Blob([blobData], { type: contentType }),
     fileName,
   );
+  // The standards-based FormData serializer owns Content-Disposition filename
+  // quoting/escaping; never interpolate this value into a raw header.
 
   // lgtm[js/file-access-to-http] The validated destination and upload are the explicit behavior of this MCP tool.
   const response = await fetchConnector(uploadUrl, {

@@ -198,4 +198,27 @@ describe("HTTP listener config", () => {
       "baseUrl is required when the HTTP listener is not bound to loopback",
     );
   });
+
+  it("requires an HTTPS public origin for a non-loopback listener", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        host: "0.0.0.0",
+        baseUrl: "http://127.0.0.1:3000",
+        allowedHosts: ["mcp.example.com"],
+      }),
+    );
+
+    expect(() => loadHttpServerConfig(configPath)).toThrow(
+      "baseUrl must use HTTPS when the HTTP listener is not bound to loopback",
+    );
+  });
+
+  it("rejects blank bounded-integer configuration instead of silently defaulting", () => {
+    const configPath = join(tempDir, "http.json");
+    process.env.MCP_PORT = "";
+
+    expect(() => loadHttpServerConfig(configPath)).toThrow("between 1 and 65535");
+  });
 });

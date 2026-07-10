@@ -194,6 +194,10 @@ cache when the file metadata or any relevant environment value changes.
 | `QURL_PUBLIC_VIDEO_PAGE_PATH`          | `publicVideo.pagePath`         |
 
 `QURL_API_KEY` is intentionally environment-only and has no config-file field.
+Prefer `QURL_SMTP_PASSWORD` for the SMTP secret as well. If `smtp.password` is
+stored in the config file on a POSIX host, restrict that file to owner-only
+permissions (for example, `chmod 600`); startup warns when group/other read bits
+are present.
 
 Raising `maxUploadFileDataBytes` also raises the HTTP JSON parser's per-request
 memory ceiling to roughly 1.5 times that value (up to about 150 MB at the

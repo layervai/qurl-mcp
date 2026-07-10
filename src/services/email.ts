@@ -41,7 +41,10 @@ function formatSmtpErrorForLog(error: unknown, smtp: SmtpConfig): string {
   if (!(error instanceof Error)) return formatErrorForLog(error);
   let message = error.message;
   for (const credential of [smtp.username, smtp.password]) {
-    if (credential) message = message.replaceAll(credential, "[REDACTED]");
+    if (!credential) continue;
+    for (const representation of new Set([credential, encodeURIComponent(credential)])) {
+      message = message.replaceAll(representation, "[REDACTED]");
+    }
   }
   const redacted = new Error(message);
   redacted.name = error.name;

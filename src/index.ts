@@ -29,6 +29,7 @@ async function main(): Promise<void> {
         `SMTP is not configured. Missing fields: ${smtpInspection.missingFields.join(", ") || "(unknown)"}`,
       );
     }
+    for (const warning of smtpInspection.securityWarnings) console.warn(`Warning: ${warning}`);
 
     const client = new QURLClient({ apiKey, baseURL: runtimeConfig.defaultQurlApiUrl });
     const server = createServer(client, version, "stdio");
