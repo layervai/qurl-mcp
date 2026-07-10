@@ -467,6 +467,22 @@ describe("public video config", () => {
     expect(() => loadRuntimeConfig(configPath)).toThrow("title must be at most 200 characters");
   });
 
+  it("flattens control characters in the operator-provided video title", () => {
+    const configPath = join(tempDir!, "qurl-mcp.config.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        publicVideo: {
+          title: "Launch\nDemo",
+          pagePath: "/media/video",
+          filePath: "/srv/videos/demo.mp4",
+        },
+      }),
+    );
+
+    expect(loadRuntimeConfig(configPath).publicVideo?.title).toBe("Launch Demo");
+  });
+
   it("requires an absolute public video file path", () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(

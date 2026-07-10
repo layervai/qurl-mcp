@@ -5,6 +5,7 @@ import { extname, isAbsolute, normalize, resolve } from "node:path";
 import { isEmailAddress, normalizeEmailAddress, normalizeEmailDomain } from "./email-addresses.js";
 import { RESERVED_PUBLIC_PATH_PREFIXES } from "./http-routes.js";
 import { clearSensitiveLogValues, registerSensitiveLogValues } from "./logging.js";
+import { flattenControlCharacters } from "./text.js";
 
 export interface SmtpConfig {
   host: string;
@@ -440,7 +441,9 @@ function validateSmtpCredential(value: string, fieldName: "username" | "password
 }
 
 export function normalizePublicVideoTitle(value: string | undefined): string {
-  const title = trimString(value) ?? DEFAULT_PUBLIC_VIDEO_TITLE;
+  const title =
+    flattenControlCharacters(trimString(value) ?? DEFAULT_PUBLIC_VIDEO_TITLE).trim() ||
+    DEFAULT_PUBLIC_VIDEO_TITLE;
   if (title.length > MAX_PUBLIC_VIDEO_TITLE_CHARACTERS) {
     throw new Error(
       `publicVideo.title must be at most ${MAX_PUBLIC_VIDEO_TITLE_CHARACTERS} characters.`,

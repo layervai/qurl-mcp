@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { constants } from "node:fs";
-import { open, type FileHandle } from "node:fs/promises";
+import { open, realpath, type FileHandle } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { z } from "zod";
@@ -159,7 +159,11 @@ export async function uploadGeneratedFileAndMint(
   connectorConfig: ConnectorConfig,
 ) {
   const sourcePath = resolve(input.file_path);
-  const relativeToTemp = relative(resolve(tmpdir()), sourcePath);
+  const [canonicalTempPath, canonicalSourcePath] = await Promise.all([
+    realpath(tmpdir()),
+    realpath(sourcePath),
+  ]);
+  const relativeToTemp = relative(canonicalTempPath, canonicalSourcePath);
   if (
     isAbsolute(relativeToTemp) ||
     relativeToTemp === ".." ||
@@ -167,7 +171,11 @@ export async function uploadGeneratedFileAndMint(
   ) {
     throw new Error("Generated upload files must remain inside the server temporary directory.");
   }
-  return uploadLocalFileAndMint(client, { ...input, file_path: sourcePath }, connectorConfig);
+  return uploadLocalFileAndMint(
+    client,
+    { ...input, file_path: canonicalSourcePath },
+    connectorConfig,
+  );
 }
 
 export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {

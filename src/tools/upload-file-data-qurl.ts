@@ -125,7 +125,8 @@ function normalizeBase64Input(input: string): {
   // Step 3: Accept either the standard or URL-safe alphabet, but reject a
   // mixed alphabet because no conforming encoder emits that representation.
   const usesStandardAlphabet = /^[A-Za-z0-9+/]*={0,2}$/.test(withoutWhitespace);
-  const usesUrlSafeAlphabet = /^[A-Za-z0-9_-]*={0,2}$/.test(withoutWhitespace);
+  const usesUrlSafeAlphabet =
+    !usesStandardAlphabet && /^[A-Za-z0-9_-]*={0,2}$/.test(withoutWhitespace);
   if (!usesStandardAlphabet && !usesUrlSafeAlphabet) {
     throw new Error("file_base64 must be valid base64-encoded content");
   }
