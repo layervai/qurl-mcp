@@ -10,6 +10,7 @@ import {
 } from "./config.js";
 import { resolve } from "node:path";
 import { isIP } from "node:net";
+import { normalizeMcpMetricsIdentity, type McpMetricsIdentity } from "./emf-metrics.js";
 
 export interface HttpServerConfig {
   port: number;
@@ -24,6 +25,13 @@ export interface HttpServerConfig {
   sessionAbsoluteTtlMs: number;
   unvalidatedSessionTtlMs: number;
   mcpRateLimitPerMinute: number;
+  stateless?: boolean;
+  maxConcurrentRequests?: number;
+  credentialRateLimitStore?: "memory" | "dynamodb";
+  rateLimitDynamoDbTable?: string;
+  metricsNamespace?: string;
+  metricsService?: string;
+  metricsEnvironment?: string;
   publicFileRateLimitPerMinute: number;
   maxUploadFileDataBytes: number;
   defaultQurlApiUrl: string;
@@ -39,6 +47,90 @@ const DEFAULT_MAX_UNVALIDATED_SESSIONS = 100;
 const DEFAULT_SESSION_IDLE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_SESSION_ABSOLUTE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_UNVALIDATED_SESSION_TTL_MS = 60 * 1000;
+export const DEFAULT_MAX_CONCURRENT_REQUESTS = 20;
+const MAX_CONCURRENT_REQUESTS = 1_000;
+const MAX_STATELESS_PARSER_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
+
+export function getJsonBodyLimitBytes(maxUploadFileDataBytes: number): number {
+  // This limits raw request bytes, so JSON escaping can only consume the
+  // allowance faster; it cannot expand memory beyond this parser ceiling.
+  // Base64 itself needs no JSON escaping and inflates decoded bytes by 4/3,
+  // leaving the remainder of this 1.5x bound for the JSON-RPC envelope.
+  // decodeBase64File still applies the exact decoded-byte limit after parsing.
+  return Math.ceil(maxUploadFileDataBytes * 1.5) + 64 * 1024;
+}
+
+export function assertStatelessParserBudget(
+  stateless: boolean,
+  maxConcurrentRequests: number,
+  maxUploadFileDataBytes: number,
+): void {
+  const parserBudgetBytes = maxConcurrentRequests * getJsonBodyLimitBytes(maxUploadFileDataBytes);
+  if (stateless && parserBudgetBytes > MAX_STATELESS_PARSER_BUDGET_BYTES) {
+    throw new Error(
+      "Stateless parser budget exceeds 4 GiB; reduce maxConcurrentRequests or maxUploadFileDataBytes.",
+    );
+  }
+}
+
+export function assertDeployedStatelessRequirements(
+  host: string,
+  stateless: boolean,
+  credentialRateLimitStore: "memory" | "dynamodb",
+  metricsIdentity: McpMetricsIdentity | undefined,
+): void {
+  if (!stateless || isLoopbackHostname(host)) return;
+  if (credentialRateLimitStore !== "dynamodb") {
+    throw new Error(
+      "Deployed stateless HTTP mode requires MCP_CREDENTIAL_RATE_LIMIT_STORE=dynamodb.",
+    );
+  }
+  if (!metricsIdentity) {
+    throw new Error(
+      "Deployed stateless HTTP mode requires MCP_METRICS_NAMESPACE, MCP_METRICS_SERVICE, and MCP_METRICS_ENVIRONMENT.",
+    );
+  }
+}
+
+function parseBoolean(value: unknown, fallback: boolean, fieldName: string): boolean {
+  if (value === undefined) return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  throw new Error(`${fieldName} must be true or false.`);
+}
+
+function parseCredentialRateLimitStore(value: unknown): "memory" | "dynamodb" {
+  if (value === undefined) return "memory";
+  if (value === "memory" || value === "dynamodb") return value;
+  throw new Error(
+    "MCP_CREDENTIAL_RATE_LIMIT_STORE/credentialRateLimitStore must be memory or dynamodb.",
+  );
+}
+
+function parseOptionalNonEmptyString(value: unknown, fieldName: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${fieldName} must be a non-empty string.`);
+  }
+  return value.trim();
+}
+
+export function normalizeRateLimitDynamoDbTable(value: unknown): string | undefined {
+  const tableName = parseOptionalNonEmptyString(
+    value,
+    "MCP_RATE_LIMIT_DYNAMODB_TABLE/rateLimitDynamoDbTable",
+  );
+  if (tableName !== undefined && !/^[A-Za-z0-9_.-]{3,255}$/.test(tableName)) {
+    throw new Error(
+      "MCP_RATE_LIMIT_DYNAMODB_TABLE/rateLimitDynamoDbTable must be 3-255 DynamoDB table-name characters (letters, numbers, underscore, hyphen, or period).",
+    );
+  }
+  return tableName;
+}
 
 function parseBoundedInteger(
   value: unknown,
@@ -61,6 +153,19 @@ function parseBoundedInteger(
     throw new Error(`${fieldName} must be an integer between ${minimum} and ${maximum}.`);
   }
   return parsed;
+}
+
+export function normalizeMaxConcurrentRequests(
+  value: unknown,
+  fieldName = "maxConcurrentRequests",
+): number {
+  return parseBoundedInteger(
+    value,
+    DEFAULT_MAX_CONCURRENT_REQUESTS,
+    fieldName,
+    1,
+    MAX_CONCURRENT_REQUESTS,
+  );
 }
 
 function normalizeAllowedHosts(hosts: unknown): string[] | undefined {
@@ -170,6 +275,34 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
   // reads only the HTTP file, but both paths use one shared normalizer.
   const publicVideo =
     runtimeConfig.publicVideo ?? normalizePublicVideoConfig(fileConfig.publicVideo);
+  const stateless = parseBoolean(
+    process.env.MCP_HTTP_STATELESS ?? fileConfig.stateless,
+    false,
+    "MCP_HTTP_STATELESS/stateless",
+  );
+  const credentialRateLimitStore = parseCredentialRateLimitStore(
+    process.env.MCP_CREDENTIAL_RATE_LIMIT_STORE ?? fileConfig.credentialRateLimitStore,
+  );
+  const rateLimitDynamoDbTable = normalizeRateLimitDynamoDbTable(
+    process.env.MCP_RATE_LIMIT_DYNAMODB_TABLE ?? fileConfig.rateLimitDynamoDbTable,
+  );
+  const metricsIdentity = normalizeMcpMetricsIdentity(
+    {
+      namespace: process.env.MCP_METRICS_NAMESPACE ?? fileConfig.metricsNamespace,
+      service: process.env.MCP_METRICS_SERVICE ?? fileConfig.metricsService,
+      environment: process.env.MCP_METRICS_ENVIRONMENT ?? fileConfig.metricsEnvironment,
+    },
+    stateless,
+  );
+  const metricsNamespace = metricsIdentity?.namespace;
+  const metricsService = metricsIdentity?.service;
+  const metricsEnvironment = metricsIdentity?.environment;
+  if (credentialRateLimitStore === "dynamodb" && !rateLimitDynamoDbTable) {
+    throw new Error(
+      "MCP_RATE_LIMIT_DYNAMODB_TABLE/rateLimitDynamoDbTable is required for the dynamodb credential rate-limit store.",
+    );
+  }
+  assertDeployedStatelessRequirements(host, stateless, credentialRateLimitStore, metricsIdentity);
   const maxSessions = parseBoundedInteger(
     process.env.MCP_MAX_SESSIONS ?? fileConfig.maxSessions,
     DEFAULT_MAX_SESSIONS,
@@ -208,6 +341,15 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
   if (sessionAbsoluteTtlMs < sessionIdleTtlMs) {
     throw new Error("sessionAbsoluteTtlMs must be greater than or equal to sessionIdleTtlMs.");
   }
+  const maxConcurrentRequests = normalizeMaxConcurrentRequests(
+    process.env.MCP_MAX_CONCURRENT_REQUESTS ?? fileConfig.maxConcurrentRequests,
+    "MCP_MAX_CONCURRENT_REQUESTS/maxConcurrentRequests",
+  );
+  assertStatelessParserBudget(
+    stateless,
+    maxConcurrentRequests,
+    runtimeConfig.maxUploadFileDataBytes,
+  );
 
   return {
     port,
@@ -233,6 +375,13 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
       10_000,
       5 * 60 * 1000,
     ),
+    stateless,
+    maxConcurrentRequests,
+    credentialRateLimitStore,
+    rateLimitDynamoDbTable,
+    metricsNamespace,
+    metricsService,
+    metricsEnvironment,
     mcpRateLimitPerMinute: parseBoundedInteger(
       process.env.MCP_RATE_LIMIT_PER_MINUTE ?? fileConfig.mcpRateLimitPerMinute,
       120,

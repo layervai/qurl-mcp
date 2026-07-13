@@ -1,0 +1,16 @@
+{
+  "port": 3000,
+  "host": "0.0.0.0",
+  "baseUrl": "https://mcp.example.com",
+  "allowedHosts": ["mcp.example.com"],
+  "trustProxyHops": 1,
+  "stateless": true,
+  "maxConcurrentRequests": 20,
+  "credentialRateLimitStore": "dynamodb",
+  "rateLimitDynamoDbTable": "qurl-mcp-sandbox-rate-limits",
+  "metricsNamespace": "LayerV/qurl-mcp",
+  "metricsService": "qurl-mcp",
+  "metricsEnvironment": "sandbox",
+  "mcpRateLimitPerMinute": 120,
+  "publicFileRateLimitPerMinute": 300
+}

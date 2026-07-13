@@ -37,6 +37,9 @@ describe("HTTP listener config", () => {
         sessionIdleTtlMs: 900_000,
         unvalidatedSessionTtlMs: 60_000,
         mcpRateLimitPerMinute: 120,
+        stateless: false,
+        maxConcurrentRequests: 20,
+        credentialRateLimitStore: "memory",
       }),
     );
   });
@@ -223,5 +226,105 @@ describe("HTTP listener config", () => {
     process.env.MCP_PORT = "";
 
     expect(() => loadHttpServerConfig(configPath)).toThrow("between 1 and 65535");
+  });
+
+  it("requires a shared rate store and stable metrics for deployed stateless mode", () => {
+    const configPath = join(tempDir, "http.json");
+    const publicConfig = {
+      host: "0.0.0.0",
+      baseUrl: "https://mcp.example.com",
+      allowedHosts: ["mcp.example.com"],
+      stateless: true,
+    };
+    writeFileSync(configPath, JSON.stringify(publicConfig));
+    expect(() => loadHttpServerConfig(configPath)).toThrow(
+      "requires MCP_CREDENTIAL_RATE_LIMIT_STORE=dynamodb",
+    );
+
+    writeFileSync(
+      configPath,
+      JSON.stringify({ ...publicConfig, credentialRateLimitStore: "dynamodb" }),
+    );
+    expect(() => loadHttpServerConfig(configPath)).toThrow("rateLimitDynamoDbTable is required");
+
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        ...publicConfig,
+        credentialRateLimitStore: "dynamodb",
+        rateLimitDynamoDbTable: "bad/table",
+      }),
+    );
+    expect(() => loadHttpServerConfig(configPath)).toThrow(
+      "must be 3-255 DynamoDB table-name characters",
+    );
+
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        ...publicConfig,
+        credentialRateLimitStore: "dynamodb",
+        rateLimitDynamoDbTable: "qurl-mcp-sandbox-rate-limits",
+      }),
+    );
+    expect(() => loadHttpServerConfig(configPath)).toThrow("requires MCP_METRICS_NAMESPACE");
+
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        ...publicConfig,
+        credentialRateLimitStore: "dynamodb",
+        rateLimitDynamoDbTable: "qurl-mcp-sandbox-rate-limits",
+        metricsNamespace: "LayerV/qurl-mcp",
+        metricsService: "qurl-mcp",
+        metricsEnvironment: "sandbox",
+        maxConcurrentRequests: 20,
+      }),
+    );
+    expect(loadHttpServerConfig(configPath)).toEqual(
+      expect.objectContaining({
+        stateless: true,
+        credentialRateLimitStore: "dynamodb",
+        rateLimitDynamoDbTable: "qurl-mcp-sandbox-rate-limits",
+        maxConcurrentRequests: 20,
+      }),
+    );
+  });
+
+  it("allows loopback stateless development with the compatibility memory store", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(configPath, JSON.stringify({ stateless: true, maxConcurrentRequests: 3 }));
+
+    expect(loadHttpServerConfig(configPath)).toEqual(
+      expect.objectContaining({
+        stateless: true,
+        maxConcurrentRequests: 3,
+        credentialRateLimitStore: "memory",
+      }),
+    );
+  });
+
+  it("rejects a stateless parser budget above the process safety ceiling", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(configPath, JSON.stringify({ stateless: true, maxConcurrentRequests: 100 }));
+    process.env.MCP_MAX_UPLOAD_FILE_DATA_BYTES = String(100 * 1024 * 1024);
+
+    expect(() => loadHttpServerConfig(configPath)).toThrow("Stateless parser budget exceeds 4 GiB");
+  });
+
+  it("rejects stateless-only saturation metrics in stateful mode", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        metricsNamespace: "LayerV/qurl-mcp",
+        metricsService: "qurl-mcp",
+        metricsEnvironment: "sandbox",
+      }),
+    );
+
+    expect(() => loadHttpServerConfig(configPath)).toThrow(
+      "metrics identity is supported only in stateless HTTP mode",
+    );
   });
 });

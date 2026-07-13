@@ -23,6 +23,7 @@ import { QURLAPIError } from "../client.js";
 import { createHttpRuntime, runHttpMain } from "../http.js";
 import type { HttpServerConfig } from "../http-config.js";
 import { makeMockClient, sampleCreateQURLData } from "./helpers.js";
+import { MemoryCredentialRateLimitStore } from "../credential-rate-limit-store.js";
 
 const testConfig: HttpServerConfig = {
   port: 3000,
@@ -105,6 +106,26 @@ async function requestWithHost(url: string, host: string): Promise<number> {
   });
 }
 
+async function postMcpWithRawHeaders(
+  baseUrl: string,
+  token: string,
+): Promise<{ statusCode: number; rawHeaders: string[] }> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      `${baseUrl}/mcp`,
+      { method: "POST", headers: bearerHeaders(token) },
+      (res) => {
+        res.resume();
+        res.once("end", () =>
+          resolve({ statusCode: res.statusCode ?? 0, rawHeaders: res.rawHeaders }),
+        );
+      },
+    );
+    req.once("error", reject);
+    req.end(JSON.stringify(initializeBody));
+  });
+}
+
 afterEach(async () => {
   vi.useRealTimers();
   await closeAllSessions();
@@ -121,6 +142,581 @@ afterEach(async () => {
 });
 
 describe("HTTP MCP server", () => {
+  it("fails fast when a directly constructed DynamoDB runtime lacks a table", () => {
+    expect(() =>
+      createHttpRuntime(
+        { ...testConfig, credentialRateLimitStore: "dynamodb" },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("rateLimitDynamoDbTable is required");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...testConfig,
+          credentialRateLimitStore: "dynamodb",
+          rateLimitDynamoDbTable: "bad/table",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("must be 3-255 DynamoDB table-name characters");
+  });
+
+  it("rejects direct stateful or partial metrics configuration", () => {
+    expect(() =>
+      createHttpRuntime(
+        { ...testConfig, stateless: true, maxConcurrentRequests: 0 },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("maxConcurrentRequests must be an integer between 1 and 1000");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...testConfig,
+          stateless: true,
+          maxConcurrentRequests: 100,
+          maxUploadFileDataBytes: 100 * 1024 * 1024,
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("Stateless parser budget exceeds 4 GiB");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...testConfig,
+          metricsNamespace: "LayerV/qurl-mcp",
+          metricsService: "qurl-mcp",
+          metricsEnvironment: "sandbox",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("only in stateless HTTP mode");
+    expect(() =>
+      createHttpRuntime(
+        { ...testConfig, metricsNamespace: "LayerV/qurl-mcp" },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("only in stateless HTTP mode");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...testConfig,
+          metricsNamespace: " ",
+          metricsService: "qurl-mcp",
+          metricsEnvironment: "sandbox",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("only in stateless HTTP mode");
+    expect(() =>
+      createHttpRuntime(
+        { ...testConfig, stateless: true, metricsNamespace: "LayerV/qurl-mcp" },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("must be configured together");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...testConfig,
+          stateless: true,
+          metricsNamespace: "LayerV/qurl-mcp",
+          metricsService: " ",
+          metricsEnvironment: "sandbox",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("must be non-empty");
+
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      const trimmedRuntime = createHttpRuntime(
+        {
+          ...testConfig,
+          stateless: true,
+          metricsNamespace: " LayerV/qurl-mcp ",
+          metricsService: " qurl-mcp ",
+          metricsEnvironment: " sandbox ",
+        },
+        { version: "0.0.0-test" },
+      );
+      trimmedRuntime.emitMetricsHeartbeat();
+      expect(JSON.parse(String(write.mock.calls[0]?.[0]))).toEqual(
+        expect.objectContaining({
+          Service: "qurl-mcp",
+          Environment: "sandbox",
+          _aws: expect.objectContaining({
+            CloudWatchMetrics: [expect.objectContaining({ Namespace: "LayerV/qurl-mcp" })],
+          }),
+        }),
+      );
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("enforces deployed stateless requirements for direct runtime construction", () => {
+    const deployedConfig: HttpServerConfig = {
+      ...testConfig,
+      host: "0.0.0.0",
+      baseUrl: "https://mcp.example.com",
+      allowedHosts: ["mcp.example.com"],
+      stateless: true,
+    };
+    expect(() => createHttpRuntime(deployedConfig, { version: "0.0.0-test" })).toThrow(
+      "requires MCP_CREDENTIAL_RATE_LIMIT_STORE=dynamodb",
+    );
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...deployedConfig,
+          credentialRateLimitStore: "dynamodb",
+          rateLimitDynamoDbTable: "rate-table",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("requires MCP_METRICS_NAMESPACE");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...deployedConfig,
+          credentialRateLimitStore: "dynamodb",
+          rateLimitDynamoDbTable: "rate-table",
+          metricsNamespace: "LayerV/qurl-mcp",
+          metricsService: "qurl-mcp",
+          metricsEnvironment: "sandbox",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).not.toThrow();
+  });
+
+  it("requires explicit initialization for an injected credential store", async () => {
+    const injectedRuntime = createHttpRuntime(testConfig, {
+      version: "0.0.0-test",
+      credentialRateLimitStore: new MemoryCredentialRateLimitStore(),
+    });
+    expect(() => injectedRuntime.startHttpServer()).toThrow("must be initialized");
+    await expect(injectedRuntime.initialize()).resolves.toBeUndefined();
+    const server = injectedRuntime.startHttpServer();
+    servers.push(server);
+    await getStartedServerBaseUrl(server);
+  });
+
+  it("bounds stateless header, request, and idle socket lifetimes", async () => {
+    const statelessRuntime = createHttpRuntime(
+      { ...testConfig, port: 0, stateless: true },
+      { version: "0.0.0-test" },
+    );
+    const server = statelessRuntime.startHttpServer();
+    servers.push(server);
+    await getStartedServerBaseUrl(server);
+
+    expect(server.headersTimeout).toBe(15_000);
+    expect(server.requestTimeout).toBe(120_000);
+    expect(server.timeout).toBe(120_000);
+  });
+
+  it("warns when stateless parsing accepts an elevated ceiling before bearer validation", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const statelessRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        port: 0,
+        stateless: true,
+        maxUploadFileDataBytes: 20 * 1024 * 1024,
+      },
+      { version: "0.0.0-test" },
+    );
+    try {
+      const server = statelessRuntime.startHttpServer();
+      servers.push(server);
+      await getStartedServerBaseUrl(server);
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("before downstream bearer validation"),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("Apply an authenticated edge request-size limit"),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("process-local memory credential quota"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("writes raw EMF JSON to stdout after timestamped logging is installed", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const metricsRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        port: 0,
+        stateless: true,
+        metricsNamespace: "LayerV/qurl-mcp",
+        metricsService: "qurl-mcp",
+        metricsEnvironment: "sandbox",
+      },
+      { version: "0.0.0-test" },
+    );
+    try {
+      const server = metricsRuntime.startHttpServer();
+      servers.push(server);
+      await getStartedServerBaseUrl(server);
+
+      const rawEmf = write.mock.calls
+        .map(([value]) => String(value))
+        .find((value) => value.includes('"CloudWatchMetrics"'));
+      expect(rawEmf?.startsWith("{")).toBe(true);
+      expect(rawEmf?.endsWith("\n")).toBe(true);
+      expect(JSON.parse(rawEmf?.trim() ?? "null")).toEqual(
+        expect.objectContaining({
+          Service: "qurl-mcp",
+          Environment: "sandbox",
+          McpConcurrencyUtilization: 0,
+        }),
+      );
+    } finally {
+      write.mockRestore();
+    }
+  });
+
+  it("flushes the final stateless metrics interval during graceful shutdown", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const metricsRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        port: 0,
+        stateless: true,
+        metricsNamespace: "LayerV/qurl-mcp",
+        metricsService: "qurl-mcp",
+        metricsEnvironment: "sandbox",
+      },
+      { version: "0.0.0-test" },
+    );
+    const server = metricsRuntime.startHttpServer();
+    try {
+      await getStartedServerBaseUrl(server);
+      write.mockClear();
+      const closed = new Promise<void>((resolve) => server.once("close", () => resolve()));
+      metricsRuntime.shutdownHttpServer("test metrics shutdown");
+      await closed;
+
+      const finalHeartbeat = write.mock.calls
+        .map(([value]) => String(value))
+        .find((value) => value.includes('"CloudWatchMetrics"'));
+      expect(JSON.parse(finalHeartbeat?.trim() ?? "null")).toEqual(
+        expect.objectContaining({
+          McpConcurrencyUtilization: 0,
+          McpConcurrencyRejected: 0,
+          McpRateLimitStoreErrors: 0,
+        }),
+      );
+    } finally {
+      write.mockRestore();
+      if (server.listening) {
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+    }
+  });
+
+  it("serves request-scoped stateless MCP without session affinity or retained state", async () => {
+    const credentialRateLimitStore = new MemoryCredentialRateLimitStore();
+    const incrementCredentialCount = vi.spyOn(credentialRateLimitStore, "increment");
+    const statelessRuntime = createHttpRuntime(
+      { ...testConfig, stateless: true, maxConcurrentRequests: 4 },
+      {
+        version: "0.0.0-test",
+        clientFactory: () => makeMockClient(),
+        credentialRateLimitStore,
+      },
+    );
+    const baseUrl = await start(statelessRuntime.app);
+    const headers = {
+      ...bearerHeaders("lv_live_stateless"),
+      "mcp-session-id": "client-supplied-session",
+    };
+
+    const initialized = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(initializeBody),
+    });
+    expect(initialized.status).toBe(200);
+    expect(initialized.headers.get("mcp-session-id")).toBeNull();
+    expect(initialized.headers.get("ratelimit")).toContain('"credential"');
+    expect(initialized.headers.get("ratelimit-policy")).toContain('"credential"');
+
+    const catalog = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
+    });
+    expect(catalog.status).toBe(200);
+    expect(catalog.headers.get("mcp-session-id")).toBeNull();
+    const catalogBody = await catalog.text();
+    const catalogJson = catalogBody.startsWith("event:")
+      ? JSON.parse(
+          catalogBody
+            .split("\n")
+            .find((line) => line.startsWith("data: "))
+            ?.slice("data: ".length) ?? "null",
+        )
+      : JSON.parse(catalogBody);
+    expect(JSON.stringify(catalogJson)).toContain("create_qurl");
+
+    for (const method of ["GET", "DELETE"]) {
+      const response = await fetch(`${baseUrl}/mcp`, { method, headers });
+      expect(response.status).toBe(405);
+      expect(response.headers.get("allow")).toBe("POST");
+      expect(response.headers.get("content-type")).toContain("application/json");
+      expect(await response.json()).toEqual(
+        expect.objectContaining({ error: expect.objectContaining({ code: -32600 }) }),
+      );
+    }
+    expect(incrementCredentialCount).toHaveBeenCalledTimes(2);
+    await new Promise((resolve) => globalThis.setImmediate(resolve));
+    expect(statelessRuntime.getActiveSessionCount()).toBe(0);
+    expect(statelessRuntime.getInFlightRequestCount()).toBe(0);
+    await statelessRuntime.closeAllSessions();
+  });
+
+  it("combines IP and credential rate limits into one structured header line", async () => {
+    const statelessRuntime = createHttpRuntime(
+      { ...testConfig, stateless: true },
+      { version: "0.0.0-test" },
+    );
+    const baseUrl = await start(statelessRuntime.app);
+
+    const response = await postMcpWithRawHeaders(baseUrl, "lv_live_combined_headers");
+    expect(response.statusCode).toBe(200);
+    const headerLines = response.rawHeaders.reduce<Record<string, string[]>>(
+      (result, value, index, rawHeaders) => {
+        if (index % 2 !== 0) return result;
+        const name = value.toLowerCase();
+        if (name === "ratelimit" || name === "ratelimit-policy") {
+          (result[name] ??= []).push(rawHeaders[index + 1] ?? "");
+        }
+        return result;
+      },
+      {},
+    );
+    expect(headerLines.ratelimit).toHaveLength(1);
+    expect(headerLines.ratelimit?.[0]).toContain('"ip"');
+    expect(headerLines.ratelimit?.[0]).toContain('"credential"');
+    expect(headerLines["ratelimit-policy"]).toHaveLength(1);
+    expect(headerLines["ratelimit-policy"]?.[0]).toContain('"ip"');
+    expect(headerLines["ratelimit-policy"]?.[0]).toContain('"credential"');
+    await statelessRuntime.closeAllSessions();
+  });
+
+  it("uses the configured parser ceiling in stateless mode", async () => {
+    const statelessRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        stateless: true,
+        maxUploadFileDataBytes: 12 * 1024 * 1024,
+        maxConcurrentRequests: 1,
+      },
+      { version: "0.0.0-test" },
+    );
+    const baseUrl = await start(statelessRuntime.app);
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_stateless_large_request"),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+        params: { padding: "x".repeat(11 * 1024 * 1024) },
+      }),
+    });
+
+    expect(response.status).not.toBe(413);
+    expect(await response.text()).not.toContain("Request body is too large");
+    await statelessRuntime.closeAllSessions();
+  });
+
+  it("shares one credential allowance across stateless runtime instances", async () => {
+    const store = new MemoryCredentialRateLimitStore();
+    const config = {
+      ...testConfig,
+      stateless: true,
+      trustProxyHops: 1,
+      mcpRateLimitPerMinute: 1,
+    };
+    const runtimeA = createHttpRuntime(config, {
+      version: "0.0.0-test",
+      credentialRateLimitStore: store,
+    });
+    const runtimeB = createHttpRuntime(config, {
+      version: "0.0.0-test",
+      credentialRateLimitStore: store,
+    });
+    const [baseA, baseB] = await Promise.all([start(runtimeA.app), start(runtimeB.app)]);
+    const post = (baseUrl: string, token: string, forwardedFor: string) =>
+      fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(token), "x-forwarded-for": forwardedFor },
+        body: JSON.stringify(initializeBody),
+      });
+
+    expect((await post(baseA, "lv_live_shared", "198.51.100.1")).status).toBe(200);
+    const overLimit = await post(baseB, "lv_live_shared", "203.0.113.9");
+    expect(overLimit.status).toBe(429);
+    expect(overLimit.headers.get("ratelimit")).toContain('"credential"; r=0');
+    const rateLimitPolicy = overLimit.headers.get("ratelimit-policy");
+    expect(rateLimitPolicy).toContain('"credential"; q=1; w=60');
+    expect(rateLimitPolicy).not.toMatch(/"credential"[^,]*;\s*pk=/);
+    expect((await post(baseA, "lv_live_distinct", "192.0.2.44")).status).toBe(200);
+    await Promise.all([runtimeA.closeAllSessions(), runtimeB.closeAllSessions()]);
+  });
+
+  it("fails closed when the shared credential store is unavailable", async () => {
+    const clientFactory = vi.fn(() => makeMockClient());
+    const unavailableStore = {
+      initialize: vi.fn(async () => undefined),
+      increment: vi.fn(async () => {
+        throw new Error("dynamodb unavailable");
+      }),
+    };
+    const unavailableRuntime = createHttpRuntime(
+      { ...testConfig, stateless: true },
+      {
+        version: "0.0.0-test",
+        clientFactory,
+        credentialRateLimitStore: unavailableStore,
+      },
+    );
+    await expect(unavailableRuntime.initialize()).resolves.toBeUndefined();
+    const baseUrl = await start(unavailableRuntime.app);
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_store_failure"),
+      body: JSON.stringify(initializeBody),
+    });
+
+    expect(response.status).toBe(503);
+    expect(clientFactory).not.toHaveBeenCalled();
+    expect(unavailableStore.increment).toHaveBeenCalledTimes(1);
+  });
+
+  it("acquires and releases the stateless concurrency permit around body parsing", async () => {
+    const limitedRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        stateless: true,
+        maxConcurrentRequests: 1,
+        mcpRateLimitPerMinute: 100,
+      },
+      { version: "0.0.0-test" },
+    );
+    const baseUrl = await start(limitedRuntime.app);
+    const parsedUrl = new URL(`${baseUrl}/mcp`);
+    const firstResponse = new Promise<number>((resolve, reject) => {
+      const pending = request(
+        {
+          hostname: parsedUrl.hostname,
+          port: parsedUrl.port,
+          path: parsedUrl.pathname,
+          method: "POST",
+          headers: bearerHeaders("lv_live_chunked"),
+        },
+        (response) => {
+          response.resume();
+          response.once("end", () => resolve(response.statusCode ?? 0));
+        },
+      );
+      pending.once("error", reject);
+      pending.write('{"jsonrpc":');
+      void (async () => {
+        for (let attempt = 0; attempt < 50; attempt += 1) {
+          if (limitedRuntime.getInFlightRequestCount() === 1) break;
+          await new Promise((wait) => globalThis.setTimeout(wait, 5));
+        }
+        const rejected = await fetch(`${baseUrl}/mcp`, {
+          method: "POST",
+          headers: bearerHeaders("lv_live_second"),
+          body: JSON.stringify(initializeBody),
+        });
+        expect(rejected.status).toBe(503);
+        pending.end("}");
+      })().catch(reject);
+    });
+
+    expect(await firstResponse).toBe(400);
+    expect(limitedRuntime.getInFlightRequestCount()).toBe(0);
+    const afterParserError = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_after_parser_error"),
+      body: JSON.stringify(initializeBody),
+    });
+    expect(afterParserError.status).toBe(200);
+  });
+
+  it("bounds asynchronous stateless teardown backlog", async () => {
+    let markTeardownStarted!: () => void;
+    let releaseTeardown!: () => void;
+    const teardownStarted = new Promise<void>((resolve) => {
+      markTeardownStarted = resolve;
+    });
+    const teardownGate = new Promise<void>((resolve) => {
+      releaseTeardown = resolve;
+    });
+    let blockFirstClose = true;
+    const limitedRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        stateless: true,
+        maxConcurrentRequests: 1,
+        mcpRateLimitPerMinute: 100,
+      },
+      {
+        version: "0.0.0-test",
+        transportFactory: () => {
+          const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+          if (blockFirstClose) {
+            blockFirstClose = false;
+            const close = transport.close.bind(transport);
+            transport.close = async () => {
+              markTeardownStarted();
+              await teardownGate;
+              await close();
+            };
+          }
+          return transport;
+        },
+      },
+    );
+    const baseUrl = await start(limitedRuntime.app);
+    const first = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_teardown_first"),
+      body: JSON.stringify(initializeBody),
+    });
+    expect(first.status).toBe(200);
+    await first.text();
+    await teardownStarted;
+
+    const whileClosing = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_teardown_second"),
+      body: JSON.stringify(initializeBody),
+    });
+    expect(whileClosing.status).toBe(503);
+
+    releaseTeardown();
+    await limitedRuntime.closeAllSessions();
+    const afterClose = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_teardown_third"),
+      body: JSON.stringify(initializeBody),
+    });
+    expect(afterClose.status).toBe(200);
+    await limitedRuntime.closeAllSessions();
+  });
+
   it("creates isolated apps and session registries from explicit config", async () => {
     const otherRuntime = createHttpRuntime(
       { ...testConfig, baseUrl: "http://127.0.0.1:3001" },
@@ -1708,9 +2304,10 @@ describe("HTTP MCP server", () => {
     expect(getActiveSessionCount()).toBe(1);
   });
 
-  it("rejects Host headers outside the loopback allowlist", async () => {
+  it("intentionally exempts health probes from Host validation", async () => {
     const baseUrl = await start();
-    expect(await requestWithHost(`${baseUrl}/healthz`, "attacker.example")).toBe(403);
+    expect(await requestWithHost(`${baseUrl}/healthz`, "10.0.12.34:3000")).toBe(200);
+    expect(await requestWithHost(`${baseUrl}/healthz`, "untrusted.example")).toBe(200);
     expect((await fetch(`${baseUrl}/healthz`)).status).toBe(200);
   });
 
@@ -1790,7 +2387,7 @@ describe("HTTP MCP server", () => {
 
     expect(await requestWithHost(`${baseUrl}/healthz`, "mcp.example.com")).toBe(200);
     expect(await requestWithHost(`${baseUrl}/healthz`, "mcp.example.com:8443")).toBe(200);
-    expect(await requestWithHost(`${baseUrl}/healthz`, "attacker.example")).toBe(403);
+    expect(await requestWithHost(`${baseUrl}/healthz`, "10.0.12.34:3000")).toBe(200);
     expect(
       (
         await fetch(`${baseUrl}/mcp`, {
@@ -1991,6 +2588,23 @@ describe("public video range streaming", () => {
     try {
       runHttpMain(() => {
         throw new Error("bootstrap failed");
+      });
+
+      expect(process.exitCode).toBe(1);
+      expect(error).toHaveBeenCalledWith(expect.stringContaining("HTTP startup failed"));
+    } finally {
+      process.exitCode = originalExitCode;
+    }
+  });
+
+  it("awaits and reports asynchronous HTTP bootstrap failures", async () => {
+    const originalExitCode = process.exitCode;
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    try {
+      await runHttpMain(async () => {
+        await Promise.resolve();
+        throw new Error("async bootstrap failed");
       });
 
       expect(process.exitCode).toBe(1);
