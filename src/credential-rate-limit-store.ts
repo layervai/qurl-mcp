@@ -45,11 +45,15 @@ function tableStatusFrom(result: unknown): string | undefined {
   return typeof result.Table.TableStatus === "string" ? result.Table.TableStatus : undefined;
 }
 
-function counterFrom(result: unknown): number {
-  if (!isRecord(result) || !isRecord(result.Attributes)) return Number.NaN;
+type CounterResult = { ok: true; count: number } | { ok: false };
+
+function counterFrom(result: unknown): CounterResult {
+  if (!isRecord(result) || !isRecord(result.Attributes)) return { ok: false };
   const requestCount = result.Attributes.request_count;
-  if (!isRecord(requestCount) || typeof requestCount.N !== "string") return Number.NaN;
-  return Number(requestCount.N);
+  if (!isRecord(requestCount) || typeof requestCount.N !== "string") return { ok: false };
+
+  const count = Number(requestCount.N);
+  return Number.isSafeInteger(count) && count >= 1 ? { ok: true, count } : { ok: false };
 }
 
 async function createDefaultDynamoDbOperations(): Promise<DynamoDbOperations> {
@@ -141,10 +145,10 @@ export class DynamoDbCredentialRateLimitStore implements CredentialRateLimitStor
       },
       ReturnValues: "UPDATED_NEW",
     });
-    const count = counterFrom(result);
-    if (!Number.isSafeInteger(count) || count < 1) {
+    const counter = counterFrom(result);
+    if (!counter.ok) {
       throw new Error("DynamoDB credential rate-limit counter returned an invalid value.");
     }
-    return count;
+    return counter.count;
   }
 }
