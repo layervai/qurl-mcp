@@ -24,13 +24,28 @@ export interface DynamoDbUpdateItemInput {
 }
 
 interface DynamoDbSdk {
-  DynamoDBClient: new () => { send(command: unknown): Promise<unknown> };
+  DynamoDBClient: new (config: DynamoDbClientConfig) => {
+    send(command: unknown): Promise<unknown>;
+  };
   DescribeTableCommand: new (input: { TableName: string }) => unknown;
   UpdateItemCommand: new (input: DynamoDbUpdateItemInput) => unknown;
 }
 
+interface DynamoDbClientConfig {
+  maxAttempts: number;
+  retryMode: "standard";
+  requestHandler: {
+    connectionTimeout: number;
+    requestTimeout: number;
+    throwOnRequestTimeout: true;
+  };
+}
+
 const WINDOW_MS = 60_000;
 const TTL_GRACE_SECONDS = 60 * 60;
+const DYNAMODB_MAX_ATTEMPTS = 2;
+const DYNAMODB_CONNECTION_TIMEOUT_MS = 1_000;
+const DYNAMODB_REQUEST_TIMEOUT_MS = 2_000;
 
 function minuteBucket(windowStartedAtMs: number): number {
   return Math.floor(windowStartedAtMs / WINDOW_MS);
@@ -38,6 +53,15 @@ function minuteBucket(windowStartedAtMs: number): number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function isDynamoDbSdk(value: unknown): value is DynamoDbSdk {
+  return (
+    isRecord(value) &&
+    typeof value.DynamoDBClient === "function" &&
+    typeof value.DescribeTableCommand === "function" &&
+    typeof value.UpdateItemCommand === "function"
+  );
 }
 
 function tableStatusFrom(result: unknown): string | undefined {
@@ -60,20 +84,38 @@ async function createDefaultDynamoDbOperations(): Promise<DynamoDbOperations> {
   // Keep the AWS SDK out of stdio and memory-store installs/startup. Deployed
   // HTTP images include optional dependencies; omitting it still fails closed
   // during initialization, before the listener can accept traffic.
-  let sdk: DynamoDbSdk;
+  let sdkModuleValue: unknown;
   try {
     // Keep this specifier indirect so a source checkout can compile after
     // `npm install --omit=optional`; the runtime import still fails closed if
     // an HTTP deployment selects DynamoDB without packaging the SDK.
     const sdkModule = "@aws-sdk/client-dynamodb";
-    sdk = (await import(sdkModule)) as unknown as DynamoDbSdk;
+    sdkModuleValue = await import(sdkModule);
   } catch (error) {
     throw new Error("The dynamodb credential rate-limit store requires @aws-sdk/client-dynamodb.", {
       cause: error,
     });
   }
+  if (!isDynamoDbSdk(sdkModuleValue)) {
+    throw new Error(
+      "The installed @aws-sdk/client-dynamodb module does not expose the required constructors.",
+    );
+  }
+  const sdk = sdkModuleValue;
   const { DescribeTableCommand, DynamoDBClient, UpdateItemCommand } = sdk;
-  const client = new DynamoDBClient();
+  // The authoritative quota runs while a parser/concurrency permit is held.
+  // Bound SDK work explicitly so a partial DynamoDB failure returns the
+  // fail-closed 503 promptly instead of exhausting every task permit behind
+  // inherited retry and socket-timeout defaults.
+  const client = new DynamoDBClient({
+    maxAttempts: DYNAMODB_MAX_ATTEMPTS,
+    retryMode: "standard",
+    requestHandler: {
+      connectionTimeout: DYNAMODB_CONNECTION_TIMEOUT_MS,
+      requestTimeout: DYNAMODB_REQUEST_TIMEOUT_MS,
+      throwOnRequestTimeout: true,
+    },
+  });
   return {
     describeTable: (tableName) => client.send(new DescribeTableCommand({ TableName: tableName })),
     updateItem: (input) => client.send(new UpdateItemCommand(input)),

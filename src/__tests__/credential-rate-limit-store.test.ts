@@ -89,4 +89,58 @@ describe("credential rate-limit stores", () => {
     const store = new DynamoDbCredentialRateLimitStore("rate-table");
     await expect(store.initialize()).rejects.toThrow("requires @aws-sdk/client-dynamodb");
   });
+
+  it("bounds default DynamoDB retries and network timeouts", async () => {
+    let clientConfig: unknown;
+    class DescribeTableCommand {
+      readonly input: { TableName: string };
+
+      constructor(input: { TableName: string }) {
+        this.input = input;
+      }
+    }
+    class UpdateItemCommand {
+      constructor(_input: DynamoDbUpdateItemInput) {}
+    }
+    class DynamoDBClient {
+      constructor(config: unknown) {
+        clientConfig = config;
+      }
+
+      async send(command: unknown): Promise<unknown> {
+        if (command instanceof DescribeTableCommand) {
+          return { Table: { TableName: command.input.TableName, TableStatus: "ACTIVE" } };
+        }
+        return { Attributes: { request_count: { N: "1" } } };
+      }
+    }
+    vi.doMock("@aws-sdk/client-dynamodb", () => ({
+      DescribeTableCommand,
+      DynamoDBClient,
+      UpdateItemCommand,
+    }));
+
+    const store = new DynamoDbCredentialRateLimitStore("rate-table");
+    await store.initialize();
+
+    expect(clientConfig).toEqual({
+      maxAttempts: 2,
+      retryMode: "standard",
+      requestHandler: {
+        connectionTimeout: 1_000,
+        requestTimeout: 2_000,
+        throwOnRequestTimeout: true,
+      },
+    });
+  });
+
+  it("fails closed when the optional SDK has an incompatible runtime surface", async () => {
+    vi.doMock("@aws-sdk/client-dynamodb", () => ({
+      DescribeTableCommand: null,
+      DynamoDBClient: class {},
+      UpdateItemCommand: null,
+    }));
+    const store = new DynamoDbCredentialRateLimitStore("rate-table");
+    await expect(store.initialize()).rejects.toThrow("does not expose the required constructors");
+  });
 });

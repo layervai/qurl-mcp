@@ -415,12 +415,16 @@ so expired rows do not accumulate; TTL only schedules asynchronous cleanup, and
 the minute in the key—not physical deletion—resets the active window. The task
 role requires `dynamodb:DescribeTable` for startup and `dynamodb:UpdateItem` on
 the request path. Use on-demand capacity or provision enough write capacity for
-the expected fleet rate; throttling fails closed with `503` after the SDK's
-bounded retries and never falls back to memory. The optional AWS SDK dependency
-is loaded only when the DynamoDB store is selected, so stdio-only consumers may
-install with `--omit=optional`. Deployed HTTP images must include optional
-dependencies; startup fails before listening if the SDK is absent. The client
-uses the standard `AWS_REGION` and credential provider chain; ECS deployments
+the expected fleet rate; throttling fails closed with `503` and never falls
+back to memory. The client uses standard retry mode with at most two attempts,
+a one-second connection timeout, and a two-second request timeout that throws;
+these explicit bounds limit how long a request holds a concurrency permit
+during a partial store failure. The optional AWS SDK dependency is exact-version
+pinned and loaded only when the DynamoDB store is selected, so stdio-only
+consumers may install with `--omit=optional`. Deployed HTTP images must include
+optional dependencies; startup fails before listening if the SDK is absent or
+exposes an incompatible runtime surface. The client uses the standard
+`AWS_REGION` and credential provider chain; ECS deployments
 normally obtain both from the task environment and task role. Reverse-proxy
 deployments must set the correct hop count or all callers behind the proxy will
 share the proxy's single IP bucket. Only the DynamoDB credential quota is
@@ -521,9 +525,11 @@ every authenticated HTTP POST, including initialization, discovery, and tool
 calls. Size that quota for the expected complete request pattern rather than
 tool calls alone. The fixed-window counter increments every attempt, including
 attempts already above the credential limit; edge rate limits and DynamoDB
-write/throttle alarms must therefore bound abusive write amplification. Metric
-identity fields are rejected in stateful mode so the concurrency gauge cannot
-silently report a misleading zero.
+write/throttle alarms must therefore bound abusive write amplification.
+Deployment owners must make both alarms and an over-limit write-amplification
+probe hard promotion gates rather than treating them as optional observability.
+Metric identity fields are rejected in stateful mode so the concurrency gauge
+cannot silently report a misleading zero.
 `/healthz` and the public video-file endpoint each use their own
 `publicFileRateLimitPerMinute` bucket, isolated from legal/video-page traffic
 and from each other. Keep load-balancer, liveness-probe, and expected video

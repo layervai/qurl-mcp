@@ -47,7 +47,7 @@
     "zod": "^4.4.3"
   },
   "optionalDependencies": {
-    "@aws-sdk/client-dynamodb": "^3.1079.0"
+    "@aws-sdk/client-dynamodb": "3.1079.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",
