@@ -48,6 +48,7 @@ const DEFAULT_SESSION_IDLE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_SESSION_ABSOLUTE_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_UNVALIDATED_SESSION_TTL_MS = 60 * 1000;
 export const DEFAULT_MAX_CONCURRENT_REQUESTS = 20;
+const MAX_CONCURRENT_REQUESTS = 1_000;
 const MAX_STATELESS_PARSER_BUDGET_BYTES = 4 * 1024 * 1024 * 1024;
 
 export function getJsonBodyLimitBytes(maxUploadFileDataBytes: number): number {
@@ -120,6 +121,19 @@ function parseBoundedInteger(
     throw new Error(`${fieldName} must be an integer between ${minimum} and ${maximum}.`);
   }
   return parsed;
+}
+
+export function normalizeMaxConcurrentRequests(
+  value: unknown,
+  fieldName = "maxConcurrentRequests",
+): number {
+  return parseBoundedInteger(
+    value,
+    DEFAULT_MAX_CONCURRENT_REQUESTS,
+    fieldName,
+    1,
+    MAX_CONCURRENT_REQUESTS,
+  );
 }
 
 function normalizeAllowedHosts(hosts: unknown): string[] | undefined {
@@ -263,7 +277,7 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
         "Deployed stateless HTTP mode requires MCP_CREDENTIAL_RATE_LIMIT_STORE=dynamodb.",
       );
     }
-    if (!metricsNamespace || !metricsService || !metricsEnvironment) {
+    if (!metricsIdentity) {
       throw new Error(
         "Deployed stateless HTTP mode requires MCP_METRICS_NAMESPACE, MCP_METRICS_SERVICE, and MCP_METRICS_ENVIRONMENT.",
       );
@@ -307,12 +321,9 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
   if (sessionAbsoluteTtlMs < sessionIdleTtlMs) {
     throw new Error("sessionAbsoluteTtlMs must be greater than or equal to sessionIdleTtlMs.");
   }
-  const maxConcurrentRequests = parseBoundedInteger(
+  const maxConcurrentRequests = normalizeMaxConcurrentRequests(
     process.env.MCP_MAX_CONCURRENT_REQUESTS ?? fileConfig.maxConcurrentRequests,
-    DEFAULT_MAX_CONCURRENT_REQUESTS,
     "MCP_MAX_CONCURRENT_REQUESTS/maxConcurrentRequests",
-    1,
-    1_000,
   );
   assertStatelessParserBudget(
     stateless,

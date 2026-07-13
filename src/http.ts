@@ -40,10 +40,10 @@ import {
 } from "./config.js";
 import {
   assertStatelessParserBudget,
-  DEFAULT_MAX_CONCURRENT_REQUESTS,
   getDefaultHttpConfigPath,
   getJsonBodyLimitBytes,
   loadHttpServerConfig,
+  normalizeMaxConcurrentRequests,
   type HttpServerConfig,
 } from "./http-config.js";
 import { HEALTH_HTTP_PATH, MCP_HTTP_PATH } from "./http-routes.js";
@@ -134,14 +134,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const defaultQurlApiUrl = config.defaultQurlApiUrl;
   const defaultQurlConnectorUrl = config.defaultQurlConnectorUrl;
   const stateless = config.stateless ?? false;
-  const maxConcurrentRequests = config.maxConcurrentRequests ?? DEFAULT_MAX_CONCURRENT_REQUESTS;
-  if (
-    !Number.isSafeInteger(maxConcurrentRequests) ||
-    maxConcurrentRequests < 1 ||
-    maxConcurrentRequests > 1_000
-  ) {
-    throw new Error("maxConcurrentRequests must be an integer between 1 and 1000.");
-  }
+  const maxConcurrentRequests = normalizeMaxConcurrentRequests(config.maxConcurrentRequests);
   assertStatelessParserBudget(stateless, maxConcurrentRequests, config.maxUploadFileDataBytes);
   let inFlightRequests = 0;
 
@@ -255,7 +248,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         ),
       );
       const partitionKey = Buffer.from(
-        createHash("sha256").update(credentialDigest, "utf8").digest("hex").slice(0, 12),
+        digestBearerToken(credentialDigest).toString("hex").slice(0, 12),
         "ascii",
       ).toString("base64");
       appendStructuredHeader(res, "RateLimit", `"credential"; r=${remaining}; t=${resetSeconds}`);
@@ -458,7 +451,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
     activeStatelessRequests.delete(request);
     const bearerToken = request.bearerToken;
-    request.closePromise = withRequestAuth(undefined, bearerToken, async () => {
+    const closePromise = withRequestAuth(undefined, bearerToken, async () => {
       try {
         await request.transport.close();
       } catch (error) {
@@ -471,10 +464,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       }
     }).finally(() => {
       request.bearerToken = "";
-      if (request.closePromise) closingStatelessRequests.delete(request.closePromise);
+      closingStatelessRequests.delete(closePromise);
     });
-    closingStatelessRequests.add(request.closePromise);
-    await request.closePromise;
+    request.closePromise = closePromise;
+    closingStatelessRequests.add(closePromise);
+    await closePromise;
   }
 
   async function trackSessionActivity<T>(
