@@ -109,6 +109,10 @@ boundary.
 npm install
 ```
 
+For a local stdio-only source install, use `npm install --omit=optional`; this
+omits the AWS SDK. HTTP deployments using the DynamoDB credential quota must use
+the ordinary install so the optional SDK is packaged.
+
 ### 2. Build
 
 ```bash
@@ -342,6 +346,10 @@ video-file route still fails closed with `404` until the asset is corrected.
 
 ## qurl-mcp.http.json Reference
 
+Use [`qurl-mcp.http.example.json`](qurl-mcp.http.example.json) for local,
+stateful development. [`qurl-mcp.http.stateless.example.json`](qurl-mcp.http.stateless.example.json)
+shows every store and metric field required by a deployed stateless service.
+
 | Field                          | Purpose                                                                             |
 | ------------------------------ | ----------------------------------------------------------------------------------- |
 | `port`                         | HTTP MCP listener port                                                              |
@@ -349,6 +357,13 @@ video-file route still fails closed with `404` until the asset is corrected.
 | `baseUrl`                      | Public base URL of the service                                                      |
 | `allowedHosts`                 | Host allowlist for Host header validation                                           |
 | `trustProxyHops`               | Exact trusted reverse-proxy hop count (default `0`)                                 |
+| `stateless`                    | Request-scoped HTTP transport with no session affinity (default `false`)            |
+| `maxConcurrentRequests`        | Stateless-only POST/parser concurrency cap per process (default `20`)               |
+| `credentialRateLimitStore`     | Credential counter backend: `memory` or `dynamodb` (default `memory`)               |
+| `rateLimitDynamoDbTable`       | DynamoDB table used by the shared credential counter                                |
+| `metricsNamespace`             | CloudWatch EMF namespace for stateless saturation metrics                           |
+| `metricsService`               | Stable CloudWatch EMF Service dimension                                             |
+| `metricsEnvironment`           | Stable CloudWatch EMF Environment dimension                                         |
 | `maxSessions`                  | Hard cap on live MCP sessions (default `1000`)                                      |
 | `maxSessionsPerCredential`     | Per-bearer live and initializing session cap (default `20`)                         |
 | `maxUnvalidatedSessions`       | Cap on sessions that have not completed a downstream qURL API call (default `100`)  |
@@ -367,6 +382,13 @@ HTTP fields have matching environment overrides:
 | `MCP_BASE_URL`                          | `baseUrl`                         |
 | `MCP_ALLOWED_HOSTS`                     | `allowedHosts`                    |
 | `MCP_TRUST_PROXY_HOPS`                  | `trustProxyHops`                  |
+| `MCP_HTTP_STATELESS`                    | `stateless`                       |
+| `MCP_MAX_CONCURRENT_REQUESTS`           | `maxConcurrentRequests`           |
+| `MCP_CREDENTIAL_RATE_LIMIT_STORE`       | `credentialRateLimitStore`        |
+| `MCP_RATE_LIMIT_DYNAMODB_TABLE`         | `rateLimitDynamoDbTable`          |
+| `MCP_METRICS_NAMESPACE`                 | `metricsNamespace`                |
+| `MCP_METRICS_SERVICE`                   | `metricsService`                  |
+| `MCP_METRICS_ENVIRONMENT`               | `metricsEnvironment`              |
 | `MCP_MAX_SESSIONS`                      | `maxSessions`                     |
 | `MCP_MAX_SESSIONS_PER_CREDENTIAL`       | `maxSessionsPerCredential`        |
 | `MCP_MAX_UNVALIDATED_SESSIONS`          | `maxUnvalidatedSessions`          |
@@ -384,9 +406,27 @@ The listener defaults to `127.0.0.1`. A non-loopback `host` is rejected unless
 The Host allowlist is limited to 1,000 entries so request-time validation stays
 bounded even under pathological operator configuration.
 `/mcp` applies the configured request allowance independently to both the
-client IP and the SHA-256 digest of the authenticated bearer. Reverse-proxy
+client IP and the SHA-256 digest of the authenticated bearer. The memory store
+is process-local; the DynamoDB store uses an atomic fixed-window counter keyed
+by credential digest and UTC minute. It never stores the bearer. As with any
+fixed window, requests around a minute boundary can total nearly twice the
+configured allowance. Enable DynamoDB TTL on the numeric `expires_at` attribute
+so expired rows do not accumulate; TTL only schedules asynchronous cleanup, and
+the minute in the key—not physical deletion—resets the active window. The task
+role requires `dynamodb:DescribeTable` for startup and `dynamodb:UpdateItem` on
+the request path. Use on-demand capacity or provision enough write capacity for
+the expected fleet rate; throttling fails closed with `503` after the SDK's
+bounded retries and never falls back to memory. The optional AWS SDK dependency
+is loaded only when the DynamoDB store is selected, so stdio-only consumers may
+install with `--omit=optional`. Deployed HTTP images must include optional
+dependencies; startup fails before listening if the SDK is absent. The client
+uses the standard `AWS_REGION` and credential provider chain; ECS deployments
+normally obtain both from the task environment and task role. Reverse-proxy
 deployments must set the correct hop count or all callers behind the proxy will
-share the proxy's single IP bucket. The credential bucket also prevents one
+share the proxy's single IP bucket. Only the DynamoDB credential quota is
+fleet-wide: the IP limiter is process-local, so its effective fleet allowance
+multiplies with task count and must be backed by a shared edge limit. The
+credential bucket also prevents one
 key from bypassing the request allowance by rotating source IPs, while
 `maxSessionsPerCredential` prevents it from occupying the full session pool.
 Each distinct bearer value retains one credential-bucket entry for the current
@@ -395,7 +435,8 @@ cannot create entries faster than `mcpRateLimitPerMinute`; hostile distributed
 traffic still requires the documented shared edge limit. The IP bucket is the
 primary in-process control against arbitrary bearer rotation because distinct
 unvalidated bearer strings necessarily occupy distinct credential buckets.
-Budget pending-session parser memory as `maxUnvalidatedSessions` times roughly
+In stateful mode, budget pending-session parser memory as
+`maxUnvalidatedSessions` times roughly
 1.5 times the smaller of `maxUploadFileDataBytes` and 10 MB (plus about 64 KiB
 per request). At the defaults, the theoretical concurrent ceiling is about
 1.5 GiB. Lower `maxUnvalidatedSessions` and the shared edge concurrency limit
@@ -447,11 +488,42 @@ authenticate the forwarded qURL bearer before accepting or storing upload bytes.
 Deploying an unauthenticated connector is unsupported because it would allow an
 unvalidated MCP caller to create connector-side state.
 
-Session caps, request rate limits, and email recipient quotas are in-memory and
-apply independently to each server process. A horizontally scaled deployment
-therefore has aggregate limits of roughly the configured value multiplied by
-its instance count, and email quota state resets on process restart. Use shared
-edge/provider limits or a single routed instance when a global cap is required.
+Stateful mode is the compatibility default and retains the existing MCP session
+registry, GET SSE, and explicit DELETE behavior. Stateless mode creates and
+closes a server and transport for each POST, ignores `mcp-session-id`, and
+returns JSON-RPC-shaped `405` responses for GET and DELETE. It is the required
+mode behind a load balancer or autoscaling service because no request depends
+on process-local affinity. The concurrency permit is acquired before JSON
+parsing and released on every response/error/disconnect path. Stateless mode
+uses the configured `maxUploadFileDataBytes` parser ceiling directly because
+the pre-parse concurrency permit provides its memory-amplification bound.
+Budget roughly `maxConcurrentRequests` times (1.5 times
+`maxUploadFileDataBytes` plus 64 KiB) per process; the default concurrency at
+the 100 MB upload ceiling is approximately 3 GiB before downstream work.
+Stateless startup rejects configurations whose conservative parser budget
+exceeds 4 GiB. Lower either setting further when the ECS task has a smaller
+memory limit. In contrast, stateful sessions above the default ceiling must
+first complete a successful downstream qURL API call.
+
+The stateless listener bounds header receipt at 15 seconds and both complete
+request receipt and idle socket lifetime at 120 seconds. A concurrency permit
+spans parsing through response completion, so stalled clients cannot retain the
+entire permit pool indefinitely.
+
+Deployed (non-loopback) stateless mode requires the DynamoDB credential store
+and all three stable metric identity fields. It emits a 30-second EMF heartbeat:
+`McpConcurrencyUtilization` is the peak permit utilization observed during the
+interval (including requests that start and finish between heartbeats), while
+`McpConcurrencyRejected` and `McpRateLimitStoreErrors` are snapshot-and-zero
+interval deltas that include explicit zeros. Session caps and email recipient
+quotas remain in-memory; the DynamoDB credential quota is fleet-wide and counts
+every authenticated HTTP POST, including initialization, discovery, and tool
+calls. Size that quota for the expected complete request pattern rather than
+tool calls alone. The fixed-window counter increments every attempt, including
+attempts already above the credential limit; edge rate limits and DynamoDB
+write/throttle alarms must therefore bound abusive write amplification. Metric
+identity fields are rejected in stateful mode so the concurrency gauge cannot
+silently report a misleading zero.
 `/healthz` and the public video-file endpoint each use their own
 `publicFileRateLimitPerMinute` bucket, isolated from legal/video-page traffic
 and from each other. Keep load-balancer, liveness-probe, and expected video
@@ -493,17 +565,22 @@ After starting in `http` mode, the common routes are:
 | `publicVideo.pagePath`         | Public video playback page   |
 | `publicVideo.pagePath + /file` | MP4 streaming endpoint       |
 
-`/healthz` is intentionally unauthenticated, exposes only `{ "ok": true }`, and
-uses the configured public-route request limit in a separate bucket so health
-probes cannot consume the legal/video route allowance. A `429` from this route
+`/healthz` is intentionally unauthenticated and Host-unvalidated for every
+caller, exposes only `{ "ok": true }`, and uses the configured public-route
+request limit in a separate bucket so health probes cannot consume the
+legal/video route allowance. A `429` from this route
 means the probe source exceeded `publicFileRateLimitPerMinute`, not that the
 application failed its liveness check; keep probe frequency below that limit.
+It is registered before Host validation because ALB target probes use the task
+IP and port as Host; public MCP and browser routes remain Host-validated.
 
 ## HTTP Authentication
 
 The `/mcp` endpoint requires `Authorization: Bearer <qURL API key>` on every
-request. The bearer token is bound to the resulting MCP session, so a session
-ID cannot be reused with a different credential.
+request. In stateful mode the bearer token is bound to the resulting MCP
+session, so a session ID cannot be reused with a different credential. In
+stateless mode the bearer remains request-scoped and is discarded when the
+response closes.
 
 **Operator authentication boundary:** initialization accepts any non-empty
 bearer token and allows the public tools/resources/prompts catalog to be read

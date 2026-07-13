@@ -39,7 +39,9 @@ import {
   isLoopbackHostname,
 } from "./config.js";
 import {
+  assertStatelessParserBudget,
   getDefaultHttpConfigPath,
+  getJsonBodyLimitBytes,
   loadHttpServerConfig,
   type HttpServerConfig,
 } from "./http-config.js";
@@ -47,6 +49,12 @@ import { HEALTH_HTTP_PATH, MCP_HTTP_PATH } from "./http-routes.js";
 import { getLegalDocuments, renderLegalDocumentHtml } from "./services/legal-pages.js";
 import { getPublicVideoFileRoute, renderPublicVideoPageHtml } from "./services/video-page.js";
 import { createServer } from "./server.js";
+import {
+  DynamoDbCredentialRateLimitStore,
+  MemoryCredentialRateLimitStore,
+  type CredentialRateLimitStore,
+} from "./credential-rate-limit-store.js";
+import { McpEmfMetrics, normalizeMcpMetricsIdentity } from "./emf-metrics.js";
 
 type SessionContext = {
   sessionId: string;
@@ -69,15 +77,26 @@ type AuthorizedSession = {
   bearerToken: string;
 };
 
-const DISCONNECTED_SESSION_GRACE_MS = 30_000;
+type StatelessRequestContext = {
+  transport: StreamableHTTPServerTransport;
+  server: ReturnType<typeof createServer>;
+  bearerToken: string;
+  closePromise?: Promise<void>;
+};
 
-function getJsonBodyLimitBytes(maxUploadFileDataBytes: number): number {
-  // This limits raw request bytes, so JSON escaping can only consume the
-  // allowance faster; it cannot expand memory beyond this parser ceiling.
-  // Base64 itself needs no JSON escaping and inflates decoded bytes by 4/3,
-  // leaving the remainder of this 1.5x bound for the JSON-RPC envelope.
-  // decodeBase64File still applies the exact decoded-byte limit after parsing.
-  return Math.ceil(maxUploadFileDataBytes * 1.5) + 64 * 1024;
+const DISCONNECTED_SESSION_GRACE_MS = 30_000;
+const STATELESS_HEADERS_TIMEOUT_MS = 15_000;
+const STATELESS_REQUEST_TIMEOUT_MS = 120_000;
+const STATELESS_SOCKET_IDLE_TIMEOUT_MS = 120_000;
+
+function requireRateLimitDynamoDbTable(config: HttpServerConfig): string {
+  const tableName = config.rateLimitDynamoDbTable;
+  if (!tableName) {
+    // loadHttpServerConfig enforces this too, but createHttpRuntime is public
+    // and can be called directly. Preserve the same fail-fast invariant there.
+    throw new Error("rateLimitDynamoDbTable is required for the dynamodb credential store.");
+  }
+  return tableName;
 }
 
 export interface HttpRuntimeOptions {
@@ -86,7 +105,8 @@ export interface HttpRuntimeOptions {
     filePath: string,
     options: { start?: number; end?: number },
   ) => ReturnType<typeof createReadStream>;
-  transportFactory?: () => StreamableHTTPServerTransport;
+  transportFactory?: (stateless?: boolean) => StreamableHTTPServerTransport;
+  credentialRateLimitStore?: CredentialRateLimitStore;
   runtimeConfigPath?: string;
   version: string;
 }
@@ -103,6 +123,45 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const baseUrl = config.baseUrl;
   const defaultQurlApiUrl = config.defaultQurlApiUrl;
   const defaultQurlConnectorUrl = config.defaultQurlConnectorUrl;
+  const stateless = config.stateless ?? false;
+  const maxConcurrentRequests = config.maxConcurrentRequests ?? 20;
+  if (
+    !Number.isSafeInteger(maxConcurrentRequests) ||
+    maxConcurrentRequests < 1 ||
+    maxConcurrentRequests > 1_000
+  ) {
+    throw new Error("maxConcurrentRequests must be an integer between 1 and 1000.");
+  }
+  assertStatelessParserBudget(stateless, maxConcurrentRequests, config.maxUploadFileDataBytes);
+  let inFlightRequests = 0;
+
+  // This public API can bypass loadHttpServerConfig, so both entry points use
+  // one normalizer for the complete, trimmed, stateless-only identity contract.
+  const metricsIdentity = normalizeMcpMetricsIdentity(
+    {
+      namespace: config.metricsNamespace,
+      service: config.metricsService,
+      environment: config.metricsEnvironment,
+    },
+    stateless,
+  );
+  const metrics = new McpEmfMetrics(
+    metricsIdentity,
+    // Both loader and direct-call validation guarantee a positive denominator.
+    () => (inFlightRequests / maxConcurrentRequests) * 100,
+  );
+  const credentialRateLimitStore =
+    options.credentialRateLimitStore ??
+    (config.credentialRateLimitStore === "dynamodb"
+      ? new DynamoDbCredentialRateLimitStore(requireRateLimitDynamoDbTable(config))
+      : new MemoryCredentialRateLimitStore());
+  // Injected stores are an embedding seam and may need initialization even
+  // when config names the compatibility memory backend. Require initialize()
+  // for every injected implementation; only the module-owned memory store is
+  // known to be ready without it.
+  let credentialRateLimitStoreInitialized =
+    options.credentialRateLimitStore === undefined &&
+    config.credentialRateLimitStore !== "dynamodb";
 
   const app = express();
   app.disable("x-powered-by");
@@ -119,28 +178,6 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     // `identifier` names the draft-8 RateLimit policy; request IP remains the
     // default key. The credential policy below supplies its own keyGenerator.
     identifier: "ip",
-    standardHeaders: "draft-8",
-    legacyHeaders: false,
-    handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
-  });
-  const credentialRateLimitKeys = new WeakMap<express.Request, string>();
-  const getCredentialRateLimitKey = (req: express.Request): string => {
-    // The wrapper below rejects tokenless requests and installs the digest
-    // synchronously. If that coupling ever regresses, collapse requests into
-    // one fail-closed bucket instead of throwing inside express-rate-limit.
-    return credentialRateLimitKeys.get(req) ?? "missing-authenticated-credential";
-  };
-  const credentialRateLimiterCore = rateLimit({
-    windowMs: 60_000,
-    // The matching threshold is intentional: the IP policy bounds aggregate
-    // traffic from one network (including shared egress), while this policy
-    // follows one credential even if it rotates source addresses. Requests
-    // must satisfy both independent abuse controls.
-    limit: config.mcpRateLimitPerMinute,
-    identifier: "credential",
-    // The enclosing credentialRateLimiter wrapper always installs this value
-    // synchronously before invoking the core limiter.
-    keyGenerator: getCredentialRateLimitKey,
     standardHeaders: "draft-8",
     legacyHeaders: false,
     handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
@@ -166,18 +203,86 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     verifier: createPassthroughBearerVerifier(),
     requiredScopes: ["mcp:tools"],
   });
-  const credentialRateLimiter: express.RequestHandler = (req, res, next) => {
+  const concurrencyLimiter: express.RequestHandler = (_req, res, next) => {
+    if (inFlightRequests >= maxConcurrentRequests) {
+      metrics.incrementConcurrencyRejected();
+      rejectJsonRpc(res, 503, "The MCP request concurrency limit has been reached.");
+      return;
+    }
+    inFlightRequests += 1;
+    metrics.observeConcurrencyUtilization();
+    let released = false;
+    const release = (): void => {
+      if (released) return;
+      released = true;
+      inFlightRequests -= 1;
+    };
+    res.once("finish", release);
+    res.once("close", release);
+    next();
+  };
+  const credentialRateLimiter: express.RequestHandler = async (req, res, next) => {
     const token = getAuthenticatedBearerToken(req);
     if (!token) {
       rejectJsonRpc(res, 401, "Bearer authentication required.");
       return;
     }
-    credentialRateLimitKeys.set(req, digestBearerToken(token).toString("hex"));
-    credentialRateLimiterCore(req, res, next);
+    try {
+      const windowStartedAtMs = Date.now();
+      const credentialDigest = digestBearerToken(token).toString("hex");
+      const count = await credentialRateLimitStore.increment({
+        credentialDigest,
+        windowStartedAtMs,
+      });
+      const remaining = Math.max(0, config.mcpRateLimitPerMinute - count);
+      const resetSeconds = Math.max(
+        1,
+        Math.ceil(
+          (Math.floor(windowStartedAtMs / 60_000) * 60_000 + 60_000 - windowStartedAtMs) / 1_000,
+        ),
+      );
+      const partitionKey = Buffer.from(
+        createHash("sha256").update(credentialDigest, "utf8").digest("hex").slice(0, 12),
+        "ascii",
+      ).toString("base64");
+      res.append("RateLimit", `"credential"; r=${remaining}; t=${resetSeconds}`);
+      res.append(
+        "RateLimit-Policy",
+        `"credential"; q=${config.mcpRateLimitPerMinute}; w=60; pk=:${partitionKey}:`,
+      );
+      if (count > config.mcpRateLimitPerMinute) {
+        rejectJsonRpc(res, 429, "Too many requests.");
+        return;
+      }
+      next();
+    } catch (error) {
+      metrics.incrementRateLimitStoreErrors();
+      console.error(`[mcp-http] credential rate-limit store failed (${formatErrorForLog(error)})`);
+      rejectJsonRpc(res, 503, "Credential rate-limit service is unavailable.");
+    }
   };
   // The credential guard and limiter core are one middleware, so a future
   // array reorder cannot make tokenless requests reach the keyed store.
   const authenticatedMcpMiddleware = [bearerAuthMiddleware, credentialRateLimiter];
+  const authenticatedMcpPostMiddleware = [
+    bearerAuthMiddleware,
+    ...(stateless ? [concurrencyLimiter] : []),
+    credentialRateLimiter,
+  ];
+  const rejectUnsupportedStatelessMethod =
+    (method: "GET" | "DELETE"): express.RequestHandler =>
+    (_req, res) => {
+      res.set("Allow", "POST");
+      rejectJsonRpc(res, 405, `${method} is not supported in stateless HTTP mode.`, -32600);
+    };
+
+  // Readiness must not depend on the public Host allowlist: ALB probes use the
+  // target IP and port as Host. The response carries no sensitive state, so
+  // /healthz is intentionally unauthenticated and Host-unvalidated for every
+  // caller, not only ALB-shaped Host values.
+  app.get(HEALTH_HTTP_PATH, healthRateLimiter, (_req, res) => {
+    res.json({ ok: true });
+  });
 
   if (config.allowedHosts?.length) {
     app.use(hostHeaderValidation(config.allowedHosts));
@@ -224,6 +329,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
   const sessions = new Map<string, SessionContext>();
   const closingSessions = new Map<string, Promise<void>>();
+  const activeStatelessRequests = new Set<StatelessRequestContext>();
+  const closingStatelessRequests = new Set<Promise<void>>();
   let pendingInitializations = 0;
   const pendingInitializationsByCredential = new Map<string, number>();
 
@@ -231,14 +338,16 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     const bearerToken = getAuthenticatedBearerToken(req);
     const session = sessions.get(getSessionId(req) ?? "");
     const mayUseConfiguredLimit =
-      session?.credentialValidated === true &&
-      bearerToken !== undefined &&
-      bearerTokenMatches(bearerToken, session.bearerTokenDigest);
-    // Session lookup alone is not authorization: the digest re-check prevents
-    // a guessed or leaked session ID from unlocking the larger parser ceiling.
-    // This is a memory-amplification gate, not a qURL scope boundary. Any key
-    // authenticated by a successful API call may use the configured parser;
-    // each subsequent operation still enforces its own downstream scopes.
+      stateless ||
+      (session?.credentialValidated === true &&
+        bearerToken !== undefined &&
+        bearerTokenMatches(bearerToken, session.bearerTokenDigest));
+    // Session lookup alone is not authorization: in stateful mode the digest
+    // re-check prevents a guessed or leaked session ID from unlocking the
+    // larger parser ceiling. Stateless mode has no session to validate, so its
+    // configured parser ceiling is instead bounded by the permit acquired
+    // before parsing. This is a memory-amplification gate, not a qURL scope
+    // boundary; each operation still enforces its downstream scopes.
     const locals = res.locals as McpResponseLocals;
     locals.usingUnvalidatedBodyLimit = !mayUseConfiguredLimit;
     const parser = mayUseConfiguredLimit ? parseConfiguredMcpJsonBody : parseUnvalidatedMcpJsonBody;
@@ -322,6 +431,36 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     // asynchronous server.close() is still settling. Shutdown callers wait for
     // that ownership cleanup too rather than observing an empty registry early.
     await Promise.all([...closingSessions.values()]);
+    await Promise.all(
+      [...activeStatelessRequests].map((request) => closeStatelessRequest(request)),
+    );
+    await Promise.all([...closingStatelessRequests]);
+  }
+
+  async function closeStatelessRequest(request: StatelessRequestContext): Promise<void> {
+    if (request.closePromise) {
+      await request.closePromise;
+      return;
+    }
+    activeStatelessRequests.delete(request);
+    const bearerToken = request.bearerToken;
+    request.closePromise = withRequestAuth(undefined, bearerToken, async () => {
+      try {
+        await request.transport.close();
+      } catch (error) {
+        console.error(`[mcp-http] stateless transport close failed (${formatErrorForLog(error)})`);
+      }
+      try {
+        await request.server.close();
+      } catch (error) {
+        console.error(`[mcp-http] stateless server close failed (${formatErrorForLog(error)})`);
+      }
+    }).finally(() => {
+      request.bearerToken = "";
+      if (request.closePromise) closingStatelessRequests.delete(request.closePromise);
+    });
+    closingStatelessRequests.add(request.closePromise);
+    await request.closePromise;
   }
 
   async function trackSessionActivity<T>(
@@ -568,6 +707,60 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     );
   }
 
+  const handleStatelessMcpPost: express.RequestHandler = async (req, res) => {
+    const bearerToken = getAuthenticatedBearerToken(req);
+    const startedAt = Date.now();
+    const hasToolCall = containsToolCall(req.body);
+    if (!bearerToken) {
+      rejectJsonRpc(res, 401, "Bearer authentication required.");
+      return;
+    }
+
+    // Stateless transports deliberately ignore caller-provided affinity.
+    delete req.headers["mcp-session-id"];
+    const server = createServer(
+      options.clientFactory?.(bearerToken) ??
+        createQurlClientFromBearerToken(bearerToken, { qurlApiUrl: defaultQurlApiUrl }),
+      version,
+      "http",
+      config.maxUploadFileDataBytes,
+    );
+    const transport =
+      options.transportFactory?.(true) ??
+      new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    const request: StatelessRequestContext = { server, transport, bearerToken };
+    activeStatelessRequests.add(request);
+    let cleanupStarted = false;
+    const cleanup = (): void => {
+      if (cleanupStarted) return;
+      cleanupStarted = true;
+      void closeStatelessRequest(request);
+    };
+    res.once("finish", cleanup);
+    res.once("close", cleanup);
+
+    try {
+      if (hasToolCall) logInfo("[mcp-http] stateless tool call started");
+      await server.connect(transport);
+      await withRequestAuth(undefined, bearerToken, () =>
+        transport.handleRequest(req, res, req.body),
+      );
+      if (hasToolCall) {
+        logInfo(`[mcp-http] stateless tool call finished elapsed=${formatDurationMs(startedAt)}`);
+      }
+      if (res.writableEnded) cleanup();
+    } catch (error) {
+      if (hasToolCall) {
+        console.error(
+          `[mcp-http] stateless tool call failed elapsed=${formatDurationMs(startedAt)}`,
+        );
+      }
+      console.error(`Error handling stateless MCP POST request (${formatErrorForLog(error)})`);
+      if (!res.headersSent) rejectJsonRpc(res, 500, "Internal server error.");
+      cleanup();
+    }
+  };
+
   const handleMcpPost: express.RequestHandler = async (req, res) => {
     const bearerToken = getAuthenticatedBearerToken(req);
     const startedAt = Date.now();
@@ -743,67 +936,80 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   app.post(
     MCP_HTTP_PATH,
     mcpRateLimiter,
-    ...authenticatedMcpMiddleware,
+    ...authenticatedMcpPostMiddleware,
     parseMcpJsonBody,
-    handleMcpPost,
+    stateless ? handleStatelessMcpPost : handleMcpPost,
   );
 
-  app.get(MCP_HTTP_PATH, mcpRateLimiter, ...authenticatedMcpMiddleware, async (req, res) => {
-    const authorizedSession = resolveAuthorizedSession(req);
-    if (!authorizedSession) {
-      res.status(404).send(REINITIALIZE_MESSAGE);
-      return;
-    }
-    const { session, bearerToken } = authorizedSession;
-    // The SDK transport can remain reusable after its SSE response closes, so
-    // track the response lifecycle directly rather than relying only on the
-    // transport-level onclose hook.
-    res.once("close", () => markSessionDisconnected(session.sessionId));
+  app.get(
+    MCP_HTTP_PATH,
+    // Keep unsupported stateless probes in the cheap per-IP bucket so they
+    // cannot flood 405 responses; the credential/DynamoDB limiter is bypassed.
+    mcpRateLimiter,
+    ...(stateless ? [rejectUnsupportedStatelessMethod("GET")] : authenticatedMcpMiddleware),
+    async (req, res) => {
+      const authorizedSession = resolveAuthorizedSession(req);
+      if (!authorizedSession) {
+        res.status(404).send(REINITIALIZE_MESSAGE);
+        return;
+      }
+      const { session, bearerToken } = authorizedSession;
+      // The SDK transport can remain reusable after its SSE response closes, so
+      // track the response lifecycle directly rather than relying only on the
+      // transport-level onclose hook.
+      res.once("close", () => markSessionDisconnected(session.sessionId));
 
-    try {
-      await trackSessionActivity(session, () =>
-        withRequestAuth(session.sessionId, bearerToken, () =>
+      try {
+        await trackSessionActivity(session, () =>
+          withRequestAuth(session.sessionId, bearerToken, () =>
+            session.transport.handleRequest(req, res),
+          ),
+        );
+      } catch (error) {
+        console.error(`Error handling MCP GET request (${formatErrorForLog(error)})`);
+        if (!res.headersSent) {
+          res.status(500).send("Internal server error.");
+        }
+      }
+    },
+  );
+
+  app.delete(
+    MCP_HTTP_PATH,
+    // Match GET: rate-limit probes by IP without charging a bearer counter.
+    mcpRateLimiter,
+    ...(stateless ? [rejectUnsupportedStatelessMethod("DELETE")] : authenticatedMcpMiddleware),
+    async (req, res) => {
+      const authorizedSession = resolveAuthorizedSession(req);
+      if (!authorizedSession) {
+        res.status(404).send(REINITIALIZE_MESSAGE);
+        return;
+      }
+      const { session, bearerToken } = authorizedSession;
+
+      try {
+        logInfo("[mcp-http] closing session");
+        session.lastActivityAt = Date.now();
+        await withRequestAuth(session.sessionId, bearerToken, () =>
           session.transport.handleRequest(req, res),
-        ),
-      );
-    } catch (error) {
-      console.error(`Error handling MCP GET request (${formatErrorForLog(error)})`);
-      if (!res.headersSent) {
-        res.status(500).send("Internal server error.");
+        );
+      } catch (error) {
+        console.error(`Error handling MCP DELETE request (${formatErrorForLog(error)})`);
+        if (!res.headersSent) {
+          res.status(500).send("Internal server error.");
+        }
+      } finally {
+        // DELETE is an explicit teardown request. It intentionally closes the
+        // transport even if another request is still in flight rather than
+        // allowing a long-running tool call to block client-directed cleanup.
+        // The SDK handles DELETE by closing the transport first; its Protocol
+        // onclose hook then clears the server's transport reference. closeSession
+        // removes our registry reference before calling server.close(), making
+        // that final ownership cleanup idempotent and safe if SDK behavior changes.
+        await closeSession(session.sessionId);
       }
-    }
-  });
-
-  app.delete(MCP_HTTP_PATH, mcpRateLimiter, ...authenticatedMcpMiddleware, async (req, res) => {
-    const authorizedSession = resolveAuthorizedSession(req);
-    if (!authorizedSession) {
-      res.status(404).send(REINITIALIZE_MESSAGE);
-      return;
-    }
-    const { session, bearerToken } = authorizedSession;
-
-    try {
-      logInfo("[mcp-http] closing session");
-      session.lastActivityAt = Date.now();
-      await withRequestAuth(session.sessionId, bearerToken, () =>
-        session.transport.handleRequest(req, res),
-      );
-    } catch (error) {
-      console.error(`Error handling MCP DELETE request (${formatErrorForLog(error)})`);
-      if (!res.headersSent) {
-        res.status(500).send("Internal server error.");
-      }
-    } finally {
-      // DELETE is an explicit teardown request. It intentionally closes the
-      // transport even if another request is still in flight rather than
-      // allowing a long-running tool call to block client-directed cleanup.
-      // The SDK handles DELETE by closing the transport first; its Protocol
-      // onclose hook then clears the server's transport reference. closeSession
-      // removes our registry reference before calling server.close(), making
-      // that final ownership cleanup idempotent and safe if SDK behavior changes.
-      await closeSession(session.sessionId);
-    }
-  });
+    },
+  );
 
   const jsonBodyErrorHandler: express.ErrorRequestHandler = (error, _req, res, next) => {
     if (res.headersSent) {
@@ -899,10 +1105,6 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     });
   }
 
-  app.get(HEALTH_HTTP_PATH, healthRateLimiter, (_req, res) => {
-    res.json({ ok: true });
-  });
-
   // Keep JSON-RPC error envelopes scoped to the protocol route. Public pages
   // use a plain-text fallback so an unrelated handler failure cannot return a
   // misleading JSON-RPC response (or Express's default stack-bearing HTML).
@@ -918,8 +1120,21 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
   let shutdownHttpServer: (signal?: string) => void = () => undefined;
 
+  async function initialize(): Promise<void> {
+    await credentialRateLimitStore.initialize();
+    credentialRateLimitStoreInitialized = true;
+  }
+
   function startHttpServer(): Server {
+    if (!credentialRateLimitStoreInitialized) {
+      throw new Error("Credential rate-limit store must be initialized before HTTP startup.");
+    }
     installTimestampedConsole();
+    const metricsTimer = metricsIdentity
+      ? globalThis.setInterval(() => metrics.emitHeartbeat(), 30_000)
+      : undefined;
+    metricsTimer?.unref();
+    if (metricsIdentity) metrics.emitHeartbeat();
     let sweepInProgress = false;
     const shortestSessionTtlMs = Math.min(
       config.sessionIdleTtlMs,
@@ -945,7 +1160,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     const httpServer = app.listen(port, host, () => {
       logInfo(`qURL MCP HTTP server listening on ${sanitizeLogValue(host)}:${port}`);
       logInfo("HTTP MCP auth mode: qURL API-key passthrough");
-      if (config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES) {
+      if (!stateless && config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES) {
         console.warn(
           "Warning: maxUploadFileDataBytes exceeds the default; requests above the default parser ceiling require an already-validated MCP session. Apply an authenticated edge request-size limit on hostile networks.",
         );
@@ -986,6 +1201,14 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         logInfo(`Host allowlist enabled with ${config.allowedHosts.length} entries.`);
       }
     });
+    if (stateless) {
+      // A permit spans parsing through response completion. Bound slow header,
+      // body, and idle-response sockets so a small set of stalled connections
+      // cannot retain the whole stateless permit pool indefinitely.
+      httpServer.headersTimeout = STATELESS_HEADERS_TIMEOUT_MS;
+      httpServer.requestTimeout = STATELESS_REQUEST_TIMEOUT_MS;
+      httpServer.setTimeout(STATELESS_SOCKET_IDLE_TIMEOUT_MS);
+    }
 
     let shuttingDown = false;
     const removeSignalHandlers = (): void => {
@@ -996,6 +1219,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       if (shuttingDown) return;
       shuttingDown = true;
       globalThis.clearInterval(sweepTimer);
+      if (metricsTimer) globalThis.clearInterval(metricsTimer);
       removeSignalHandlers();
       logInfo(`Received ${signal}; draining HTTP connections and MCP sessions.`);
 
@@ -1021,6 +1245,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     process.once("SIGINT", handleSigint);
     httpServer.once("close", () => {
       globalThis.clearInterval(sweepTimer);
+      if (metricsTimer) globalThis.clearInterval(metricsTimer);
       removeSignalHandlers();
     });
     shutdownHttpServer = (signal = "shutdown") => shutdown(signal);
@@ -1032,7 +1257,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     // hooks are intentionally exposed as deterministic test seams.
     app,
     closeAllSessions,
+    emitMetricsHeartbeat: () => metrics.emitHeartbeat(),
     getActiveSessionCount,
+    getInFlightRequestCount: () => inFlightRequests,
+    initialize,
     shutdownHttpServer: (signal?: string) => shutdownHttpServer(signal),
     startHttpServer,
     streamPublicVideo,
@@ -1043,24 +1271,29 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 const isMainModule =
   typeof process.argv[1] === "string" &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-export function runHttpMain(
-  start = (): void => {
+export async function runHttpMain(
+  start = async (): Promise<void> => {
     const require = createRequire(import.meta.url);
     const { version } = require("../package.json") as { version: string };
     const runtimeConfigPath = getDefaultConfigPath();
     const config = loadHttpServerConfig(getDefaultHttpConfigPath());
-    createHttpRuntime(config, { runtimeConfigPath, version }).startHttpServer();
+    const runtime = createHttpRuntime(config, { runtimeConfigPath, version });
+    await runtime.initialize();
+    runtime.startHttpServer();
   },
-): void {
-  try {
-    start();
-  } catch (error) {
+): Promise<void> {
+  const handleStartupError = (error: unknown): void => {
     installTimestampedConsole();
     console.error(`qURL MCP HTTP startup failed (${formatErrorForLog(error)})`);
     // Startup failed before a server or sweep timer was retained. Preserve
     // stderr flushing and let the empty event loop terminate with this status.
     process.exitCode = 1;
+  };
+  try {
+    await start();
+  } catch (error) {
+    handleStartupError(error);
   }
 }
 
-if (isMainModule) runHttpMain();
+if (isMainModule) void runHttpMain();

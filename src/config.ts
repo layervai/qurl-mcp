@@ -64,6 +64,13 @@ export type UncheckedConfigFileShape = Partial<{
   sessionAbsoluteTtlMs: number;
   unvalidatedSessionTtlMs: number;
   mcpRateLimitPerMinute: number;
+  stateless: boolean;
+  maxConcurrentRequests: number;
+  credentialRateLimitStore: "memory" | "dynamodb";
+  rateLimitDynamoDbTable: string;
+  metricsNamespace: string;
+  metricsService: string;
+  metricsEnvironment: string;
   publicFileRateLimitPerMinute: number;
   maxUploadFileDataBytes: string | number;
   defaultQurlApiUrl: string;
