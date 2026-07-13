@@ -149,6 +149,16 @@ describe("HTTP MCP server", () => {
         { version: "0.0.0-test" },
       ),
     ).toThrow("rateLimitDynamoDbTable is required");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...testConfig,
+          credentialRateLimitStore: "dynamodb",
+          rateLimitDynamoDbTable: "bad/table",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("must be 3-255 DynamoDB table-name characters");
   });
 
   it("rejects direct stateful or partial metrics configuration", () => {
@@ -174,6 +184,23 @@ describe("HTTP MCP server", () => {
         {
           ...testConfig,
           metricsNamespace: "LayerV/qurl-mcp",
+          metricsService: "qurl-mcp",
+          metricsEnvironment: "sandbox",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("only in stateless HTTP mode");
+    expect(() =>
+      createHttpRuntime(
+        { ...testConfig, metricsNamespace: "LayerV/qurl-mcp" },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("only in stateless HTTP mode");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...testConfig,
+          metricsNamespace: " ",
           metricsService: "qurl-mcp",
           metricsEnvironment: "sandbox",
         },
@@ -226,6 +253,42 @@ describe("HTTP MCP server", () => {
     }
   });
 
+  it("enforces deployed stateless requirements for direct runtime construction", () => {
+    const deployedConfig: HttpServerConfig = {
+      ...testConfig,
+      host: "0.0.0.0",
+      baseUrl: "https://mcp.example.com",
+      allowedHosts: ["mcp.example.com"],
+      stateless: true,
+    };
+    expect(() => createHttpRuntime(deployedConfig, { version: "0.0.0-test" })).toThrow(
+      "requires MCP_CREDENTIAL_RATE_LIMIT_STORE=dynamodb",
+    );
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...deployedConfig,
+          credentialRateLimitStore: "dynamodb",
+          rateLimitDynamoDbTable: "rate-table",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).toThrow("requires MCP_METRICS_NAMESPACE");
+    expect(() =>
+      createHttpRuntime(
+        {
+          ...deployedConfig,
+          credentialRateLimitStore: "dynamodb",
+          rateLimitDynamoDbTable: "rate-table",
+          metricsNamespace: "LayerV/qurl-mcp",
+          metricsService: "qurl-mcp",
+          metricsEnvironment: "sandbox",
+        },
+        { version: "0.0.0-test" },
+      ),
+    ).not.toThrow();
+  });
+
   it("requires explicit initialization for an injected credential store", async () => {
     const injectedRuntime = createHttpRuntime(testConfig, {
       version: "0.0.0-test",
@@ -250,6 +313,36 @@ describe("HTTP MCP server", () => {
     expect(server.headersTimeout).toBe(15_000);
     expect(server.requestTimeout).toBe(120_000);
     expect(server.timeout).toBe(120_000);
+  });
+
+  it("warns when stateless parsing accepts an elevated ceiling before bearer validation", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const statelessRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        port: 0,
+        stateless: true,
+        maxUploadFileDataBytes: 20 * 1024 * 1024,
+      },
+      { version: "0.0.0-test" },
+    );
+    try {
+      const server = statelessRuntime.startHttpServer();
+      servers.push(server);
+      await getStartedServerBaseUrl(server);
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("before downstream bearer validation"),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("Apply an authenticated edge request-size limit"),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("process-local memory credential quota"),
+      );
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("writes raw EMF JSON to stdout after timestamped logging is installed", async () => {
@@ -284,6 +377,47 @@ describe("HTTP MCP server", () => {
       );
     } finally {
       write.mockRestore();
+    }
+  });
+
+  it("flushes the final stateless metrics interval during graceful shutdown", async () => {
+    const write = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const metricsRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        port: 0,
+        stateless: true,
+        metricsNamespace: "LayerV/qurl-mcp",
+        metricsService: "qurl-mcp",
+        metricsEnvironment: "sandbox",
+      },
+      { version: "0.0.0-test" },
+    );
+    const server = metricsRuntime.startHttpServer();
+    try {
+      await getStartedServerBaseUrl(server);
+      write.mockClear();
+      const closed = new Promise<void>((resolve) => server.once("close", () => resolve()));
+      metricsRuntime.shutdownHttpServer("test metrics shutdown");
+      await closed;
+
+      const finalHeartbeat = write.mock.calls
+        .map(([value]) => String(value))
+        .find((value) => value.includes('"CloudWatchMetrics"'));
+      expect(JSON.parse(finalHeartbeat?.trim() ?? "null")).toEqual(
+        expect.objectContaining({
+          McpConcurrencyUtilization: 0,
+          McpConcurrencyRejected: 0,
+          McpRateLimitStoreErrors: 0,
+        }),
+      );
+    } finally {
+      write.mockRestore();
+      if (server.listening) {
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
     }
   });
 
@@ -432,9 +566,9 @@ describe("HTTP MCP server", () => {
     const overLimit = await post(baseB, "lv_live_shared", "203.0.113.9");
     expect(overLimit.status).toBe(429);
     expect(overLimit.headers.get("ratelimit")).toContain('"credential"; r=0');
-    expect(overLimit.headers.get("ratelimit-policy")).toMatch(
-      /"credential"; q=1; w=60; pk=:[A-Za-z0-9+/]+={0,2}:/,
-    );
+    const rateLimitPolicy = overLimit.headers.get("ratelimit-policy");
+    expect(rateLimitPolicy).toContain('"credential"; q=1; w=60');
+    expect(rateLimitPolicy).not.toMatch(/"credential"[^,]*;\s*pk=/);
     expect((await post(baseA, "lv_live_distinct", "192.0.2.44")).status).toBe(200);
     await Promise.all([runtimeA.closeAllSessions(), runtimeB.closeAllSessions()]);
   });
@@ -519,6 +653,68 @@ describe("HTTP MCP server", () => {
       body: JSON.stringify(initializeBody),
     });
     expect(afterParserError.status).toBe(200);
+  });
+
+  it("bounds asynchronous stateless teardown backlog", async () => {
+    let markTeardownStarted!: () => void;
+    let releaseTeardown!: () => void;
+    const teardownStarted = new Promise<void>((resolve) => {
+      markTeardownStarted = resolve;
+    });
+    const teardownGate = new Promise<void>((resolve) => {
+      releaseTeardown = resolve;
+    });
+    let blockFirstClose = true;
+    const limitedRuntime = createHttpRuntime(
+      {
+        ...testConfig,
+        stateless: true,
+        maxConcurrentRequests: 1,
+        mcpRateLimitPerMinute: 100,
+      },
+      {
+        version: "0.0.0-test",
+        transportFactory: () => {
+          const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+          if (blockFirstClose) {
+            blockFirstClose = false;
+            const close = transport.close.bind(transport);
+            transport.close = async () => {
+              markTeardownStarted();
+              await teardownGate;
+              await close();
+            };
+          }
+          return transport;
+        },
+      },
+    );
+    const baseUrl = await start(limitedRuntime.app);
+    const first = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_teardown_first"),
+      body: JSON.stringify(initializeBody),
+    });
+    expect(first.status).toBe(200);
+    await first.text();
+    await teardownStarted;
+
+    const whileClosing = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_teardown_second"),
+      body: JSON.stringify(initializeBody),
+    });
+    expect(whileClosing.status).toBe(503);
+
+    releaseTeardown();
+    await limitedRuntime.closeAllSessions();
+    const afterClose = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: bearerHeaders("lv_live_teardown_third"),
+      body: JSON.stringify(initializeBody),
+    });
+    expect(afterClose.status).toBe(200);
+    await limitedRuntime.closeAllSessions();
   });
 
   it("creates isolated apps and session registries from explicit config", async () => {

@@ -39,11 +39,13 @@ import {
   isLoopbackHostname,
 } from "./config.js";
 import {
+  assertDeployedStatelessRequirements,
   assertStatelessParserBudget,
   getDefaultHttpConfigPath,
   getJsonBodyLimitBytes,
   loadHttpServerConfig,
   normalizeMaxConcurrentRequests,
+  normalizeRateLimitDynamoDbTable,
   type HttpServerConfig,
 } from "./http-config.js";
 import { HEALTH_HTTP_PATH, MCP_HTTP_PATH } from "./http-routes.js";
@@ -91,7 +93,7 @@ const STATELESS_REQUEST_TIMEOUT_MS = 120_000;
 const STATELESS_SOCKET_IDLE_TIMEOUT_MS = 120_000;
 
 function requireRateLimitDynamoDbTable(config: HttpServerConfig): string {
-  const tableName = config.rateLimitDynamoDbTable;
+  const tableName = normalizeRateLimitDynamoDbTable(config.rateLimitDynamoDbTable);
   if (!tableName) {
     // loadHttpServerConfig enforces this too, but createHttpRuntime is public
     // and can be called directly. Preserve the same fail-fast invariant there.
@@ -116,6 +118,9 @@ export interface HttpRuntimeOptions {
     options: { start?: number; end?: number },
   ) => ReturnType<typeof createReadStream>;
   transportFactory?: (stateless?: boolean) => StreamableHTTPServerTransport;
+  // Injection is an embedding/test seam, not proof that a backend is shared
+  // across replicas. Non-loopback stateless callers must still declare the
+  // dynamodb backend in config so the deployed contract stays fail-closed.
   credentialRateLimitStore?: CredentialRateLimitStore;
   runtimeConfigPath?: string;
   version: string;
@@ -148,6 +153,14 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     },
     stateless,
   );
+  // Embedders can bypass loadHttpServerConfig, so the runtime seam enforces
+  // the same load-bearing non-loopback deployment contract.
+  assertDeployedStatelessRequirements(
+    host,
+    stateless,
+    config.credentialRateLimitStore ?? "memory",
+    metricsIdentity,
+  );
   const metrics = new McpEmfMetrics(
     metricsIdentity,
     // Both loader and direct-call validation guarantee a positive denominator.
@@ -165,6 +178,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   let credentialRateLimitStoreInitialized =
     options.credentialRateLimitStore === undefined &&
     config.credentialRateLimitStore !== "dynamodb";
+  // Bound completed-response teardown independently from active parser work.
+  // A slow SDK close path can consume at most one additional concurrency pool.
+  const closingStatelessRequests = new Set<Promise<void>>();
 
   const app = express();
   app.disable("x-powered-by");
@@ -207,7 +223,14 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     requiredScopes: ["mcp:tools"],
   });
   const concurrencyLimiter: express.RequestHandler = (_req, res, next) => {
-    if (inFlightRequests >= maxConcurrentRequests) {
+    if (
+      inFlightRequests >= maxConcurrentRequests ||
+      closingStatelessRequests.size >= maxConcurrentRequests
+    ) {
+      // This is an admission-failure metric, not a pure active-work gauge: a
+      // saturated teardown backlog is also capacity loss and should page. The
+      // autoscaling policy uses McpConcurrencyUtilization alone, so teardown
+      // lag cannot spuriously drive scaling from this counter.
       metrics.incrementConcurrencyRejected();
       rejectJsonRpc(res, 503, "The MCP request concurrency limit has been reached.");
       return;
@@ -241,21 +264,12 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         windowStartedAtMs,
       });
       const remaining = Math.max(0, config.mcpRateLimitPerMinute - count);
-      const resetSeconds = Math.max(
-        1,
-        Math.ceil(
-          (Math.floor(windowStartedAtMs / 60_000) * 60_000 + 60_000 - windowStartedAtMs) / 1_000,
-        ),
-      );
-      const partitionKey = Buffer.from(
-        digestBearerToken(credentialDigest).toString("hex").slice(0, 12),
-        "ascii",
-      ).toString("base64");
+      const resetSeconds = Math.max(1, Math.ceil((60_000 - (windowStartedAtMs % 60_000)) / 1_000));
       appendStructuredHeader(res, "RateLimit", `"credential"; r=${remaining}; t=${resetSeconds}`);
       appendStructuredHeader(
         res,
         "RateLimit-Policy",
-        `"credential"; q=${config.mcpRateLimitPerMinute}; w=60; pk=:${partitionKey}:`,
+        `"credential"; q=${config.mcpRateLimitPerMinute}; w=60`,
       );
       if (count > config.mcpRateLimitPerMinute) {
         rejectJsonRpc(res, 429, "Too many requests.");
@@ -270,6 +284,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   };
   // The credential guard and limiter core are one middleware, so a future
   // array reorder cannot make tokenless requests reach the keyed store.
+  // Preserve the existing stateful contract: POST, SSE GET, and explicit
+  // DELETE all consume the process-local credential quota. Stateless GET and
+  // DELETE are unsupported probes and bypass the fleet-wide store below.
   const authenticatedMcpMiddleware = [bearerAuthMiddleware, credentialRateLimiter];
   const authenticatedMcpPostMiddleware = [
     bearerAuthMiddleware,
@@ -284,7 +301,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     };
 
   // Readiness must not depend on the public Host allowlist: ALB probes use the
-  // target IP and port as Host. The response carries no sensitive state, so
+  // target IP and port as Host. The response carries no state and has no side
+  // effects; keep both properties true before expanding this exemption.
   // /healthz is intentionally unauthenticated and Host-unvalidated for every
   // caller, not only ALB-shaped Host values.
   app.get(HEALTH_HTTP_PATH, healthRateLimiter, (_req, res) => {
@@ -337,7 +355,6 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const sessions = new Map<string, SessionContext>();
   const closingSessions = new Map<string, Promise<void>>();
   const activeStatelessRequests = new Set<StatelessRequestContext>();
-  const closingStatelessRequests = new Set<Promise<void>>();
   let pendingInitializations = 0;
   const pendingInitializationsByCredential = new Map<string, number>();
 
@@ -1138,39 +1155,55 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       throw new Error("Credential rate-limit store must be initialized before HTTP startup.");
     }
     installTimestampedConsole();
-    // Keep interval semantics in loopback development too: emitHeartbeat
-    // always snapshots/resets counters and only writes EMF when identity exists.
-    const metricsTimer = globalThis.setInterval(() => metrics.emitHeartbeat(), 30_000);
-    metricsTimer.unref();
-    metrics.emitHeartbeat();
+    // Stateless loopback development keeps production interval semantics even
+    // without an emitter. Stateful mode cannot configure metric identity and
+    // does not schedule an idle heartbeat timer.
+    const metricsTimer = stateless
+      ? globalThis.setInterval(() => metrics.emitHeartbeat(), 30_000)
+      : undefined;
+    metricsTimer?.unref();
+    if (stateless) metrics.emitHeartbeat();
     let sweepInProgress = false;
     const shortestSessionTtlMs = Math.min(
       config.sessionIdleTtlMs,
       config.sessionAbsoluteTtlMs,
       config.unvalidatedSessionTtlMs,
     );
-    const sweepTimer = globalThis.setInterval(
-      () => {
-        if (sweepInProgress) return;
-        sweepInProgress = true;
-        void sweepExpiredSessions()
-          .catch((error: unknown) => {
-            console.error(`[mcp-http] session sweep failed (${formatErrorForLog(error)})`);
-          })
-          .finally(() => {
-            sweepInProgress = false;
-          });
-      },
-      Math.min(60_000, Math.max(5_000, Math.floor(shortestSessionTtlMs / 2))),
-    );
-    sweepTimer.unref();
+    const sweepTimer = !stateless
+      ? globalThis.setInterval(
+          () => {
+            if (sweepInProgress) return;
+            sweepInProgress = true;
+            void sweepExpiredSessions()
+              .catch((error: unknown) => {
+                console.error(`[mcp-http] session sweep failed (${formatErrorForLog(error)})`);
+              })
+              .finally(() => {
+                sweepInProgress = false;
+              });
+          },
+          Math.min(60_000, Math.max(5_000, Math.floor(shortestSessionTtlMs / 2))),
+        )
+      : undefined;
+    sweepTimer?.unref();
 
     const httpServer = app.listen(port, host, () => {
       logInfo(`qURL MCP HTTP server listening on ${sanitizeLogValue(host)}:${port}`);
       logInfo("HTTP MCP auth mode: qURL API-key passthrough");
-      if (!stateless && config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES) {
+      if (config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES) {
         console.warn(
-          "Warning: maxUploadFileDataBytes exceeds the default; requests above the default parser ceiling require an already-validated MCP session. Apply an authenticated edge request-size limit on hostile networks.",
+          stateless
+            ? "Warning: maxUploadFileDataBytes exceeds the default; stateless requests may use the configured parser ceiling before downstream bearer validation. Apply an authenticated edge request-size limit on hostile networks."
+            : "Warning: maxUploadFileDataBytes exceeds the default; requests above the default parser ceiling require an already-validated MCP session. Apply an authenticated edge request-size limit on hostile networks.",
+        );
+      }
+      if (
+        stateless &&
+        config.credentialRateLimitStore !== "dynamodb" &&
+        options.credentialRateLimitStore === undefined
+      ) {
+        console.warn(
+          "Warning: stateless HTTP is using the process-local memory credential quota. This is supported only for single-process loopback development; any load-balanced or multi-replica deployment requires DynamoDB.",
         );
       }
       if (config.trustProxyHops === 0 && !isLoopbackHostname(host)) {
@@ -1226,8 +1259,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     const shutdown = (signal: string): void => {
       if (shuttingDown) return;
       shuttingDown = true;
-      globalThis.clearInterval(sweepTimer);
-      globalThis.clearInterval(metricsTimer);
+      if (sweepTimer) globalThis.clearInterval(sweepTimer);
+      if (metricsTimer) globalThis.clearInterval(metricsTimer);
+      // Preserve the trailing partial interval before ECS scale-in or a
+      // rolling replacement terminates the process.
+      if (stateless) metrics.emitHeartbeat();
       removeSignalHandlers();
       logInfo(`Received ${signal}; draining HTTP connections and MCP sessions.`);
 
@@ -1252,8 +1288,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     process.once("SIGTERM", handleSigterm);
     process.once("SIGINT", handleSigint);
     httpServer.once("close", () => {
-      globalThis.clearInterval(sweepTimer);
-      globalThis.clearInterval(metricsTimer);
+      if (sweepTimer) globalThis.clearInterval(sweepTimer);
+      if (metricsTimer) globalThis.clearInterval(metricsTimer);
       removeSignalHandlers();
     });
     shutdownHttpServer = (signal = "shutdown") => shutdown(signal);
@@ -1267,6 +1303,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     closeAllSessions,
     emitMetricsHeartbeat: () => metrics.emitHeartbeat(),
     getActiveSessionCount,
+    // Stateless-only observation seam; stateful runtimes intentionally report
+    // zero because they do not acquire the pre-parser concurrency permit.
     getInFlightRequestCount: () => inFlightRequests,
     initialize,
     shutdownHttpServer: (signal?: string) => shutdownHttpServer(signal),

@@ -1,3 +1,5 @@
+import type { NodeHttpHandlerOptions } from "@smithy/types";
+
 export interface CredentialRateLimitIncrement {
   credentialDigest: string;
   windowStartedAtMs: number;
@@ -34,11 +36,11 @@ interface DynamoDbSdk {
 interface DynamoDbClientConfig {
   maxAttempts: number;
   retryMode: "standard";
-  requestHandler: {
-    connectionTimeout: number;
-    requestTimeout: number;
-    throwOnRequestTimeout: true;
-  };
+  // Pick from the real Smithy contract so an SDK rename/removal fails the
+  // build, while requiring every load-bearing bound to remain configured.
+  requestHandler: Required<
+    Pick<NodeHttpHandlerOptions, "connectionTimeout" | "requestTimeout" | "throwOnRequestTimeout">
+  > & { throwOnRequestTimeout: true };
 }
 
 const WINDOW_MS = 60_000;
@@ -52,7 +54,7 @@ function minuteBucket(windowStartedAtMs: number): number {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isDynamoDbSdk(value: unknown): value is DynamoDbSdk {

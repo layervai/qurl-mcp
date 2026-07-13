@@ -10,7 +10,7 @@ import {
 } from "./config.js";
 import { resolve } from "node:path";
 import { isIP } from "node:net";
-import { normalizeMcpMetricsIdentity } from "./emf-metrics.js";
+import { normalizeMcpMetricsIdentity, type McpMetricsIdentity } from "./emf-metrics.js";
 
 export interface HttpServerConfig {
   port: number;
@@ -73,6 +73,25 @@ export function assertStatelessParserBudget(
   }
 }
 
+export function assertDeployedStatelessRequirements(
+  host: string,
+  stateless: boolean,
+  credentialRateLimitStore: "memory" | "dynamodb",
+  metricsIdentity: McpMetricsIdentity | undefined,
+): void {
+  if (!stateless || isLoopbackHostname(host)) return;
+  if (credentialRateLimitStore !== "dynamodb") {
+    throw new Error(
+      "Deployed stateless HTTP mode requires MCP_CREDENTIAL_RATE_LIMIT_STORE=dynamodb.",
+    );
+  }
+  if (!metricsIdentity) {
+    throw new Error(
+      "Deployed stateless HTTP mode requires MCP_METRICS_NAMESPACE, MCP_METRICS_SERVICE, and MCP_METRICS_ENVIRONMENT.",
+    );
+  }
+}
+
 function parseBoolean(value: unknown, fallback: boolean, fieldName: string): boolean {
   if (value === undefined) return fallback;
   if (typeof value === "boolean") return value;
@@ -98,6 +117,19 @@ function parseOptionalNonEmptyString(value: unknown, fieldName: string): string 
     throw new Error(`${fieldName} must be a non-empty string.`);
   }
   return value.trim();
+}
+
+export function normalizeRateLimitDynamoDbTable(value: unknown): string | undefined {
+  const tableName = parseOptionalNonEmptyString(
+    value,
+    "MCP_RATE_LIMIT_DYNAMODB_TABLE/rateLimitDynamoDbTable",
+  );
+  if (tableName !== undefined && !/^[A-Za-z0-9_.-]{3,255}$/.test(tableName)) {
+    throw new Error(
+      "MCP_RATE_LIMIT_DYNAMODB_TABLE/rateLimitDynamoDbTable must be 3-255 DynamoDB table-name characters (letters, numbers, underscore, hyphen, or period).",
+    );
+  }
+  return tableName;
 }
 
 function parseBoundedInteger(
@@ -251,9 +283,8 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
   const credentialRateLimitStore = parseCredentialRateLimitStore(
     process.env.MCP_CREDENTIAL_RATE_LIMIT_STORE ?? fileConfig.credentialRateLimitStore,
   );
-  const rateLimitDynamoDbTable = parseOptionalNonEmptyString(
+  const rateLimitDynamoDbTable = normalizeRateLimitDynamoDbTable(
     process.env.MCP_RATE_LIMIT_DYNAMODB_TABLE ?? fileConfig.rateLimitDynamoDbTable,
-    "MCP_RATE_LIMIT_DYNAMODB_TABLE/rateLimitDynamoDbTable",
   );
   const metricsIdentity = normalizeMcpMetricsIdentity(
     {
@@ -271,18 +302,7 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
       "MCP_RATE_LIMIT_DYNAMODB_TABLE/rateLimitDynamoDbTable is required for the dynamodb credential rate-limit store.",
     );
   }
-  if (stateless && !isLoopbackHostname(host)) {
-    if (credentialRateLimitStore !== "dynamodb") {
-      throw new Error(
-        "Deployed stateless HTTP mode requires MCP_CREDENTIAL_RATE_LIMIT_STORE=dynamodb.",
-      );
-    }
-    if (!metricsIdentity) {
-      throw new Error(
-        "Deployed stateless HTTP mode requires MCP_METRICS_NAMESPACE, MCP_METRICS_SERVICE, and MCP_METRICS_ENVIRONMENT.",
-      );
-    }
-  }
+  assertDeployedStatelessRequirements(host, stateless, credentialRateLimitStore, metricsIdentity);
   const maxSessions = parseBoundedInteger(
     process.env.MCP_MAX_SESSIONS ?? fileConfig.maxSessions,
     DEFAULT_MAX_SESSIONS,

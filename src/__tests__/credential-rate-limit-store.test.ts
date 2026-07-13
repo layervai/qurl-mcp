@@ -1,10 +1,25 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createServer } from "node:http";
 import {
   DynamoDbCredentialRateLimitStore,
   MemoryCredentialRateLimitStore,
   credentialRateLimitKey,
   type DynamoDbUpdateItemInput,
 } from "../credential-rate-limit-store.js";
+
+interface InstalledDynamoDbSdk {
+  DynamoDBClient: new (config: unknown) => {
+    config: {
+      requestHandler: {
+        constructor: { name: string };
+        httpHandlerConfigs?: () => Record<string, unknown>;
+      };
+    };
+    destroy(): void;
+    send(command: unknown): Promise<unknown>;
+  };
+  DescribeTableCommand: new (input: { TableName: string }) => unknown;
+}
 
 describe("credential rate-limit stores", () => {
   afterEach(() => {
@@ -142,5 +157,60 @@ describe("credential rate-limit stores", () => {
     }));
     const store = new DynamoDbCredentialRateLimitStore("rate-table");
     await expect(store.initialize()).rejects.toThrow("does not expose the required constructors");
+  });
+
+  it("materializes timeout options in the pinned SDK node handler", async () => {
+    vi.doUnmock("@aws-sdk/client-dynamodb");
+    const sdkModuleName = "@aws-sdk/client-dynamodb";
+    const sdkModule: unknown = await import(sdkModuleName);
+    if (
+      typeof sdkModule !== "object" ||
+      sdkModule === null ||
+      !("DynamoDBClient" in sdkModule) ||
+      typeof sdkModule.DynamoDBClient !== "function" ||
+      !("DescribeTableCommand" in sdkModule) ||
+      typeof sdkModule.DescribeTableCommand !== "function"
+    ) {
+      throw new Error("Expected the installed DynamoDB SDK constructors.");
+    }
+    const { DescribeTableCommand, DynamoDBClient } = sdkModule as unknown as InstalledDynamoDbSdk;
+    const server = createServer((_request, response) => {
+      response.statusCode = 500;
+      response.end("{}");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Expected a local test server.");
+    const client = new DynamoDBClient({
+      endpoint: `http://127.0.0.1:${address.port}`,
+      region: "us-east-2",
+      credentials: { accessKeyId: "test", secretAccessKey: "test" },
+      maxAttempts: 2,
+      retryMode: "standard",
+      requestHandler: {
+        connectionTimeout: 1_000,
+        requestTimeout: 2_000,
+        throwOnRequestTimeout: true,
+      },
+    });
+    try {
+      await expect(
+        client.send(new DescribeTableCommand({ TableName: "rate-table" })),
+      ).rejects.toBeDefined();
+      const handler = client.config.requestHandler;
+      expect(handler.constructor.name).toBe("NodeHttpHandler");
+      expect(handler.httpHandlerConfigs?.()).toEqual(
+        expect.objectContaining({
+          connectionTimeout: 1_000,
+          requestTimeout: 2_000,
+          throwOnRequestTimeout: true,
+        }),
+      );
+    } finally {
+      client.destroy();
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
   });
 });

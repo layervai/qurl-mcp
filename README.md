@@ -410,8 +410,10 @@ client IP and the SHA-256 digest of the authenticated bearer. The memory store
 is process-local; the DynamoDB store uses an atomic fixed-window counter keyed
 by credential digest and UTC minute. It never stores the bearer. As with any
 fixed window, requests around a minute boundary can total nearly twice the
-configured allowance. Enable DynamoDB TTL on the numeric `expires_at` attribute
-so expired rows do not accumulate; TTL only schedules asynchronous cleanup, and
+configured allowance. The table contract is a string partition key named
+`rate_key`; the atomic update writes a numeric `request_count` counter and a
+numeric `expires_at` TTL timestamp. Enable DynamoDB TTL on `expires_at` so
+expired rows do not accumulate; TTL only schedules asynchronous cleanup, and
 the minute in the key—not physical deletion—resets the active window. The task
 role requires `dynamodb:DescribeTable` for startup and `dynamodb:UpdateItem` on
 the request path. Use on-demand capacity or provision enough write capacity for
@@ -419,18 +421,23 @@ the expected fleet rate; throttling fails closed with `503` and never falls
 back to memory. The client uses standard retry mode with at most two attempts,
 a one-second connection timeout, and a two-second request timeout that throws;
 these explicit bounds limit how long a request holds a concurrency permit
-during a partial store failure. The optional AWS SDK dependency is exact-version
-pinned and loaded only when the DynamoDB store is selected, so stdio-only
-consumers may install with `--omit=optional`. Deployed HTTP images must include
-optional dependencies; startup fails before listening if the SDK is absent or
-exposes an incompatible runtime surface. The client uses the standard
-`AWS_REGION` and credential provider chain; ECS deployments
+during a partial store failure. The optional AWS SDK dependency is top-level
+exact-version pinned, while the committed package lock fixes its transitive
+`@aws-sdk/*` and `@smithy/*` graph. Any SDK bump must update the lockfile and
+keep the real-`NodeHttpHandler` timeout-materialization regression test green.
+The dependency is loaded only when the DynamoDB store is selected, so
+stdio-only consumers may install with `--omit=optional`. Deployed HTTP images
+must include optional dependencies; startup fails before listening if the SDK
+is absent or exposes an incompatible runtime surface. The client uses the
+standard `AWS_REGION` and credential provider chain; ECS deployments
 normally obtain both from the task environment and task role. Reverse-proxy
 deployments must set the correct hop count or all callers behind the proxy will
 share the proxy's single IP bucket. Only the DynamoDB credential quota is
 fleet-wide: the IP limiter is process-local, so its effective fleet allowance
 multiplies with task count and must be backed by a shared edge limit. The
-credential bucket also prevents one
+managed deployment in qurl-integrations-infra PR #1305 enforces both a
+per-source-IP WAF limit and a lower aggregate `/mcp` fleet cap, with live
+headroom proof tracked in issue #1306. The credential bucket also prevents one
 key from bypassing the request allowance by rotating source IPs, while
 `maxSessionsPerCredential` prevents it from occupying the full session pool.
 Each distinct bearer value retains one credential-bucket entry for the current
@@ -493,8 +500,9 @@ Deploying an unauthenticated connector is unsupported because it would allow an
 unvalidated MCP caller to create connector-side state.
 
 Stateful mode is the compatibility default and retains the existing MCP session
-registry, GET SSE, and explicit DELETE behavior. Stateless mode creates and
-closes a server and transport for each POST, ignores `mcp-session-id`, and
+registry, GET SSE, explicit DELETE behavior, and process-local credential quota
+charging for all three MCP methods. Stateless mode creates and closes a server
+and transport for each POST, ignores `mcp-session-id`, and
 returns JSON-RPC-shaped `405` responses for GET and DELETE. It is the required
 mode behind a load balancer or autoscaling service because no request depends
 on process-local affinity. The concurrency permit is acquired before JSON
@@ -508,28 +516,62 @@ Stateless startup rejects configurations whose conservative parser budget
 exceeds 4 GiB. Lower either setting further when the ECS task has a smaller
 memory limit. In contrast, stateful sessions above the default ceiling must
 first complete a successful downstream qURL API call.
+On hostile networks, an authenticated edge request-size limit no larger than
+the configured parser ceiling is a deployment requirement: the permit bounds
+aggregate memory, but a non-empty bearer is not authoritatively validated until
+the parsed operation reaches the downstream qURL API.
 
 The stateless listener bounds header receipt at 15 seconds and both complete
 request receipt and idle socket lifetime at 120 seconds. A concurrency permit
 spans parsing through response completion, so stalled clients cannot retain the
-entire permit pool indefinitely.
+entire permit pool indefinitely. A tool call that produces no socket traffic
+for 120 seconds is intentionally aborted; integrations needing longer silent
+operations must move that work behind an asynchronous API rather than raising
+this fleet-wide retention bound.
 
 Deployed (non-loopback) stateless mode requires the DynamoDB credential store
 and all three stable metric identity fields. It emits a 30-second EMF heartbeat:
 `McpConcurrencyUtilization` is the peak permit utilization observed during the
-interval (including requests that start and finish between heartbeats), while
+interval at request admission and heartbeat (including requests that start and
+finish between heartbeats), while
 `McpConcurrencyRejected` and `McpRateLimitStoreErrors` are snapshot-and-zero
 interval deltas that include explicit zeros. Session caps and email recipient
 quotas remain in-memory; the DynamoDB credential quota is fleet-wide and counts
 every authenticated HTTP POST, including initialization, discovery, and tool
 calls. Size that quota for the expected complete request pattern rather than
-tool calls alone. The fixed-window counter increments every attempt, including
+tool calls alone. The permit also spans the bounded DynamoDB increment: during
+a store brownout, each admitted request may retain one permit for roughly four
+seconds (two two-second attempts) before failing closed, while excess requests
+receive a fast concurrency `503`. The fixed-window counter increments every
+attempt, including
 attempts already above the credential limit; edge rate limits and DynamoDB
 write/throttle alarms must therefore bound abusive write amplification.
 Deployment owners must make both alarms and an over-limit write-amplification
 probe hard promotion gates rather than treating them as optional observability.
+The managed deployment in
+[qurl-integrations-infra#1305](https://github.com/layervai/qurl-integrations-infra/pull/1305)
+provisions those alarms, with live proof tracked in its rollout ledger and
+issue #1306 before promotion.
+Direct `createHttpRuntime` embedders that inject a credential-store
+implementation must still declare `credentialRateLimitStore: "dynamodb"` for
+non-loopback stateless mode. The generic injection interface cannot prove a
+custom backend is shared across replicas, so injection is deliberately not an
+escape hatch from the deployed contract.
 Metric identity fields are rejected in stateful mode so the concurrency gauge
 cannot silently report a misleading zero.
+Each stateless POST owns a fresh MCP server and transport so no request can
+inherit another credential's handler state. Completed-response teardown is
+tracked asynchronously. Admission stops when that backlog reaches
+`maxConcurrentRequests`; requests already in flight may then finish, so the
+backlog can transiently approach twice that count but remains bounded. While
+the admission guard is closed, new requests fail with `503` and increment
+`McpConcurrencyRejected` instead of growing teardown memory without bound.
+That counter intentionally represents admission failure from either active
+request saturation or teardown backpressure. Autoscaling must use
+`McpConcurrencyUtilization` alone; the rejection counter remains page-worthy,
+and low utilization alongside rejections identifies teardown lag.
+Pooling these objects would weaken request isolation and is deliberately not a
+performance optimization without measured registration pressure.
 `/healthz` and the public video-file endpoint each use their own
 `publicFileRateLimitPerMinute` bucket, isolated from legal/video-page traffic
 and from each other. Keep load-balancer, liveness-probe, and expected video

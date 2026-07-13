@@ -252,6 +252,18 @@ describe("HTTP listener config", () => {
       JSON.stringify({
         ...publicConfig,
         credentialRateLimitStore: "dynamodb",
+        rateLimitDynamoDbTable: "bad/table",
+      }),
+    );
+    expect(() => loadHttpServerConfig(configPath)).toThrow(
+      "must be 3-255 DynamoDB table-name characters",
+    );
+
+    writeFileSync(
+      configPath,
+      JSON.stringify({
+        ...publicConfig,
+        credentialRateLimitStore: "dynamodb",
         rateLimitDynamoDbTable: "qurl-mcp-sandbox-rate-limits",
       }),
     );
