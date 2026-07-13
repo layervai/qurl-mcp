@@ -1144,11 +1144,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       throw new Error("Credential rate-limit store must be initialized before HTTP startup.");
     }
     installTimestampedConsole();
-    const metricsTimer = metricsIdentity
-      ? globalThis.setInterval(() => metrics.emitHeartbeat(), 30_000)
-      : undefined;
-    metricsTimer?.unref();
-    if (metricsIdentity) metrics.emitHeartbeat();
+    // Keep interval semantics in loopback development too: emitHeartbeat
+    // always snapshots/resets counters and only writes EMF when identity exists.
+    const metricsTimer = globalThis.setInterval(() => metrics.emitHeartbeat(), 30_000);
+    metricsTimer.unref();
+    metrics.emitHeartbeat();
     let sweepInProgress = false;
     const shortestSessionTtlMs = Math.min(
       config.sessionIdleTtlMs,
@@ -1233,7 +1233,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       if (shuttingDown) return;
       shuttingDown = true;
       globalThis.clearInterval(sweepTimer);
-      if (metricsTimer) globalThis.clearInterval(metricsTimer);
+      globalThis.clearInterval(metricsTimer);
       removeSignalHandlers();
       logInfo(`Received ${signal}; draining HTTP connections and MCP sessions.`);
 
@@ -1259,7 +1259,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     process.once("SIGINT", handleSigint);
     httpServer.once("close", () => {
       globalThis.clearInterval(sweepTimer);
-      if (metricsTimer) globalThis.clearInterval(metricsTimer);
+      globalThis.clearInterval(metricsTimer);
       removeSignalHandlers();
     });
     shutdownHttpServer = (signal = "shutdown") => shutdown(signal);
