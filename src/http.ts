@@ -40,6 +40,7 @@ import {
 } from "./config.js";
 import {
   assertStatelessParserBudget,
+  DEFAULT_MAX_CONCURRENT_REQUESTS,
   getDefaultHttpConfigPath,
   getJsonBodyLimitBytes,
   loadHttpServerConfig,
@@ -99,6 +100,15 @@ function requireRateLimitDynamoDbTable(config: HttpServerConfig): string {
   return tableName;
 }
 
+function appendStructuredHeader(res: express.Response, name: string, value: string): void {
+  const existing = res.getHeader(name);
+  const fields = existing === undefined ? [] : Array.isArray(existing) ? existing : [existing];
+  // Structured fields are one comma-joined field value even when independent
+  // policies contribute members. Set one physical header line so clients do
+  // not have to normalize duplicate RateLimit/RateLimit-Policy lines.
+  res.setHeader(name, [...fields.map(String), value].join(", "));
+}
+
 export interface HttpRuntimeOptions {
   clientFactory?: (bearerToken: string) => IQURLClient;
   fileStreamFactory?: (
@@ -124,7 +134,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const defaultQurlApiUrl = config.defaultQurlApiUrl;
   const defaultQurlConnectorUrl = config.defaultQurlConnectorUrl;
   const stateless = config.stateless ?? false;
-  const maxConcurrentRequests = config.maxConcurrentRequests ?? 20;
+  const maxConcurrentRequests = config.maxConcurrentRequests ?? DEFAULT_MAX_CONCURRENT_REQUESTS;
   if (
     !Number.isSafeInteger(maxConcurrentRequests) ||
     maxConcurrentRequests < 1 ||
@@ -217,6 +227,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       released = true;
       inFlightRequests -= 1;
     };
+    // Release when the response lifetime ends: this permit bounds active body
+    // parsing/request work, not asynchronously closing MCP objects. Teardown is
+    // tracked separately in closingStatelessRequests and drained on shutdown.
     res.once("finish", release);
     res.once("close", release);
     next();
@@ -245,8 +258,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         createHash("sha256").update(credentialDigest, "utf8").digest("hex").slice(0, 12),
         "ascii",
       ).toString("base64");
-      res.append("RateLimit", `"credential"; r=${remaining}; t=${resetSeconds}`);
-      res.append(
+      appendStructuredHeader(res, "RateLimit", `"credential"; r=${remaining}; t=${resetSeconds}`);
+      appendStructuredHeader(
+        res,
         "RateLimit-Policy",
         `"credential"; q=${config.mcpRateLimitPerMinute}; w=60; pk=:${partitionKey}:`,
       );

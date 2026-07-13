@@ -106,6 +106,26 @@ async function requestWithHost(url: string, host: string): Promise<number> {
   });
 }
 
+async function postMcpWithRawHeaders(
+  baseUrl: string,
+  token: string,
+): Promise<{ statusCode: number; rawHeaders: string[] }> {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      `${baseUrl}/mcp`,
+      { method: "POST", headers: bearerHeaders(token) },
+      (res) => {
+        res.resume();
+        res.once("end", () =>
+          resolve({ statusCode: res.statusCode ?? 0, rawHeaders: res.rawHeaders }),
+        );
+      },
+    );
+    req.once("error", reject);
+    req.end(JSON.stringify(initializeBody));
+  });
+}
+
 afterEach(async () => {
   vi.useRealTimers();
   await closeAllSessions();
@@ -325,6 +345,35 @@ describe("HTTP MCP server", () => {
     await new Promise((resolve) => globalThis.setImmediate(resolve));
     expect(statelessRuntime.getActiveSessionCount()).toBe(0);
     expect(statelessRuntime.getInFlightRequestCount()).toBe(0);
+    await statelessRuntime.closeAllSessions();
+  });
+
+  it("combines IP and credential rate limits into one structured header line", async () => {
+    const statelessRuntime = createHttpRuntime(
+      { ...testConfig, stateless: true },
+      { version: "0.0.0-test" },
+    );
+    const baseUrl = await start(statelessRuntime.app);
+
+    const response = await postMcpWithRawHeaders(baseUrl, "lv_live_combined_headers");
+    expect(response.statusCode).toBe(200);
+    const headerLines = response.rawHeaders.reduce<Record<string, string[]>>(
+      (result, value, index, rawHeaders) => {
+        if (index % 2 !== 0) return result;
+        const name = value.toLowerCase();
+        if (name === "ratelimit" || name === "ratelimit-policy") {
+          (result[name] ??= []).push(rawHeaders[index + 1] ?? "");
+        }
+        return result;
+      },
+      {},
+    );
+    expect(headerLines.ratelimit).toHaveLength(1);
+    expect(headerLines.ratelimit?.[0]).toContain('"ip"');
+    expect(headerLines.ratelimit?.[0]).toContain('"credential"');
+    expect(headerLines["ratelimit-policy"]).toHaveLength(1);
+    expect(headerLines["ratelimit-policy"]?.[0]).toContain('"ip"');
+    expect(headerLines["ratelimit-policy"]?.[0]).toContain('"credential"');
     await statelessRuntime.closeAllSessions();
   });
 
