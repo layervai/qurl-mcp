@@ -1259,7 +1259,8 @@ paths:
           - 403 `access_denied` if the resource exists but belongs to
             another owner.
           - 403 `connector_disabled` if this is a qURL Connector resource
-            (`type: tunnel` on the wire) and minting is currently unavailable.
+            (`type: tunnel` on the wire) and qURL Connector operations are
+            currently unavailable.
           - 400 `revoked` if the resource is revoked.
           - 400 `invalid_input` for malformed or out-of-range field
             values (e.g. a `session_duration` like `5x`).
