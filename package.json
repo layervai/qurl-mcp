@@ -47,18 +47,18 @@
     "zod": "^4.4.3"
   },
   "optionalDependencies": {
-    "@aws-sdk/client-dynamodb": "3.1079.0"
+    "@aws-sdk/client-dynamodb": "3.1086.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",
-    "@smithy/types": "4.15.1",
+    "@smithy/types": "4.16.1",
     "@types/express": "^5.0.6",
     "@types/node": "20.19.43",
     "@types/nodemailer": "^8.0.1",
     "@types/pdfkit": "^0.17.6",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.32.1",
-    "@vitest/coverage-v8": "4.1.9",
+    "@vitest/coverage-v8": "4.1.10",
     "eslint": "^10.2.1",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
