@@ -1,39 +1,441 @@
 name: Claude Code
 
 on:
+  # issue_comment loads this secrets-bearing workflow from the trusted default
+  # branch. Do not add pull_request, pull_request_review, or
+  # pull_request_review_comment: those events load PR-merge-ref workflow code
+  # before any actor, fork, or immutable-head guard can run.
   issue_comment:
     types: [created]
-  pull_request_review_comment:
-    types: [created]
-  issues:
-    types: [opened, assigned]
-  pull_request_review:
-    types: [submitted]
+
+permissions: {}
+
+concurrency:
+  group: claude-command-${{ github.event.issue.number }}
+  cancel-in-progress: false
 
 jobs:
   claude:
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      (
+        github.event.comment.body == '@claude' ||
+        startsWith(github.event.comment.body, '@claude ')
+      ) &&
+      (
+        github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'
+      )
     runs-on: ubuntu-latest
+    timeout-minutes: 8
     permissions:
       contents: read
       pull-requests: read
       issues: read
-      id-token: write
       actions: read
+      id-token: write
 
     steps:
-      - name: Checkout repository
+      - name: Validate Claude trigger actor permission
+        id: claude_actor
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRIGGER_ACTOR: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${TRIGGER_ACTOR}" ]]; then
+            echo "::error::Unable to resolve Claude trigger actor; failing closed before checkout."
+            exit 1
+          fi
+
+          if ! actor_permission="$(timeout 30s gh api "repos/${GITHUB_REPOSITORY}/collaborators/${TRIGGER_ACTOR}/permission" --jq '.permission // ""')"; then
+            echo "::error::Unable to resolve Claude trigger actor permission; failing closed before checkout."
+            exit 1
+          fi
+
+          case "${actor_permission}" in
+            admin|maintain|write)
+              ;;
+            *)
+              echo "::error::Claude command trigger actor must have write access to this repository."
+              exit 1
+              ;;
+          esac
+
+          echo "authorized=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve Claude pull request context
+        id: claude_pr
+        # This workflow holds ANTHROPIC_API_KEY. Resolve immutable PR head/base
+        # snapshots and reject fork heads before repository code is read.
+        if: success() && steps.claude_actor.outputs.authorized == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${PR_NUMBER}" ]]; then
+            echo "::error::Unable to resolve pull request number for Claude command."
+            exit 1
+          fi
+
+          if ! pr_context="$(timeout 30s gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.head.repo.full_name // "", .head.sha // "", .head.ref // "", .base.repo.full_name // "", .base.sha // "", .base.ref // "", (.commits // "" | tostring), .base.repo.default_branch // "", .state // ""] | .[]')"; then
+            echo "::error::Unable to resolve PR context for Claude command; failing closed before checkout."
+            exit 1
+          fi
+
+          mapfile -t pr_fields <<< "${pr_context}"
+          if (( ${#pr_fields[@]} != 9 )); then
+            echo "::error::PR context is malformed for Claude command; failing closed before checkout."
+            exit 1
+          fi
+          head_repo="${pr_fields[0]}"
+          head_sha="${pr_fields[1]}"
+          head_ref="${pr_fields[2]}"
+          base_repo="${pr_fields[3]}"
+          base_sha="${pr_fields[4]}"
+          base_ref="${pr_fields[5]}"
+          commit_count="${pr_fields[6]}"
+          default_branch="${pr_fields[7]}"
+          pr_state="${pr_fields[8]}"
+
+          if [[ -z "${head_repo}" || -z "${head_sha}" || -z "${head_ref}" || -z "${base_repo}" || -z "${base_sha}" || -z "${base_ref}" ]]; then
+            echo "::error::PR head or base identity is unavailable for Claude command; failing closed before checkout."
+            exit 1
+          elif [[ "${head_repo}" != "${GITHUB_REPOSITORY}" ]]; then
+            echo "::error::Claude PR commands are limited to same-repository heads because this workflow holds ANTHROPIC_API_KEY."
+            exit 1
+          elif [[ "${base_repo}" != "${GITHUB_REPOSITORY}" ]]; then
+            echo "::error::Claude PR commands require the pull request base to match this repository."
+            exit 1
+          elif [[ "${pr_state}" != "open" ]]; then
+            echo "::error::Claude PR commands require a currently open pull request."
+            exit 1
+          elif [[ "${default_branch}" == "@" || ! "${default_branch}" =~ ^[A-Za-z0-9@_][A-Za-z0-9/_.#+,@-]*$ ]] ||
+               ! git check-ref-format --branch "${default_branch}" >/dev/null 2>&1; then
+            echo "::error::The repository default branch is invalid for Claude command; failing closed before checkout."
+            exit 1
+          elif [[ ! "${head_sha}" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; then
+            echo "::error::PR head SHA is invalid for Claude command; failing closed before checkout."
+            exit 1
+          elif [[ ! "${base_sha}" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; then
+            echo "::error::PR base SHA is invalid for Claude command; failing closed before checkout."
+            exit 1
+          elif [[ "${head_ref}" == "@" || ! "${head_ref}" =~ ^[A-Za-z0-9@_][A-Za-z0-9/_.#+,@-]*$ ]] ||
+               ! git check-ref-format --branch "${head_ref}" >/dev/null 2>&1; then
+            echo "::error::PR head branch is invalid for Claude command; failing closed before checkout."
+            exit 1
+          elif [[ "${head_ref}" == "${default_branch}" ]]; then
+            echo "::error::Claude PR commands cannot write to the repository default branch."
+            exit 1
+          elif [[ "${base_ref}" == "@" || ! "${base_ref}" =~ ^[A-Za-z0-9@_][A-Za-z0-9/_.#+,@-]*$ ]] ||
+               ! git check-ref-format --branch "${base_ref}" >/dev/null 2>&1; then
+            echo "::error::PR base branch is invalid for Claude command; failing closed before checkout."
+            exit 1
+          elif [[ "${head_ref}" == "${base_ref}" || "${head_ref}" == "${base_ref}/"* || "${base_ref}" == "${head_ref}/"* ]]; then
+            echo "::error::PR head and base branches overlap and cannot share the credential-free local origin."
+            exit 1
+          elif [[ ! "${commit_count}" =~ ^[0-9]+$ ]]; then
+            echo "::error::PR commit count is invalid for Claude command; failing closed before checkout."
+            exit 1
+          fi
+          head_fetch_depth=$(( commit_count > 20 ? commit_count : 20 ))
+
+          {
+            echo "head_sha=${head_sha}"
+            echo "head_ref=${head_ref}"
+            echo "base_sha=${base_sha}"
+            echo "base_ref=${base_ref}"
+            echo "default_branch=${default_branch}"
+            echo "head_fetch_depth=${head_fetch_depth}"
+            echo "checkout_allowed=true"
+          } >> "${GITHUB_OUTPUT}"
+
+      # Keep the workspace on trusted repository code until the pinned Claude
+      # action has applied its audited tag-mode PR checkout and base-config
+      # restoration. Depth zero makes the already-authorized exact PR snapshots
+      # available as objects without putting PR-authored files in the workspace.
+      - name: Checkout
+        id: checkout
+        if: success() && steps.claude_actor.outputs.authorized == 'true' && steps.claude_pr.outputs.checkout_allowed == 'true'
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 1
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prepare credential-free local origin
+        if: success() && steps.checkout.outcome == 'success'
+        env:
+          EXPECTED_HEAD_SHA: ${{ steps.claude_pr.outputs.head_sha }}
+          HEAD_REF: ${{ steps.claude_pr.outputs.head_ref }}
+          EXPECTED_BASE_SHA: ${{ steps.claude_pr.outputs.base_sha }}
+          BASE_REF: ${{ steps.claude_pr.outputs.base_ref }}
+          HEAD_FETCH_DEPTH: ${{ steps.claude_pr.outputs.head_fetch_depth }}
+          EXPECTED_DEFAULT_BRANCH: ${{ steps.claude_pr.outputs.default_branch }}
+          TRUSTED_REF: ${{ github.event.repository.default_branch }}
+          LOCAL_ORIGIN: ${{ runner.temp }}/claude-local-origin-${{ github.run_id }}-${{ github.run_attempt }}.git
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${TRUSTED_REF}" || "${TRUSTED_REF}" == "@" || ! "${TRUSTED_REF}" =~ ^[A-Za-z0-9@_][A-Za-z0-9/_.#+,@-]*$ ]] ||
+             ! git check-ref-format --branch "${TRUSTED_REF}" >/dev/null 2>&1; then
+            echo "::error::The trusted repository default branch is invalid; failing closed."
+            exit 1
+          fi
+          if [[ "${TRUSTED_REF}" != "${EXPECTED_DEFAULT_BRANCH}" ||
+                "${HEAD_REF}" == "${EXPECTED_DEFAULT_BRANCH}" ]]; then
+            echo "::error::The trusted default-branch identity changed or is the writable PR head; failing closed before Claude."
+            exit 1
+          fi
+          if ! trusted_head="$(git rev-parse HEAD 2>/dev/null)" ||
+             ! trusted_branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)" ||
+             ! trusted_ref_head="$(git rev-parse "refs/heads/${TRUSTED_REF}" 2>/dev/null)" ||
+             [[ "${trusted_branch}" != "${TRUSTED_REF}" || "${trusted_head}" != "${trusted_ref_head}" ]]; then
+            echo "::error::The initial Claude workspace is not the trusted repository default branch; failing closed."
+            exit 1
+          fi
+          if ! git cat-file -e "${EXPECTED_HEAD_SHA}^{commit}" 2>/dev/null; then
+            echo "::error::The validated PR head commit is absent from the trusted object store; failing closed."
+            exit 1
+          fi
+          if ! git cat-file -e "${EXPECTED_BASE_SHA}^{commit}" 2>/dev/null; then
+            echo "::error::The validated PR base commit is absent from the trusted object store; failing closed."
+            exit 1
+          fi
+
+          # v1.0.180 preserves PR-authored startup-sensitive paths under
+          # .claude-pr/ with dereferencing enabled before restoring the base
+          # copies. A symlink such as .claude/settings.json ->
+          # /proc/self/environ would therefore materialize this secrets-bearing
+          # action process's environment into a file Claude can read. Inspect
+          # the authorized tree object without checking it out and accept only
+          # ordinary executable/non-executable blobs at every preserved path.
+          sensitive_paths=(
+            .claude
+            .mcp.json
+            .claude.json
+            .gitmodules
+            .ripgreprc
+            CLAUDE.md
+            CLAUDE.local.md
+            .husky
+          )
+          sensitive_tree="$(mktemp "${RUNNER_TEMP}/claude-sensitive-tree.XXXXXX")"
+          trap 'rm -f "${sensitive_tree}"' EXIT
+          if ! git ls-tree -rz --full-tree "${EXPECTED_HEAD_SHA}" -- "${sensitive_paths[@]}" > "${sensitive_tree}"; then
+            echo "::error::Unable to inspect the authorized PR startup-sensitive tree; failing closed."
+            exit 1
+          fi
+          while IFS=$'\t' read -r -d '' entry _path; do
+            read -r mode object_type _object_id <<< "${entry}"
+            if [[ "${object_type}" != "blob" || ( "${mode}" != "100644" && "${mode}" != "100755" ) ]]; then
+              echo "::error::PR startup-sensitive paths must contain only regular files; symlinks and gitlinks are rejected."
+              exit 1
+            fi
+          done < "${sensitive_tree}"
+          rm -f "${sensitive_tree}"
+          trap - EXIT
+
+          if ! git checkout --detach "${trusted_head}" >/dev/null 2>&1; then
+            echo "::error::Unable to detach the trusted initial workspace before staging pull-request refs; failing closed."
+            exit 1
+          fi
+          if ! git branch --force "${HEAD_REF}" "${EXPECTED_HEAD_SHA}" >/dev/null 2>&1 ||
+             ! git branch --force "${BASE_REF}" "${EXPECTED_BASE_SHA}" >/dev/null 2>&1; then
+            echo "::error::Unable to stage the validated pull-request refs without checking them out; failing closed."
+            exit 1
+          fi
+          if [[ "$(git rev-parse "refs/heads/${HEAD_REF}")" != "${EXPECTED_HEAD_SHA}" ||
+                "$(git rev-parse "refs/heads/${BASE_REF}")" != "${EXPECTED_BASE_SHA}" ||
+                "$(git rev-parse HEAD)" != "${trusted_head}" ]] ||
+             git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+            echo "::error::The staged pull-request refs changed the trusted detached workspace; failing closed."
+            exit 1
+          fi
+          object_format="$(git rev-parse --show-object-format)"
+          if ! git init --bare --object-format="${object_format}" "${LOCAL_ORIGIN}" >/dev/null 2>&1; then
+            echo "::error::Unable to initialize the credential-free local origin; failing closed."
+            exit 1
+          fi
+          if ! git --git-dir="${LOCAL_ORIGIN}" fetch --no-tags --no-recurse-submodules "${GITHUB_WORKSPACE}" \
+            "refs/heads/${HEAD_REF}:refs/heads/${HEAD_REF}" \
+            "refs/heads/${BASE_REF}:refs/heads/${BASE_REF}" >/dev/null 2>&1; then
+            echo "::error::Unable to seed the validated PR snapshots into the local origin; failing closed."
+            exit 1
+          fi
+          if ! git remote set-url origin "${LOCAL_ORIGIN}"; then
+            echo "::error::Unable to install the credential-free local origin; failing closed."
+            exit 1
+          fi
+          git config fetch.recurseSubmodules false
+          if git config --local --get-regexp '^http\..*\.extraheader$' >/dev/null 2>&1 ||
+             git config --local --get-regexp '^credential(\..*)?\.helper$' >/dev/null 2>&1; then
+            echo "::error::The credential-free local origin retained a repository credential; failing closed."
+            exit 1
+          fi
+          if [[ "$(git rev-parse HEAD)" != "${trusted_head}" ]] ||
+             git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+            echo "::error::Preparing the local origin changed the trusted detached workspace; failing closed."
+            exit 1
+          fi
+          if ! git fetch origin "--depth=${HEAD_FETCH_DEPTH}" "${HEAD_REF}" >/dev/null 2>&1; then
+            echo "::error::The credential-free PR head fetch preflight failed; failing closed."
+            exit 1
+          fi
+          if ! git fetch origin "${BASE_REF}" --depth=1 --no-recurse-submodules >/dev/null 2>&1; then
+            echo "::error::The credential-free PR base fetch preflight failed; failing closed."
+            exit 1
+          fi
+          if [[ "$(git rev-parse "refs/remotes/origin/${HEAD_REF}")" != "${EXPECTED_HEAD_SHA}" || "$(git rev-parse "refs/remotes/origin/${BASE_REF}")" != "${EXPECTED_BASE_SHA}" || "$(git --git-dir="${LOCAL_ORIGIN}" rev-parse "refs/heads/${HEAD_REF}")" != "${EXPECTED_HEAD_SHA}" || "$(git --git-dir="${LOCAL_ORIGIN}" rev-parse "refs/heads/${BASE_REF}")" != "${EXPECTED_BASE_SHA}" ]]; then
+            echo "::error::The credential-free local origin does not match the validated PR snapshots; failing closed."
+            exit 1
+          fi
+          if git config --local --get-regexp '^http\..*\.extraheader$' >/dev/null 2>&1 ||
+             git config --local --get-regexp '^credential(\..*)?\.helper$' >/dev/null 2>&1; then
+            echo "::error::A credential-free fetch installed a repository credential; failing closed."
+            exit 1
+          fi
+          if [[ "$(git rev-parse HEAD)" != "${trusted_head}" ]] ||
+             git symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+            echo "::error::The local-origin preflight checked out pull-request code before the pinned action; failing closed."
+            exit 1
+          fi
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@2fee15510437d71399d9139ed60433470484a8fb # v1.0.153
+        if: success()
+        # v1.0.180 keeps interactive commands on the same fail-closed runner as
+        # automatic review and avoids the v1.0.140/141 issue-comment crash.
+        uses: anthropics/claude-code-action@fa7e2f0a29a126f0b81cdcf360561b36e44cf608 # v1.0.180
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Omit github_token so the action uses its OIDC/GitHub App token path.
+          # Signed API commits can publish accepted same-repo edits without
+          # installing Git credentials into the checkout.
+          use_commit_signing: true
+          # Exclude only GitHub Actions' own generated comments from context;
+          # human review comments remain available to Claude.
+          exclude_comments_by_actor: github-actions[bot]
+          # Keep comment-triggered analysis on the same proven model as the
+          # automatic PR review. The action's implicit default may select the
+          # 1M-context variant, which this repository credential cannot start.
+          # scripts/check-claude-model-lockstep.py enforces this coupling.
+          # Do not add extra allowed tools by default: the action's base GitHub
+          # tools are sufficient here. The automatic review workflow uses a
+          # narrow GitHub MCP allowlist because its explicit prompt needs PR
+          # inspection.
           claude_args: '--model claude-opus-4-8'
+
+      - name: Verify reviewed pull request head
+        if: success() && steps.claude.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          EXPECTED_HEAD_SHA: ${{ steps.claude_pr.outputs.head_sha }}
+          EXPECTED_BASE_SHA: ${{ steps.claude_pr.outputs.base_sha }}
+          HEAD_REF: ${{ steps.claude_pr.outputs.head_ref }}
+          BASE_REF: ${{ steps.claude_pr.outputs.base_ref }}
+          EXPECTED_DEFAULT_BRANCH: ${{ steps.claude_pr.outputs.default_branch }}
+          LOCAL_ORIGIN: ${{ runner.temp }}/claude-local-origin-${{ github.run_id }}-${{ github.run_attempt }}.git
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          set -euo pipefail
+
+          # The action also returns success when it deliberately skips execution
+          # (for example, after trigger validation). Require the private runner
+          # artifact that only a completed Claude execution produces.
+          if [[ -z "${EXECUTION_FILE}" || ! -f "${EXECUTION_FILE}" || ! -s "${EXECUTION_FILE}" ]]; then
+            echo "::error::Claude did not produce a completed execution artifact; failing closed."
+            exit 1
+          fi
+          if [[ "${HEAD_REF}" == "@" || ! "${HEAD_REF}" =~ ^[A-Za-z0-9@_][A-Za-z0-9/_.#+,@-]*$ ]] ||
+             ! git check-ref-format --branch "${HEAD_REF}" >/dev/null 2>&1 ||
+             [[ "${BASE_REF}" == "@" || ! "${BASE_REF}" =~ ^[A-Za-z0-9@_][A-Za-z0-9/_.#+,@-]*$ ]] ||
+             ! git check-ref-format --branch "${BASE_REF}" >/dev/null 2>&1 ||
+             [[ "${EXPECTED_DEFAULT_BRANCH}" == "@" || ! "${EXPECTED_DEFAULT_BRANCH}" =~ ^[A-Za-z0-9@_][A-Za-z0-9/_.#+,@-]*$ ]] ||
+             ! git check-ref-format --branch "${EXPECTED_DEFAULT_BRANCH}" >/dev/null 2>&1 ||
+             [[ "${HEAD_REF}" == "${EXPECTED_DEFAULT_BRANCH}" ]]; then
+            echo "::error::Claude terminal verification received invalid pull request refs; failing closed."
+            exit 1
+          fi
+
+          if git config --local --get-regexp '^http\..*\.extraheader$' >/dev/null 2>&1 ||
+             git config --local --get-regexp '^credential(\..*)?\.helper$' >/dev/null 2>&1; then
+            echo "::error::Claude changed the credential-free repository configuration; failing closed."
+            exit 1
+          fi
+          mapfile -t origin_urls < <(git remote get-url --all origin 2>/dev/null)
+          mapfile -t origin_push_urls < <(git remote get-url --push --all origin 2>/dev/null)
+          if (( ${#origin_urls[@]} != 1 || ${#origin_push_urls[@]} != 1 )) ||
+             [[ "${origin_urls[0]}" != "${LOCAL_ORIGIN}" || "${origin_push_urls[0]}" != "${LOCAL_ORIGIN}" ]]; then
+            echo "::error::Claude changed the credential-free local origin; failing closed."
+            exit 1
+          fi
+          mapfile -t recurse_submodule_values < <(git config --local --get-all fetch.recurseSubmodules 2>/dev/null)
+          if (( ${#recurse_submodule_values[@]} != 1 )) || [[ "${recurse_submodule_values[0]}" != "false" ]]; then
+            echo "::error::Claude changed the submodule-safe fetch configuration; failing closed."
+            exit 1
+          fi
+
+          if ! current_context="$(timeout 30s gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '[.head.repo.full_name // "", .head.sha // "", .head.ref // "", .base.repo.full_name // "", .base.sha // "", .base.ref // "", .base.repo.default_branch // "", .state // ""] | .[]')"; then
+            echo "::error::Unable to refresh the pull request after Claude review; failing closed."
+            exit 1
+          fi
+          mapfile -t current_fields <<< "${current_context}"
+          if (( ${#current_fields[@]} != 8 )); then
+            echo "::error::The refreshed pull request context is malformed after Claude review; failing closed."
+            exit 1
+          fi
+          current_head_repo="${current_fields[0]}"
+          current_head="${current_fields[1]}"
+          current_head_ref="${current_fields[2]}"
+          current_base_repo="${current_fields[3]}"
+          current_base="${current_fields[4]}"
+          current_base_ref="${current_fields[5]}"
+          current_default_branch="${current_fields[6]}"
+          current_pr_state="${current_fields[7]}"
+          if ! local_head="$(git rev-parse HEAD 2>/dev/null)"; then
+            echo "::error::Unable to resolve the local pull request head after Claude review; failing closed."
+            exit 1
+          fi
+          if ! tracking_head="$(git rev-parse "refs/remotes/origin/${HEAD_REF}" 2>/dev/null)" ||
+             ! tracking_base="$(git rev-parse "refs/remotes/origin/${BASE_REF}" 2>/dev/null)" ||
+             ! source_head="$(git rev-parse "refs/heads/${HEAD_REF}" 2>/dev/null)" ||
+             ! source_base="$(git rev-parse "refs/heads/${BASE_REF}" 2>/dev/null)" ||
+             ! origin_head="$(git --git-dir="${LOCAL_ORIGIN}" rev-parse "refs/heads/${HEAD_REF}" 2>/dev/null)" ||
+             ! origin_base="$(git --git-dir="${LOCAL_ORIGIN}" rev-parse "refs/heads/${BASE_REF}" 2>/dev/null)"; then
+            echo "::error::Unable to resolve the credential-free pull request snapshots after Claude review; failing closed."
+            exit 1
+          fi
+
+          for sha_name in current_head current_base EXPECTED_HEAD_SHA EXPECTED_BASE_SHA local_head source_head source_base tracking_head tracking_base origin_head origin_base; do
+            if [[ ! "${!sha_name}" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]]; then
+              echo "::error::A pull request snapshot is unavailable or invalid after Claude review; failing closed."
+              exit 1
+            fi
+          done
+
+          if [[ "${current_pr_state}" != "open" ||
+                "${current_head_repo}" != "${GITHUB_REPOSITORY}" ||
+                "${current_base_repo}" != "${GITHUB_REPOSITORY}" ||
+                "${current_default_branch}" != "${EXPECTED_DEFAULT_BRANCH}" ||
+                "${current_head_ref}" == "${current_default_branch}" ||
+                "${current_head}" != "${EXPECTED_HEAD_SHA}" ||
+                "${current_head_ref}" != "${HEAD_REF}" ||
+                "${EXPECTED_HEAD_SHA}" != "${local_head}" ||
+                "${EXPECTED_HEAD_SHA}" != "${source_head}" ||
+                "${EXPECTED_HEAD_SHA}" != "${tracking_head}" ||
+                "${EXPECTED_HEAD_SHA}" != "${origin_head}" ||
+                "${current_base}" != "${EXPECTED_BASE_SHA}" ||
+                "${current_base_ref}" != "${BASE_REF}" ||
+                "${EXPECTED_BASE_SHA}" != "${source_base}" ||
+                "${EXPECTED_BASE_SHA}" != "${tracking_base}" ||
+                "${EXPECTED_BASE_SHA}" != "${origin_base}" ]]; then
+            echo "::error::The pull request head or base changed during Claude review; rerun the command on the current snapshots."
+            exit 1
+          fi
