@@ -49,7 +49,11 @@ describe("native UDP lifecycle API snapshot", () => {
   }
 
   it("retains qurl:agent for native UDP enrollment credential minting", () => {
+    expect(spec).toContain(
+      "- `qurl:agent` - Mint native UDP qURL Connector enrollment credentials",
+    );
     expect(spec).toContain("qurl:agent: Mint native UDP qURL Connector enrollment credentials");
+    expect(spec).not.toContain("- `qurl:agent` - Bootstrap LayerV qURL Connector agents");
     expect(spec).not.toContain("qurl:agent: Bootstrap LayerV qURL Connector agents");
   });
 });
