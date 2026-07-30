@@ -21,7 +21,7 @@ info:
     - `qurl:read` - Read access to qURLs and quota
     - `qurl:write` - Create, update, and delete qURLs
     - `qurl:resolve` - Resolve access tokens and grant network access (headless)
-    - `qurl:agent` - Bootstrap LayerV qURL Connector agents (POST /v1/agent/bootstrap)
+    - `qurl:agent` - Mint native UDP qURL Connector enrollment credentials
     - `qurl:write` also covers webhook management
 
     ## Rate Limiting
@@ -123,8 +123,6 @@ tags:
     description: Resource management — groups qURLs by target URL
   - name: Connectors
     description: Plugin connections that let qURL mint and report on resources owned by external workspaces, guilds, and systems.
-  - name: Agent
-    description: Bootstrap endpoint for the LayerV qURL Connector agent
   - name: Sessions
     description: Active access-session inspection and termination for a resource
 
@@ -194,110 +192,6 @@ paths:
           $ref: '#/components/responses/InternalServerError'
         '502':
           $ref: '#/components/responses/BadGateway'
-
-  /v1/agent/bootstrap:
-    post:
-      tags:
-        - Agent
-      summary: Bootstrap a LayerV qURL Connector agent
-      description: |
-        Registers a LayerV agent's X25519 public key and returns the
-        NHP peer info the agent needs to perform its first knock.
-
-        Re-bootstrapping with a new `public_key` for the same
-        `agent_id` is idempotent (key rotation).
-
-        **Authentication:** API key with the `qurl:agent` scope. JWTs
-        are rejected with 403.
-
-        **Rate limit:** 10 per hour per API key.
-
-        **Audit:** every outcome is recorded.
-      operationId: postV1AgentBootstrap
-      security:
-        - bearerAuth: [qurl:agent]
-      # Operation-level `servers:` declares the customer-facing
-      # canonical hosts for this operation. Scalar and other OpenAPI
-      # 3.0.x renderers honor op-level Servers (they OVERRIDE the root
-      # `servers:` block for the specific operation's docs render), so
-      # customers reading the API reference see "POST /v1/agent/bootstrap
-      # on bootstrap.layerv.{ai,xyz}" — matching the customer install
-      # guidance (qurl-reverse-tunnel-client's docs/install-docker.md
-      # directs sidecars to bootstrap.layerv.*).
-      #
-      # Runtime caveat: kin-openapi v0.135 (`routers/gorillamux/
-      # router.go:53-65`) SILENTLY IGNORES op-level Servers for
-      # request matching. The validator only consults root-level
-      # (api.layerv.*) and path-item-level. We deliberately don't use
-      # path-item-level here because that triggers a leak bug in the
-      # same router file (`servers, err = makeServers(...)` mutates a
-      # shared variable, so the path-level Servers leak forward to
-      # every subsequent path in InMatchingOrder, 404ing them from
-      # api.layerv.*).
-      #
-      # Workaround: `middleware.RewriteBootstrapHostForValidator`
-      # (mounted before the validator in router.go) rewrites the
-      # request URL.Host from `bootstrap.layerv.<tld>` to
-      # `api.layerv.<tld>` when the path is /v1/agent/bootstrap, so
-      # the validator's root-Servers match passes. The handler runs
-      # unchanged. Once kin-openapi v0.135's op-level Servers
-      # behavior is fixed upstream, the middleware can be removed
-      # and this op-level block becomes the runtime gate.
-      servers:
-        - url: https://bootstrap.layerv.ai
-          description: Production bootstrap endpoint
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AgentBootstrapRequest'
-            example:
-              public_key: "62cFrVBeF1Tl7lUAJ9MNa9lFykVf6D7mNqLaEYggFN0="
-              agent_id: "prod-us-east-1"
-              hostname: "agent-7f8c9b-prod-use1"
-              version: "1.4.2"
-      responses:
-        '200':
-          description: Agent registered.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AgentBootstrapResponse'
-              example:
-                data:
-                  agent_id: "prod-us-east-1"
-                  registered_at: "2026-05-10T15:30:00Z"
-                  nhp_server_peer:
-                    public_key_b64: "EqHTVFh6t5DUK1aA2nkq82x5HLRqrO6FPqxcwSfKCl8="
-                    host: "nhp.layerv.ai"
-                    port: 62206
-                    expire_time: 0
-                meta:
-                  request_id: "req_abc123"
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '409':
-          description: |
-            Concurrent registration conflict for the same `agent_id`.
-
-            **Retry**: re-issue the same request body with exponential
-            backoff (e.g., 1s / 4s / 16s, capped at 60s). Registration
-            is idempotent on `agent_id`, so resending the same
-            `public_key` is safe. Do NOT regenerate the keypair on
-            409.
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        '429':
-          $ref: '#/components/responses/RateLimitExceeded'
-        '500':
-          $ref: '#/components/responses/InternalServerError'
 
   /v1/qurls:
     post:
@@ -2878,7 +2772,7 @@ components:
             qurl:read: Read access to qURLs and quota
             qurl:write: Create, update, and delete qURLs
             qurl:resolve: Resolve access tokens and grant network access
-            qurl:agent: Bootstrap LayerV qURL Connector agents (POST /v1/agent/bootstrap)
+            qurl:agent: Mint native UDP qURL Connector enrollment credentials
 
   parameters:
     QurlId:
@@ -5749,126 +5643,6 @@ components:
       properties:
         error:
           $ref: '#/components/schemas/ValidationError'
-        meta:
-          $ref: '#/components/schemas/Meta'
-
-    AgentBootstrapRequest:
-      type: object
-      required:
-        - public_key
-      properties:
-        public_key:
-          type: string
-          description: |
-            Agent's X25519 public key, raw 32 bytes encoded as standard
-            base64 (RFC 4648 §4 — `+`/`/` alphabet, `=` padding).
-          example: "62cFrVBeF1Tl7lUAJ9MNa9lFykVf6D7mNqLaEYggFN0="
-          minLength: 44
-          maxLength: 44
-          # Standard base64 alphabet + single `=` padding (44 chars
-          # always ends in exactly one `=` for 32-byte inputs). Moves
-          # alphabet validation upstream of the strict-server handler;
-          # the service boundary's base64.StdEncoding.Strict() decode
-          # remains the load-bearing defense (defense-in-depth).
-          pattern: '^[A-Za-z0-9+/]{43}=$'
-        agent_id:
-          type: string
-          description: |
-            Optional label correlating this agent across requests
-            (matches `LAYERV_AGENT_ID` on the agent). The server
-            generates one when omitted.
-          minLength: 2
-          maxLength: 64
-          pattern: '^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$'
-          example: "prod-us-east-1"
-        hostname:
-          type: string
-          description: |
-            Optional hostname where the agent is running (audit log
-            only). If a previous bootstrap recorded a value, omitting
-            this field (or sending an empty string) preserves the
-            prior value; send a non-empty string to replace it. There
-            is no wire shape to clear a previously-set hostname back
-            to empty — audit lineage is intentionally append-only.
-          maxLength: 253
-          example: "agent-7f8c9b-prod-use1"
-        version:
-          type: string
-          description: |
-            Optional agent build version (audit log only). Same merge
-            behavior as `hostname`: omitting or sending empty preserves
-            the prior value; send a non-empty string to replace it.
-            Cannot be cleared back to empty (same audit-lineage rule).
-          maxLength: 64
-          example: "1.4.2"
-
-    AgentBootstrapData:
-      type: object
-      description: |
-        Bootstrap response payload. An agent's registration may
-        expire after roughly 90 days of inactivity; long-lived
-        agents should re-bootstrap on restart. Re-bootstrapping
-        with the same `agent_id` is safe and returns the original
-        `registered_at`.
-      required:
-        - agent_id
-        - registered_at
-        - nhp_server_peer
-      properties:
-        agent_id:
-          type: string
-          description: Label for the agent; echoes the request value, or the server-generated identifier when none was supplied.
-        registered_at:
-          type: string
-          format: date-time
-          description: |
-            RFC3339 timestamp of the first registration for this
-            `agent_id`. Re-bootstraps return the original value, not
-            the current time.
-        nhp_server_peer:
-          $ref: '#/components/schemas/NHPServerPeerInfo'
-
-    NHPServerPeerInfo:
-      type: object
-      description: |
-        Peer info the agent needs to perform its first NHP knock.
-      required:
-        - public_key_b64
-        - host
-        - port
-        - expire_time
-      properties:
-        public_key_b64:
-          type: string
-          description: NHP server X25519 public key, base64-encoded (32 raw bytes).
-          minLength: 44
-          maxLength: 44
-        host:
-          type: string
-          description: NHP server hostname or IP (no scheme).
-          example: "nhp.layerv.ai"
-        port:
-          type: integer
-          minimum: 1
-          maximum: 65535
-          example: 62206
-          description: NHP server UDP port.
-        expire_time:
-          type: integer
-          format: int64
-          description: |
-            Unix timestamp (seconds) at which this peer entry should be considered stale,
-            or 0 for "no client-side expiry".
-          example: 0
-
-    AgentBootstrapResponse:
-      type: object
-      required:
-        - data
-        - meta
-      properties:
-        data:
-          $ref: '#/components/schemas/AgentBootstrapData'
         meta:
           $ref: '#/components/schemas/Meta'
 

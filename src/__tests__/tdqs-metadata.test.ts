@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { resolve as resolvePath } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi } from "vitest";
 import type { IQURLClient } from "../client.js";
 import { toolFactories } from "../server.js";
 import {
   makeMockClient,
+  readApiSpec,
   sampleAccessToken,
   sampleBatchCreateOutput,
   sampleCreateQURLData,
@@ -256,8 +256,7 @@ describe("TDQS tool metadata coverage", () => {
     // workflow already monitors — and assert the description quotes the
     // value verbatim. If the spec changes, the drift workflow updates the
     // file and this test forces a description update at the same time.
-    const specPath = fileURLToPath(new URL("../../api-spec/qurls.yaml", import.meta.url));
-    const spec = readFileSync(specPath, "utf8");
+    const spec = readApiSpec();
 
     it("create_qurl description matches the spec's expires_in default", () => {
       // The spec has two `expires_in: type: string` blocks (CreateQurlRequest
