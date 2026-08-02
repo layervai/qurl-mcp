@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { vi } from "vitest";
 import type {
   AccessToken,
@@ -10,6 +12,13 @@ import type {
   SessionData,
 } from "../client.js";
 import type { GetPromptResult } from "@modelcontextprotocol/sdk/types.js";
+
+// Load the committed OpenAPI snapshot (api-spec/qurls.yaml) as a raw string.
+// Shared by the spec-drift and lifecycle-retirement tests that assert against it.
+export function readApiSpec(): string {
+  const specPath = fileURLToPath(new URL("../../api-spec/qurls.yaml", import.meta.url));
+  return readFileSync(specPath, "utf8");
+}
 
 export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClient {
   return {

@@ -241,6 +241,7 @@ The repository includes an API spec drift detection system:
 - **Detection:** The workflow fetches the live spec, diffs it against the snapshot, and opens a GitHub Issue with the diff when changes are detected.
 - **Action:** When an issue is opened, review the diff, update `api-spec/qurls.yaml`, update client types/tools as needed, and verify with `npm run build && npm run lint && npm test`.
 - **Spec URL:** Configurable via the `QURL_API_SPEC_URL` repository variable. Defaults to `https://api.layerv.ai/v1/openapi.yaml`.
+- **Native UDP invariant:** The retired HTTP agent lifecycle operations (`/v1/agent/bootstrap`, `/v1/agent/registration-info`, and `/v1/agent/registration/complete`) and their operation IDs/schemas must not reappear in the snapshot. Keep the `qurl:agent` scope: it authorizes minting native UDP Connector enrollment credentials, not an HTTP lifecycle endpoint.
 
 ## npm Publishing (Trusted Publishing / OIDC)
 
