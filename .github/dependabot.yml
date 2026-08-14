@@ -25,6 +25,16 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    # CodeQL stamps init state with its action version, so every sub-action
+    # must move in lockstep or analysis fails with a configuration error.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
+      codeql-action-security:
+        applies-to: security-updates
+        patterns:
+          - "github/codeql-action*"
     labels:
       - "dependencies"
       - "ci"
