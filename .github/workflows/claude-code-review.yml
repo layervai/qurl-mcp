@@ -135,7 +135,7 @@ jobs:
         # v1.0.180 contains upstream #1496: a terminal SDK result with
         # `subtype: success` plus `is_error: true` fails instead of producing a
         # false-green review check.
-        uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1.0.187
+        uses: anthropics/claude-code-action@9d7150bc8a3dae8149739a88019d192b579ad90c # v1.0.193
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
