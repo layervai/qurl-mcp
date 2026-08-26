@@ -399,11 +399,13 @@ jobs:
           # userinfo and what git itself assumes when parsing this URL; GitHub
           # tokens are [A-Za-z0-9_], so this holds.
           # It also assumes the action keeps rewriting origin as
-          # "<scheme>://<host>/<owner>/<repo>.git" over https. A future version
-          # that drops the ".git" suffix, adds a port, or normalizes the path
+          # "<owner>/<repo>.git" under a scheme and host matching
+          # GITHUB_SERVER_URL - the scheme is not hardcoded, it is whatever the
+          # runner reports, which matters on GHES. A future action version that
+          # drops the ".git" suffix, adds a port, or normalizes the path
           # differently fails CLOSED here - safe, but it breaks every run until
-          # this line is updated. If this guard starts failing right after an
-          # action bump, check the action's URL format before anything else.
+          # the action_origin construction below is updated. The failure prints
+          # the observed and expected destinations, so start there.
           origin_destination() {
             local url="$1" scheme rest authority path
             if [[ "${url}" == *://* ]]; then
@@ -432,9 +434,12 @@ jobs:
             exit 1
           fi
           for origin_candidate in "${origin_urls[0]}" "${origin_push_urls[0]}"; do
+            # Never echo origin_candidate itself - it carries the token. Only
+            # the userinfo-stripped destination is safe to print.
+            origin_dest="$(origin_destination "${origin_candidate}")"
             if [[ "${origin_candidate}" != "${LOCAL_ORIGIN}" ]] &&
-               [[ "$(origin_destination "${origin_candidate}")" != "${action_origin}" ]]; then
-              echo "::error::The local origin moved off this repository; failing closed."
+               [[ "${origin_dest}" != "${action_origin}" ]]; then
+              echo "::error::The local origin moved off this repository; failing closed. Got '${origin_dest}', expected '${action_origin}' or '${LOCAL_ORIGIN}'."
               exit 1
             fi
           done
