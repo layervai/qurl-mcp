@@ -246,6 +246,12 @@ jobs:
           # contains no unencoded "/", which is what RFC 3986 requires of
           # userinfo and what git itself assumes when parsing this URL; GitHub
           # tokens are [A-Za-z0-9_], so this holds.
+          # It also assumes the action keeps rewriting origin as
+          # "<scheme>://<host>/<owner>/<repo>.git" over https. A future version
+          # that drops the ".git" suffix, adds a port, or normalizes the path
+          # differently fails CLOSED here - safe, but it breaks every run until
+          # this line is updated. If this guard starts failing right after an
+          # action bump, check the action's URL format before anything else.
           origin_destination() {
             local url="$1" scheme rest authority path
             if [[ "${url}" == *://* ]]; then
