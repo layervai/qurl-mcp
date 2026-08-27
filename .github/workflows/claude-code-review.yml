@@ -26,7 +26,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.base.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: write
@@ -169,6 +169,15 @@ jobs:
             - Security concerns
             - Test coverage
 
+            Use search_code to find call sites, other implementations, and
+            prior art before judging a change; scope every query with
+            `repo:${{ github.repository }}`. GitHub indexes only the default
+            branch, so results are pointers, not truth: confirm anything you
+            rely on with get_file_contents at HEAD SHA. When a change spans
+            more files than one context holds, delegate the wide reads to
+            subagents with the Task tool. Subagents inherit these same
+            restrictions, so they cannot execute or fetch either.
+
             When reading changed or surrounding files, pass HEAD SHA as the sha
             argument to get_file_contents. Read CLAUDE.md through
             get_file_contents at BASE SHA for trusted repository guidance.
@@ -187,8 +196,10 @@ jobs:
 
           # Use only the action's GitHub MCP subprocess for reads and the final
           # comment. It receives the repository token but not the Anthropic key.
-          # Local, network, delegation, and GitHub file-write tools stay denied.
-          claude_args: '--model claude-opus-5 --disallowed-tools "Bash,Read,Glob,Grep,LS,Task,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,mcp__github_file_ops__commit_files,mcp__github_file_ops__delete_files,mcp__github__create_or_update_file,mcp__github__push_files,mcp__github__delete_file" --allowed-tools "mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_status,mcp__github__get_file_contents,mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__search_issues,mcp__github__search_pull_requests,mcp__github__list_issues,mcp__github__list_pull_requests,mcp__github__add_issue_comment"'
+          # Local, network, and GitHub file-write tools stay denied. Task is
+          # allowed so wide reads fan out across subagents; they inherit
+          # these same denials, so delegation buys context, never reach.
+          claude_args: '--model claude-opus-5 --disallowed-tools "Bash,Read,Glob,Grep,LS,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,mcp__github_file_ops__commit_files,mcp__github_file_ops__delete_files,mcp__github__create_or_update_file,mcp__github__push_files,mcp__github__delete_file" --allowed-tools "mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_status,mcp__github__get_file_contents,mcp__github__search_code,mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__search_issues,mcp__github__search_pull_requests,mcp__github__list_issues,mcp__github__list_pull_requests,mcp__github__add_issue_comment"'
 
       - name: Verify terminal Claude review
         if: success() && steps.claude-review.outcome == 'success'
