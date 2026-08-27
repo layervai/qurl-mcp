@@ -26,10 +26,10 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.base.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    # search_code adds a few turns; delegation was tried and removed after a
-    # 20-minute review was killed at the cap. Reviews run 2-6 minutes, so this
-    # is headroom, not a target — a review this slow is a problem to look at,
-    # not to give more time to.
+    # Reviews here run 2-6 minutes; search_code adds a few turns. This is
+    # headroom, not a target. Delegation was tried fleet-wide and removed
+    # after one review elsewhere ran past a 20-minute cap and published
+    # nothing — a review this slow is a problem to look at, not to fund.
     timeout-minutes: 12
     permissions:
       contents: read
@@ -149,6 +149,11 @@ jobs:
         # v1.0.180 contains upstream #1496: a terminal SDK result with
         # `subtype: success` plus `is_error: true` fails instead of producing a
         # false-green review check.
+        # Under the job cap on purpose: an overrun fails this step and leaves
+        # the job alive to report it. A kill at the JOB cap cancels every later
+        # step, so the verify step never runs and the PR gets a bare
+        # `cancelled` check with no comment and nothing saying why.
+        timeout-minutes: 10
         uses: anthropics/claude-code-action@1623c36729ac1cd5895198cded705a287de7db79 # v1.0.187
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -210,8 +215,6 @@ jobs:
 
           # Use only the action's GitHub MCP subprocess for reads and the final
           # comment. It receives the repository token but not the Anthropic key.
-          # Reads go only through the action's GitHub MCP subprocess, which holds
-          # the repository token but not the Anthropic key. Local, network,
           # delegation, and GitHub file-write tools stay denied.
           claude_args: '--model claude-opus-5 --disallowed-tools "Bash,Read,Glob,Grep,LS,Task,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,mcp__github_file_ops__commit_files,mcp__github_file_ops__delete_files,mcp__github__create_or_update_file,mcp__github__push_files,mcp__github__delete_file" --allowed-tools "mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_status,mcp__github__get_file_contents,mcp__github__search_code,mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__search_issues,mcp__github__search_pull_requests,mcp__github__list_issues,mcp__github__list_pull_requests,mcp__github__add_issue_comment"'
 
