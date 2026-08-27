@@ -437,9 +437,20 @@ jobs:
             # Never echo origin_candidate itself - it carries the token. Only
             # the userinfo-stripped destination is safe to print.
             origin_dest="$(origin_destination "${origin_candidate}")"
+            # A correctly stripped destination can never retain "@". If one
+            # does, the authority split landed mid-credential - userinfo
+            # holding an unencoded "/" leaves the "@" in the path, so
+            # "${authority##*@}" strips nothing and origin_dest may still
+            # carry the token. Redact rather than print it. The normal failure
+            # still shows the real destination; only the pathological one
+            # degrades to a marker.
+            safe_dest="${origin_dest}"
+            if [[ "${safe_dest}" == *@* ]]; then
+              safe_dest='<redacted: destination retained userinfo>'
+            fi
             if [[ "${origin_candidate}" != "${LOCAL_ORIGIN}" ]] &&
                [[ "${origin_dest}" != "${action_origin}" ]]; then
-              echo "::error::The local origin moved off this repository; failing closed. Got '${origin_dest}', expected '${action_origin}' or '${LOCAL_ORIGIN}'."
+              echo "::error::The local origin moved off this repository; failing closed. Got '${safe_dest}', expected '${action_origin}' or '${LOCAL_ORIGIN}'."
               exit 1
             fi
           done
