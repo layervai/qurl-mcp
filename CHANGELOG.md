@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.4.1...qurl-mcp-v0.4.2) (2026-09-01)
+
+
+### Features
+
+* add remote MCP transport and sharing workflows ([#182](https://github.com/layervai/qurl-mcp/issues/182)) ([4049006](https://github.com/layervai/qurl-mcp/commit/40490061dffd63fcf09ec9374eb8cc8b182fc142))
+* **http:** add autoscaling-safe stateless runtime ([#198](https://github.com/layervai/qurl-mcp/issues/198)) ([8388183](https://github.com/layervai/qurl-mcp/commit/8388183e67bd7614a702d0c22c6c2810eae81ede))
+
 ## [0.4.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.4.0...qurl-mcp-v0.4.1) (2026-06-13)
 
 
