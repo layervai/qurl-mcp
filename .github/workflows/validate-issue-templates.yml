@@ -35,4 +35,4 @@ permissions:
 
 jobs:
   validate-templates:
-    uses: layervai/ops-routines-workflows/.github/workflows/validate-issue-templates.yml@d07fa2fe3a103907ff2b1a1a71509a6dcd8e9d32 # v0.13.0
+    uses: layervai/ops-routines-workflows/.github/workflows/validate-issue-templates.yml@88b48c5ab3e1262018f44bbe5f4a03b94a3e39aa # v0.14.0
