@@ -4383,7 +4383,7 @@ components:
               description: Maximum tokens per qURL (-1 = unlimited)
             max_expiry_seconds:
               type: integer
-              description: Maximum expiry duration in seconds (2592000, or 30 days, on all plans)
+              description: Maximum expiry duration in seconds (2592000, or 30 days, on all customer plans)
         usage:
           type: object
           readOnly: true
