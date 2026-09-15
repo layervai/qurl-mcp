@@ -2874,7 +2874,7 @@ components:
           type: string
           description: |
             Duration until expiration. Supports: hours (24h), days (7d), weeks (1w).
-            Minimum: 1 minute. Maximum varies by plan: free=3 days, growth/enterprise=30 days. Default: 24h.
+            Minimum: 1 minute. Maximum: 30 days on all plans. Default: 24h.
           example: "7d"
         one_time_use:
           type: boolean
@@ -2978,7 +2978,7 @@ components:
           type: string
           description: |
             Duration until expiration. Supports: hours (24h), days (7d), weeks (1w).
-            Minimum: 1 minute. Maximum varies by plan: free=3 days, growth/enterprise=30 days. Default: 24h.
+            Minimum: 1 minute. Maximum: 30 days on all plans. Default: 24h.
           example: "7d"
         one_time_use:
           type: boolean
@@ -4383,7 +4383,7 @@ components:
               description: Maximum tokens per qURL (-1 = unlimited)
             max_expiry_seconds:
               type: integer
-              description: Maximum expiry duration in seconds (free=259200/3d, growth=2592000/30d, enterprise=2592000/30d)
+              description: Maximum expiry duration in seconds (2592000, or 30 days, on all customer plans)
         usage:
           type: object
           readOnly: true
