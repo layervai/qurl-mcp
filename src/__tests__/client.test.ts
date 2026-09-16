@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // `client.ts` is now a thin adapter over the `@layervai/qurl` SDK. These tests
 // mock the SDK so we can assert the adapter's translation layer in isolation:
@@ -59,6 +59,10 @@ const newClient = (apiKey = "lv_live_key", baseURL = "https://api.test.layerv.ai
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("QURLClient adapter", () => {
@@ -133,6 +137,75 @@ describe("QURLClient adapter", () => {
   });
 
   describe("shape translation", () => {
+    it("shareByCRID posts the CRID route with an empty JSON object and wraps the response", async () => {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: {
+              qurl: "https://qurl.link/#at_share",
+              crid: "crid_x",
+              type: "qv2",
+              expires_at: "2026-03-10T00:00:00Z",
+              expires_in_seconds: 300,
+              single_use: true,
+            },
+            meta: { request_id: "req_share" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+
+      const out = await newClient().shareByCRID("crid_x");
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://api.test.layerv.ai/v1/resources/crid_x/share",
+        expect.objectContaining({
+          method: "POST",
+          body: "{}",
+          headers: expect.objectContaining({ Authorization: "Bearer lv_live_key" }),
+        }),
+      );
+      expect(out.data.qurl).toBe("https://qurl.link/#at_share");
+    });
+
+    it("shareByCRID sends ttl_seconds when a TTL is requested", async () => {
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            data: {
+              qurl: "https://qurl.link/#at_share",
+              crid: "crid_x",
+              type: "qv2",
+              expires_in_seconds: 90,
+              single_use: true,
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+
+      await newClient().shareByCRID("crid_x", 90);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://api.test.layerv.ai/v1/resources/crid_x/share",
+        expect.objectContaining({ body: '{"ttl_seconds":90}' }),
+      );
+    });
+
+    it("shareByCRID maps API problem responses to QURLAPIError", async () => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { code: "resource_not_found", detail: "not found" } }),
+          { status: 404 },
+        ),
+      );
+
+      await expect(newClient().shareByCRID("crid_missing")).rejects.toMatchObject({
+        statusCode: 404,
+        code: "resource_not_found",
+        message: "not found",
+      });
+    });
+
     it("createQURL passes the input through and wraps the result in { data }", async () => {
       sdk.create.mockResolvedValue({
         qurl_id: "q_x",

@@ -40,11 +40,16 @@ It currently supports:
 | `extend_qurl`             | Extend qURL expiration                              |
 | `update_qurl`             | Update qURL metadata or expiration                  |
 | `mint_link`               | Mint a new access link for an existing resource     |
+| `share_by_crid`           | Mint a temporary access link from a resource CRID   |
 | `batch_create_qurls`      | Create multiple qURLs in one request                |
 | `revoke_qurl_token`       | Revoke a specific token                             |
 | `update_qurl_token`       | Update a specific token                             |
 | `list_qurl_sessions`      | List active access sessions                         |
 | `terminate_qurl_sessions` | Terminate one or all active sessions                |
+
+`share_by_crid` recognizes a standalone `$<CRID>` value as an explicit request
+to mint a temporary link for that CRID. The `$` is a user-facing marker and is
+removed before the CRID is sent to the qURL API. A bare CRID remains supported.
 
 ### Upload Tools
 

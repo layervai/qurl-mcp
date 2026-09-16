@@ -187,6 +187,17 @@ export const mintLinkOutputSchema = z.object({
   email_delivery: emailDeliveryResultSchema.optional(),
 });
 
+/** Response from the integrations CRID share endpoint. */
+export const shareByCRIDOutputSchema = z.object({
+  qurl: z.string().describe("Temporary qURL access link for the supplied CRID"),
+  qurl_id: z.string().optional().describe("Display-friendly ID for the minted access token"),
+  crid: z.string().describe("CRID associated with the generated link"),
+  type: z.string().describe("qURL link type"),
+  expires_at: z.string().optional().describe("Link expiration timestamp, when returned"),
+  expires_in_seconds: z.number().describe("Link lifetime in seconds"),
+  single_use: z.boolean().describe("Whether the link can be used only once"),
+});
+
 export const uploadFileQurlOutputSchema = z.object({
   resource_id: z
     .string()
