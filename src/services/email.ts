@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { createHash, hkdf, randomBytes, timingSafeEqual } from "node:crypto";
+import { hkdf, randomBytes, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
 import { getRequestQurlApiKey } from "../auth/request-context.js";
 import { loadRuntimeConfig, type RuntimeConfig, type SmtpConfig } from "../config.js";
@@ -32,10 +32,9 @@ export function isHttpEmailAuthorized(
   operatorApiKey: string | undefined,
 ): boolean {
   if (!requestApiKey || !operatorApiKey) return false;
-  return timingSafeEqual(
-    createHash("sha256").update(requestApiKey).digest(),
-    createHash("sha256").update(operatorApiKey).digest(),
-  );
+  const supplied = Buffer.from(requestApiKey);
+  const expected = Buffer.from(operatorApiKey);
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
 export function hasEmailQuotaTrackingCapacity(
