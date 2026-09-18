@@ -72,6 +72,7 @@ describe("stdio bootstrap", () => {
       expect.any(String),
       "stdio",
       10 * 1024 * 1024,
+      { uploads: false, email: false },
     );
     expect(mocks.connect).toHaveBeenCalledOnce();
     expect(mocks.logInfo).toHaveBeenCalledWith("Runtime config loaded.");

@@ -507,7 +507,8 @@ export class QURLClient implements IQURLClient {
   }
 
   async deleteQURL(id: string): Promise<void> {
-    await this.call((sdk) => sdk.deleteResource(id));
+    // Preserve the legacy endpoint while bypassing its SDK prefix guard for modern IDs.
+    await this.call((sdk) => (id.startsWith("r_") ? sdk.delete(id) : sdk.deleteResource(id)));
   }
 
   async updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }> {

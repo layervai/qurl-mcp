@@ -2,6 +2,8 @@ import { z, type ZodError } from "zod";
 import { QURLAPIError } from "../client.js";
 
 // Public API resource IDs are bounded base64url public keys or base32 CRIDs.
+// Public keys encode 80–160 DER bytes: 107–214 base64url chars, excluding length % 4 === 1.
+// CRIDs are the API-registered 47- or 60-character base32 forms.
 // Keep legacy IDs usable during rollout. The service validates key/checksum contents.
 export const RESOURCE_ID_PATTERN =
   /^(r_[a-z0-9_-]{11}|(?:[A-Za-z0-9_-]{4}){27,53}|(?:[A-Za-z0-9_-]{4}){27,53}[A-Za-z0-9_-]{2}|(?:[A-Za-z0-9_-]{4}){26,52}[A-Za-z0-9_-]{3}|[a-z2-7]{47}|[a-z2-7]{60})$/;

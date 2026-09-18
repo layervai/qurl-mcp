@@ -119,6 +119,19 @@ describe("release contract regressions", () => {
 });
 
 describe("resource SDK boundary", () => {
+  it("preserves the legacy resource deletion route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new QURLClient({
+      apiKey: "lv_test_release",
+      baseURL: "https://api.example.com",
+    }).deleteQURL("r_abcdefghijk");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example.com/v1/qurls/r_abcdefghijk",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
   it.each([publicKey, crid])("accepts current connector resource IDs: %s", async (id) => {
     vi.stubGlobal(
       "fetch",
@@ -173,6 +186,15 @@ describe("resource SDK boundary", () => {
 });
 
 describe("configured tool discovery", () => {
+  it("does not read operator configuration in the server factory", async () => {
+    vi.stubEnv("QURL_CONNECTOR_URL", "not a URL");
+    try {
+      await createServer(makeMockClient(), "test").close();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it.each(["stdio", "http"] as const)(
     "hides unconfigured upload/email features in %s",
     async (mode) => {

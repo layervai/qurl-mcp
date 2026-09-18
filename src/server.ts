@@ -1,6 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
-import { loadRuntimeConfig } from "./config.js";
 import type { IQURLClient } from "./client.js";
 import { createQurlTool } from "./tools/create-qurl.js";
 import { resolveQurlTool } from "./tools/resolve-qurl.js";
@@ -92,8 +91,8 @@ export function createServer(
   mode: ServerMode = "stdio",
   maxUploadFileDataBytes?: number,
   capabilities: { uploads: boolean; email: boolean } = {
-    uploads: Boolean(loadRuntimeConfig().defaultQurlConnectorUrl),
-    email: mode === "stdio" && Boolean(loadRuntimeConfig().smtp),
+    uploads: false,
+    email: false,
   },
 ): McpServer {
   const server = new McpServer({

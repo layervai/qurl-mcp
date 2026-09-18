@@ -134,7 +134,6 @@ interface McpResponseLocals {
 export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntimeOptions) {
   const runtimeConfigPath = options.runtimeConfigPath ?? getDefaultConfigPath();
   const version = options.version;
-  const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
   const port = config.port;
   const host = config.host;
   const baseUrl = config.baseUrl;
@@ -745,6 +744,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
     // Stateless transports deliberately ignore caller-provided affinity.
     delete req.headers["mcp-session-id"];
+    const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
     const server = createServer(
       options.clientFactory?.(bearerToken) ??
         createQurlClientFromBearerToken(bearerToken, { qurlApiUrl: defaultQurlApiUrl }),
@@ -753,7 +753,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       config.maxUploadFileDataBytes,
       {
         uploads: Boolean(defaultQurlConnectorUrl),
-        email: Boolean(runtimeConfig.smtp) && bearerToken === runtimeConfig.qurlApiKey,
+        email: Boolean(
+          runtimeConfig.smtp &&
+          runtimeConfig.qurlApiKey &&
+          bearerTokenMatches(bearerToken, digestBearerToken(runtimeConfig.qurlApiKey)),
+        ),
       },
     );
     const transport =
@@ -853,6 +857,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
           // caller cannot use header presence to select a privileged code path.
           delete req.headers["mcp-session-id"];
 
+          const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
           const server = createServer(
             options.clientFactory?.(bearerToken) ??
               createQurlClientFromBearerToken(bearerToken, { qurlApiUrl: defaultQurlApiUrl }),
@@ -861,7 +866,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
             config.maxUploadFileDataBytes,
             {
               uploads: Boolean(defaultQurlConnectorUrl),
-              email: Boolean(runtimeConfig.smtp) && bearerToken === runtimeConfig.qurlApiKey,
+              email: Boolean(
+                runtimeConfig.smtp &&
+                runtimeConfig.qurlApiKey &&
+                bearerTokenMatches(bearerToken, digestBearerToken(runtimeConfig.qurlApiKey)),
+              ),
             },
           );
           const transport =
