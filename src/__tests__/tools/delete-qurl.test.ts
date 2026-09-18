@@ -39,11 +39,11 @@ describe("deleteQurlTool", () => {
       expect(result.success).toBe(false);
     });
 
-    it("rejects q_ prefix IDs (DELETE only accepts r_)", () => {
+    it("rejects q_ prefix IDs (DELETE accepts resource identifiers only)", () => {
       const result = deleteQurlSchema.safeParse({ resource_id: "q_abcdef12345" });
       expect(result.success).toBe(false);
       if (!result.success) {
-        expect(result.error.issues[0].message).toContain("Use update_qurl or mint_link");
+        expect(result.error.issues[0].message).toContain("Expected a resource public key");
       }
     });
   });

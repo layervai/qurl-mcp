@@ -4,7 +4,7 @@ import { EmailDeliverySetupError } from "../../email-types.js";
 import {
   createQurlTool as createQurlToolFactory,
   createQurlSchema,
-  MAX_ACCESS_POLICY_LIST_ITEMS,
+  MAX_ACCESS_POLICY_IP_ITEMS,
   MAX_ACCESS_POLICY_IP_CHARACTERS,
   MAX_ACCESS_POLICY_GEO_CHARACTERS,
   MAX_AI_AGENT_CATEGORY_CHARACTERS,
@@ -117,7 +117,7 @@ describe("createQurlTool", () => {
       expect(
         createQurlSchema.safeParse({
           target_url: "https://example.com",
-          access_policy: { [field]: Array(MAX_ACCESS_POLICY_LIST_ITEMS + 1).fill("x") },
+          access_policy: { [field]: Array(MAX_ACCESS_POLICY_IP_ITEMS + 1).fill("x") },
         }).success,
       ).toBe(false);
     });
@@ -137,7 +137,7 @@ describe("createQurlTool", () => {
           createQurlSchema.safeParse({
             target_url: "https://example.com",
             access_policy: {
-              ai_agent_policy: { [field]: Array(MAX_ACCESS_POLICY_LIST_ITEMS + 1).fill("x") },
+              ai_agent_policy: { [field]: Array(MAX_ACCESS_POLICY_IP_ITEMS + 1).fill("x") },
             },
           }).success,
         ).toBe(false);
@@ -350,6 +350,9 @@ describe("createQurlTool", () => {
       });
 
       expect(vi.mocked(sendEmailMessage)).toHaveBeenCalledOnce();
+      expect(vi.mocked(sendEmailMessage).mock.calls[0]?.[0].text).not.toContain(
+        "https://example.com/protected",
+      );
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.email_delivery).toEqual({
         attempted: true,

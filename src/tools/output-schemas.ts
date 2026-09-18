@@ -25,7 +25,7 @@ import { emailDeliveryResultSchema } from "../email-types.js";
  */
 
 const accessPolicy = z
-  .object({
+  .looseObject({
     ip_allowlist: z.array(z.string()).optional(),
     ip_denylist: z.array(z.string()).optional(),
     geo_allowlist: z.array(z.string()).optional(),
@@ -33,7 +33,7 @@ const accessPolicy = z
     user_agent_allow_regex: z.string().optional(),
     user_agent_deny_regex: z.string().optional(),
     ai_agent_policy: z
-      .object({
+      .looseObject({
         block_all: z.boolean().optional(),
         deny_categories: z.array(z.string()).optional(),
         allow_categories: z.array(z.string()).optional(),
@@ -43,7 +43,7 @@ const accessPolicy = z
   .describe("Access control policy snapshot for this token");
 
 export const accessTokenOutputSchema = z
-  .object({
+  .looseObject({
     qurl_id: z.string(),
     label: z.string().optional(),
     // Same drift-tolerance rationale as qurlSchema.status — token-level
@@ -73,8 +73,8 @@ export const accessTokenOutputSchema = z
   .describe("Single access token belonging to a qURL resource");
 
 /** Stable QURL resource shape returned by get/list/update/extend. */
-export const qurlSchema = z.object({
-  resource_id: z.string().describe("Stable resource identifier (r_ prefix)"),
+export const qurlSchema = z.looseObject({
+  resource_id: z.string().describe("Stable resource identifier (public key or legacy r_ ID)"),
   qurl_site: z.string().optional(),
   target_url: z
     .string()
@@ -115,9 +115,9 @@ export const qurlSchema = z.object({
 });
 
 /** Ephemeral create-time payload — note `qurl_link` is one-shot. */
-export const createQurlOutputSchema = z.object({
+export const createQurlOutputSchema = z.looseObject({
   qurl_id: z.string().describe("Display-friendly qURL ID (q_ prefix)"),
-  resource_id: z.string().describe("Stable resource identifier (r_ prefix)"),
+  resource_id: z.string().describe("Stable resource identifier (public key or legacy r_ ID)"),
   qurl_link: z
     .string()
     .describe(
@@ -142,9 +142,9 @@ export const extendQurlOutputSchema = qurlSchema;
  * Paginated list response. When `meta.has_more` is true, pass
  * `meta.next_cursor` as the `cursor` argument on the next call.
  */
-export const listQurlsOutputSchema = z.object({
+export const listQurlsOutputSchema = z.looseObject({
   data: z.array(qurlSchema),
-  meta: z.object({
+  meta: z.looseObject({
     next_cursor: z
       .string()
       .optional()
@@ -156,11 +156,11 @@ export const listQurlsOutputSchema = z.object({
 });
 
 /** Resolve response: target_url + the access_grant that grants network access. */
-export const resolveQurlOutputSchema = z.object({
+export const resolveQurlOutputSchema = z.looseObject({
   target_url: z.string().describe("Underlying URL revealed by the resolve"),
   resource_id: z.string(),
   access_grant: z
-    .object({
+    .looseObject({
       expires_in: z
         .number()
         .describe(
@@ -173,7 +173,7 @@ export const resolveQurlOutputSchema = z.object({
 });
 
 /** Mint response: a fresh `qurl_link` for an existing resource. One-shot, like create_qurl. */
-export const mintLinkOutputSchema = z.object({
+export const mintLinkOutputSchema = z.looseObject({
   qurl_id: z.string().describe("Display-friendly qURL ID (q_ prefix) for the minted token"),
   qurl_link: z
     .string()
@@ -187,10 +187,10 @@ export const mintLinkOutputSchema = z.object({
   email_delivery: emailDeliveryResultSchema.optional(),
 });
 
-export const uploadFileQurlOutputSchema = z.object({
+export const uploadFileQurlOutputSchema = z.looseObject({
   resource_id: z
     .string()
-    .describe("Stable resource identifier (r_ prefix) returned by the connector"),
+    .describe("Stable resource identifier (public key or legacy r_ ID) returned by the connector"),
   qurl_id: z.string().describe("Display-friendly qURL ID (q_ prefix) for the minted token"),
   qurl_link: z
     .string()
@@ -213,16 +213,16 @@ export const uploadFileQurlOutputSchema = z.object({
 
 export const updateQurlTokenOutputSchema = accessTokenOutputSchema;
 
-export const revokeQurlTokenOutputSchema = z.object({
+export const revokeQurlTokenOutputSchema = z.looseObject({
   resource_id: z.string(),
   qurl_id: z.string(),
   revoked: z.literal(true),
   message: z.string(),
 });
 
-export const listQurlSessionsOutputSchema = z.object({
+export const listQurlSessionsOutputSchema = z.looseObject({
   data: z.array(
-    z.object({
+    z.looseObject({
       session_id: z.string(),
       qurl_id: z.string().optional(),
       src_ip: z.string().optional(),
@@ -232,13 +232,13 @@ export const listQurlSessionsOutputSchema = z.object({
     }),
   ),
   meta: z
-    .object({
+    .looseObject({
       request_id: z.string().optional(),
     })
     .optional(),
 });
 
-export const terminateQurlSessionsOutputSchema = z.object({
+export const terminateQurlSessionsOutputSchema = z.looseObject({
   resource_id: z.string(),
   session_id: z.string().optional(),
   terminated: z.number(),
@@ -249,7 +249,7 @@ export const terminateQurlSessionsOutputSchema = z.object({
 // mutual-exclusivity contract — a host or planner generating UI from
 // the schema will only show success-fields under `success: true` and
 // the `error` block under `success: false`, never both.
-const batchItemSuccessSchema = z.object({
+const batchItemSuccessSchema = z.looseObject({
   index: z.number().describe("Index of the corresponding item in the input `items` array"),
   success: z.literal(true),
   resource_id: z.string(),
@@ -262,10 +262,10 @@ const batchItemSuccessSchema = z.object({
   expires_at: z.string(),
 });
 
-const batchItemFailureSchema = z.object({
+const batchItemFailureSchema = z.looseObject({
   index: z.number().describe("Index of the corresponding item in the input `items` array"),
   success: z.literal(false),
-  error: z.object({
+  error: z.looseObject({
     code: z.string(),
     message: z.string(),
   }),
@@ -284,7 +284,7 @@ const batchItemResultSchema = z
  * `output-schemas.types.test.ts` asserts the flattened shape against the
  * client interface so drift on either side fails compilation.
  */
-export const batchCreateOutputSchema = z.object({
+export const batchCreateOutputSchema = z.looseObject({
   succeeded: z.number(),
   failed: z.number(),
   results: z.array(batchItemResultSchema),
@@ -292,7 +292,7 @@ export const batchCreateOutputSchema = z.object({
 });
 
 /** Delete confirmation. The qURL is in a revoked state after this call. */
-export const deleteQurlOutputSchema = z.object({
+export const deleteQurlOutputSchema = z.looseObject({
   resource_id: z.string(),
   revoked: z.literal(true),
   was_already_revoked: z

@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
+import { loadRuntimeConfig } from "./config.js";
 import type { IQURLClient } from "./client.js";
 import { createQurlTool } from "./tools/create-qurl.js";
 import { resolveQurlTool } from "./tools/resolve-qurl.js";
@@ -90,6 +91,10 @@ export function createServer(
   version: string,
   mode: ServerMode = "stdio",
   maxUploadFileDataBytes?: number,
+  capabilities: { uploads: boolean; email: boolean } = {
+    uploads: Boolean(loadRuntimeConfig().defaultQurlConnectorUrl),
+    email: mode === "stdio" && Boolean(loadRuntimeConfig().smtp),
+  },
 ): McpServer {
   const server = new McpServer({
     name: "qurl",
@@ -98,15 +103,19 @@ export function createServer(
 
   for (const factory of getToolFactoriesForMode(mode)) {
     const tool = factory(client, { mode, maxUploadFileDataBytes });
-    // registerTool wires outputSchema + annotations into tools/list; pass
-    // .shape (ZodRawShape), not the ZodObject itself.
+    if (!capabilities.uploads && tool.name.startsWith("upload_")) continue;
+    const inputSchema =
+      !capabilities.email && "email_delivery" in tool.inputSchema.shape
+        ? tool.inputSchema.omit({ email_delivery: true })
+        : tool.inputSchema;
+    // Preserve the output object catchall in the advertised JSON Schema.
     server.registerTool(
       tool.name,
       {
         title: tool.title,
         description: tool.description,
-        inputSchema: tool.inputSchema.shape,
-        outputSchema: tool.outputSchema.shape,
+        inputSchema: inputSchema.shape,
+        outputSchema: tool.outputSchema,
         annotations: tool.annotations,
       },
       tool.handler,

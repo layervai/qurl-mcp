@@ -342,7 +342,7 @@ describe("updateQurlTool", () => {
       });
 
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("require an r_ resource ID");
+      expect(result.content[0].text).toContain("require a resource identifier");
       expect(mockUpdateQurl).not.toHaveBeenCalled();
       expect(mockUpdateResource).not.toHaveBeenCalled();
     });

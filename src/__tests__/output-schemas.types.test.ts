@@ -26,16 +26,23 @@ import {
 import { sampleAccessToken, sampleQURL } from "./helpers.js";
 
 // Lock each Zod output schema to its corresponding client interface so a
-// new field on either side breaks compilation. The MCP-spec-drift workflow
+// incompatible known fields on either side break compilation; extra API fields remain open. The MCP-spec-drift workflow
 // covers external (API <-> snapshot) drift; this guards internal
 // (client.ts <-> output-schemas.ts) drift.
 //
 // `deleteQurlOutputSchema` is intentionally omitted (no client-side
 // interface — the client returns `Promise<void>` and the handler
 // synthesizes the payload).
+// Compare declared fields without the loose response objects' unknown-key index signature.
+type KnownFields<T> = T extends (infer Item)[]
+  ? KnownFields<Item>[]
+  : T extends object
+    ? { [K in keyof T as string extends K ? never : K]: KnownFields<T[K]> }
+    : T;
+
 describe("output schema <-> client type alignment", () => {
   it("qurlSchema matches QURL", () => {
-    expectTypeOf<z.infer<typeof qurlSchema>>().toEqualTypeOf<QURL>();
+    expectTypeOf<KnownFields<z.infer<typeof qurlSchema>>>().toEqualTypeOf<QURL>();
   });
 
   it("createQurlOutputSchema matches CreateQURLData", () => {
@@ -49,11 +56,15 @@ describe("output schema <-> client type alignment", () => {
   });
 
   it("listQurlsOutputSchema matches ListQURLsOutput", () => {
-    expectTypeOf<z.infer<typeof listQurlsOutputSchema>>().toEqualTypeOf<ListQURLsOutput>();
+    expectTypeOf<
+      KnownFields<z.infer<typeof listQurlsOutputSchema>>
+    >().toEqualTypeOf<ListQURLsOutput>();
   });
 
   it("resolveQurlOutputSchema matches ResolveOutput", () => {
-    expectTypeOf<z.infer<typeof resolveQurlOutputSchema>>().toEqualTypeOf<ResolveOutput>();
+    expectTypeOf<
+      KnownFields<z.infer<typeof resolveQurlOutputSchema>>
+    >().toEqualTypeOf<ResolveOutput>();
   });
 
   it("mintLinkOutputSchema matches MintLinkOutput", () => {
@@ -80,11 +91,15 @@ describe("output schema <-> client type alignment", () => {
   });
 
   it("accessTokenOutputSchema matches AccessToken", () => {
-    expectTypeOf<z.infer<typeof accessTokenOutputSchema>>().toEqualTypeOf<AccessToken>();
+    expectTypeOf<
+      KnownFields<z.infer<typeof accessTokenOutputSchema>>
+    >().toEqualTypeOf<AccessToken>();
   });
 
   it("updateQurlTokenOutputSchema matches AccessToken", () => {
-    expectTypeOf<z.infer<typeof updateQurlTokenOutputSchema>>().toEqualTypeOf<AccessToken>();
+    expectTypeOf<
+      KnownFields<z.infer<typeof updateQurlTokenOutputSchema>>
+    >().toEqualTypeOf<AccessToken>();
   });
 
   it("accepts sparse QurlSummary responses allowed by the OpenAPI spec", () => {
@@ -94,7 +109,9 @@ describe("output schema <-> client type alignment", () => {
   });
 
   it("listQurlSessionsOutputSchema matches SessionListOutput", () => {
-    expectTypeOf<z.infer<typeof listQurlSessionsOutputSchema>>().toEqualTypeOf<SessionListOutput>();
+    expectTypeOf<
+      KnownFields<z.infer<typeof listQurlSessionsOutputSchema>>
+    >().toEqualTypeOf<SessionListOutput>();
   });
 
   it("batchCreateOutputSchema matches the flattened BatchCreateOutput.data + request_id", () => {

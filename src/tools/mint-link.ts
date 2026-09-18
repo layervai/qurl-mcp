@@ -73,7 +73,7 @@ export function mintLinkTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
       "Use this to issue additional access links to a resource without creating a brand-new qURL (e.g. a second recipient, a replacement after the original was lost). " +
       "Use `create_qurl` instead when you want a brand-new resource with its own target_url and policy. " +
       "Use `update_qurl` when you only want to change expiration/tags/description on the existing resource. " +
-      "Accepts both `r_` and `q_` IDs. " +
+      "Accepts resource public keys, CRIDs, legacy `r_` IDs, and `q_` display IDs. " +
       "**Constraints:** `expires_in` and `expires_at` are mutually exclusive (handler returns an `isError: true` content block before any API call if both are set). " +
       "If neither expiry field is specified, the API defaults to 24 hours from now. " +
       "**Output:** the new `qurl_link` is shown ONCE — no subsequent call returns it. Capture `qurl_id` if you need to correlate future access events or update this specific token.",

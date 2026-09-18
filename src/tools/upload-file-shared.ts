@@ -371,7 +371,13 @@ export async function mintUploadedFile(
     console.error(
       `Connector resource ${resourceId} remains after link minting failed (${formatErrorForLog(error)})`,
     );
-    throw error;
+    throw new QURLAPIError(
+      error instanceof QURLAPIError ? error.statusCode : 0,
+      "upload_mint_failed",
+      `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
+        "Use mint_link with this resource_id to retry; do not upload the file again. " +
+        "A failed request may already have minted a token; inspect get_qurl before retrying.",
+    );
   }
 
   let qurlSite: string | undefined;

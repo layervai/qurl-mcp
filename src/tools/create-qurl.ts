@@ -13,25 +13,33 @@ import {
 } from "./email-delivery.js";
 import { createQurlOutputSchema } from "./output-schemas.js";
 
-export const MAX_ACCESS_POLICY_LIST_ITEMS = 1000;
+export const MAX_ACCESS_POLICY_IP_ITEMS = 100;
+export const MAX_ACCESS_POLICY_GEO_ITEMS = 50;
+export const MAX_AI_AGENT_CATEGORY_ITEMS = 20;
 export const MAX_ACCESS_POLICY_IP_CHARACTERS = 64;
 export const MAX_ACCESS_POLICY_GEO_CHARACTERS = 8;
 export const MAX_AI_AGENT_CATEGORY_CHARACTERS = 128;
 export const MAX_RESOURCE_TYPE_CHARACTERS = 64;
 
-const boundedPolicyList = (item: z.ZodString) => z.array(item).max(MAX_ACCESS_POLICY_LIST_ITEMS);
+const boundedPolicyList = (item: z.ZodString, limit: number) => z.array(item).max(limit);
 
 export const aiAgentPolicySchema = z.object({
   block_all: z.boolean().optional().describe("Block all recognized AI agents"),
-  deny_categories: boundedPolicyList(z.string().min(1).max(MAX_AI_AGENT_CATEGORY_CHARACTERS))
+  deny_categories: boundedPolicyList(
+    z.string().min(1).max(MAX_AI_AGENT_CATEGORY_CHARACTERS),
+    MAX_AI_AGENT_CATEGORY_ITEMS,
+  )
     .optional()
     .describe(
-      `AI agent categories to block (e.g., gptbot, commoncrawl; max ${MAX_ACCESS_POLICY_LIST_ITEMS} entries, ${MAX_AI_AGENT_CATEGORY_CHARACTERS} chars each)`,
+      `AI agent categories to block (e.g., gptbot, commoncrawl; max ${MAX_AI_AGENT_CATEGORY_ITEMS} entries, ${MAX_AI_AGENT_CATEGORY_CHARACTERS} chars each)`,
     ),
-  allow_categories: boundedPolicyList(z.string().min(1).max(MAX_AI_AGENT_CATEGORY_CHARACTERS))
+  allow_categories: boundedPolicyList(
+    z.string().min(1).max(MAX_AI_AGENT_CATEGORY_CHARACTERS),
+    MAX_AI_AGENT_CATEGORY_ITEMS,
+  )
     .optional()
     .describe(
-      `AI agent categories to permit (all others blocked; max ${MAX_ACCESS_POLICY_LIST_ITEMS} entries, ${MAX_AI_AGENT_CATEGORY_CHARACTERS} chars each)`,
+      `AI agent categories to permit (all others blocked; max ${MAX_AI_AGENT_CATEGORY_ITEMS} entries, ${MAX_AI_AGENT_CATEGORY_CHARACTERS} chars each)`,
     ),
 });
 
@@ -39,18 +47,30 @@ export const MAX_USER_AGENT_REGEX_CHARACTERS = 256;
 const userAgentRegexSchema = z.string().max(MAX_USER_AGENT_REGEX_CHARACTERS);
 
 export const accessPolicySchema = z.object({
-  ip_allowlist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_IP_CHARACTERS))
+  ip_allowlist: boundedPolicyList(
+    z.string().min(1).max(MAX_ACCESS_POLICY_IP_CHARACTERS),
+    MAX_ACCESS_POLICY_IP_ITEMS,
+  )
     .optional()
-    .describe("Allowed IP addresses or CIDR ranges (max 1000 entries, 64 chars each)"),
-  ip_denylist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_IP_CHARACTERS))
+    .describe("Allowed IP addresses or CIDR ranges (max 100 entries, 64 chars each)"),
+  ip_denylist: boundedPolicyList(
+    z.string().min(1).max(MAX_ACCESS_POLICY_IP_CHARACTERS),
+    MAX_ACCESS_POLICY_IP_ITEMS,
+  )
     .optional()
-    .describe("Denied IP addresses or CIDR ranges (max 1000 entries, 64 chars each)"),
-  geo_allowlist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_GEO_CHARACTERS))
+    .describe("Denied IP addresses or CIDR ranges (max 100 entries, 64 chars each)"),
+  geo_allowlist: boundedPolicyList(
+    z.string().min(1).max(MAX_ACCESS_POLICY_GEO_CHARACTERS),
+    MAX_ACCESS_POLICY_GEO_ITEMS,
+  )
     .optional()
-    .describe("Allowed country codes (ISO 3166-1 alpha-2; max 1000 entries, 8 chars each)"),
-  geo_denylist: boundedPolicyList(z.string().min(1).max(MAX_ACCESS_POLICY_GEO_CHARACTERS))
+    .describe("Allowed country codes (ISO 3166-1 alpha-2; max 50 entries, 8 chars each)"),
+  geo_denylist: boundedPolicyList(
+    z.string().min(1).max(MAX_ACCESS_POLICY_GEO_CHARACTERS),
+    MAX_ACCESS_POLICY_GEO_ITEMS,
+  )
     .optional()
-    .describe("Denied country codes (ISO 3166-1 alpha-2; max 1000 entries, 8 chars each)"),
+    .describe("Denied country codes (ISO 3166-1 alpha-2; max 50 entries, 8 chars each)"),
   user_agent_allow_regex: userAgentRegexSchema
     .optional()
     .describe(`Regex to allow matching user agents (max ${MAX_USER_AGENT_REGEX_CHARACTERS} chars)`),
@@ -116,7 +136,7 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
       "Create a qURL — a policy-bound, expiring access link that gates a target URL with optional IP/geo/UA/AI-agent filters and time or session limits. " +
       "**When to use:** minting a fresh protected access link for share-once or time-limited access (e.g. send a customer a 24-hour download link, gate a doc behind an IP allowlist, distribute a one-time-use credential to a contractor). " +
       "**Do NOT use this for chat-uploaded images, PDFs, screenshots, or file attachments.** In HTTP MCP mode, those should go through `upload_file_data_qurl`; in stdio mode, use `upload_file_qurl`. " +
-      "**When NOT to use:** use `mint_link` when you already have a resource (`r_…`) and just need an additional access token under it — `create_qurl` identifies the resource by target URL and may return an existing same-type resource grouping. " +
+      "**When NOT to use:** use `mint_link` when you already have a resource identifier and just need an additional access token under it — `create_qurl` identifies the resource by target URL and may return an existing same-type resource grouping. " +
       "Use `batch_create_qurls` to create many in one round-trip. " +
       "Use `update_qurl` to retag or extend an existing resource without minting a new one. " +
       "If the user says 'give me the qURL of this image/file' and the content was uploaded in chat, this is the wrong tool. " +
@@ -125,7 +145,7 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
       "A returned resource is in `active` status with the policy and per-token limits applied. " +
       "If `expires_in` is omitted the API defaults to **24h** — do not assume the link is permanent. " +
       "`max_sessions` is per minted qURL, not resource-wide; set `one_time_use: false` explicitly when you need `max_sessions: 0` to mean unlimited visitors. " +
-      "**Returns:** `{ qurl_id: string (q_…), resource_id: string (r_…), qurl_link: string (shown once), branded_domain?: string, qurl_site: string, expires_at: string (RFC 3339), label?: string, type?: string }`. " +
+      "**Returns:** `{ qurl_id: string (q_…), resource_id: string, qurl_link: string (shown once), branded_domain?: string, qurl_site: string, expires_at: string (RFC 3339), label?: string, type?: string }`. " +
       "`qurl_id` is the only `q_…` display ID an agent gets in this response — keep it if you plan a follow-up against `get_qurl`/`update_qurl`/`mint_link` (which accept either prefix). " +
       "Example: `create_qurl({ target_url: 'https://example.com/private', expires_in: '24h', one_time_use: true, access_policy: { geo_allowlist: ['US'] } })`.",
     inputSchema: createQurlSchema,
@@ -146,7 +166,6 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
         defaultSubject: "Your secure qURL link is ready",
         detailLines: [
           "A secure qURL link has been created for you.",
-          `Target URL: ${singleLineEmailDetail(createInput.target_url)}`,
           `Secure Link: ${singleLineEmailDetail(result.data.qurl_link)}`,
           // The SDK type requires expires_at; keep the guard so upstream
           // response drift cannot render "undefined" into a customer email.

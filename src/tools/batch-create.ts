@@ -18,7 +18,7 @@ function isBatchPayload(value: unknown): value is BatchCreateOutput["data"] {
 
 export const batchCreateSchema = z.object({
   items: z
-    .array(createQurlSchema)
+    .array(createQurlSchema.omit({ email_delivery: true }))
     .min(1)
     .max(100)
     .describe("Array of qURL creation requests (1-100 items)"),
@@ -52,7 +52,7 @@ export function batchCreateTool(
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof batchCreateSchema>) => {
-      const result = await client.batchCreate(input);
+      const result = await client.batchCreate(batchCreateSchema.parse(input));
       // Defense-in-depth: batchCreate passes through HTTP 400, which is
       // contracted to carry a BatchCreateResponse body with per-item errors.
       // If the API ever returns 400 with a different shape (e.g., a

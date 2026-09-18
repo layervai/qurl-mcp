@@ -226,7 +226,10 @@ describe("uploadFileDataQurlTool", () => {
           file_name: "sample.pdf",
           content_type: "application/pdf",
         }),
-      ).rejects.toThrow("mint unavailable");
+      ).resolves.toMatchObject({
+        isError: true,
+        content: [{ type: "text", text: expect.stringContaining("r_orphan12345") }],
+      });
       expect(log).toHaveBeenCalledWith(expect.stringContaining("r_orphan12345"));
     });
 

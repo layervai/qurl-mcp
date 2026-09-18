@@ -25,7 +25,7 @@ export function revokeQurlTokenTool(
       "Revoke one qURL token under a resource without revoking the whole resource. " +
       "Use this when a single recipient/link should stop working but sibling qURLs on the same `resource_id` must remain active. " +
       "Use `delete_qurl` instead when you want to revoke the resource and every token under it. " +
-      "**Constraints:** requires the parent `resource_id` (`r_…`) and the token display ID (`q_…`). Re-revoking an inactive token returns an API error rather than being treated as idempotent.",
+      "**Constraints:** requires the parent `resource_id` (public key, CRID, or legacy `r_` ID) and the token display ID (`q_…`). Re-revoking an inactive token returns an API error rather than being treated as idempotent.",
     inputSchema: revokeQurlTokenSchema,
     outputSchema: revokeQurlTokenOutputSchema,
     annotations: {

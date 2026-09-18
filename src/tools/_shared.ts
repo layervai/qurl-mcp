@@ -1,10 +1,11 @@
 import { z, type ZodError } from "zod";
 import { QURLAPIError } from "../client.js";
 
-// Contract snapshot: api-spec/qurls.yaml defines r_ IDs with exactly eleven
-// lowercase URL-safe suffix characters. Connector responses and tool inputs
-// share this constant so a future spec change fails in one obvious place.
-export const RESOURCE_ID_PATTERN = /^r_[a-z0-9_-]{11}$/;
+// Public API resource IDs are bounded base64url public keys or base32 CRIDs.
+// Keep legacy IDs usable during rollout. The service validates key/checksum contents.
+export const RESOURCE_ID_PATTERN =
+  /^(r_[a-z0-9_-]{11}|(?:[A-Za-z0-9_-]{4}){27,53}|(?:[A-Za-z0-9_-]{4}){27,53}[A-Za-z0-9_-]{2}|(?:[A-Za-z0-9_-]{4}){26,52}[A-Za-z0-9_-]{3}|[a-z2-7]{47}|[a-z2-7]{60})$/;
+const QURL_DISPLAY_ID_PATTERN = /^q_[0-9a-f]{11}$/;
 
 export type ToolRuntimeOptions = {
   mode: "stdio" | "http";
@@ -75,6 +76,7 @@ export function toStructuredContent<T extends object & { length?: never }>(
  * errors, so a missing-key misconfig becomes immediately actionable in
  * the host UI rather than buried in a generic error toast.
  *
+ * Upload mint failures also return actionable recovery content with the resource ID.
  * Other API errors continue to throw — they're real failures that callers
  * should treat as exceptional, and the JSON-RPC error path carries the
  * statusCode/code metadata the host needs to surface them properly.
@@ -86,7 +88,10 @@ export function withMissingApiKeyHandler<I>(
     try {
       return await inner(input);
     } catch (err) {
-      if (err instanceof QURLAPIError && err.code === "missing_api_key") {
+      if (
+        err instanceof QURLAPIError &&
+        (err.code === "missing_api_key" || err.code === "upload_mint_failed")
+      ) {
         return {
           isError: true,
           content: [{ type: "text", text: err.message }],
@@ -120,7 +125,7 @@ export function zodErrorToToolResult(error: ZodError) {
 /**
  * Zod schema for a tool's resource_id parameter.
  *
- * The API accepts both a resource ID (r_ prefix) and a qURL display ID
+ * The API accepts both a resource identifier (public key, CRID, or legacy r_ ID) and a qURL display ID
  * (q_ prefix) on get/update/extend/mint_link, and resolves a q_ ID to its
  * parent resource automatically. Resource-scoped endpoints use the
  * narrower `resourceOnlyIdSchema` / `qurlDisplayIdSchema` helpers below.
@@ -132,11 +137,11 @@ export function resourceIdSchema(verb: string) {
   return z
     .string()
     .regex(
-      /^(r_[a-z0-9_-]{11}|q_[0-9a-f]{11})$/,
-      "Expected an r_ resource ID or q_ qURL display ID",
+      new RegExp(`(?:${RESOURCE_ID_PATTERN.source})|(?:${QURL_DISPLAY_ID_PATTERN.source})`),
+      "Expected a resource public key, CRID, legacy r_ ID, or q_ display ID",
     )
     .describe(
-      `The resource ID (r_ prefix) or qURL display ID (q_ prefix) to ${verb}. ` +
+      `The resource public key, CRID, legacy r_ ID, or qURL display ID (q_ prefix) to ${verb}. ` +
         "If a q_ ID is passed, the API resolves it to the parent resource automatically.",
     );
 }
@@ -144,13 +149,13 @@ export function resourceIdSchema(verb: string) {
 export function resourceOnlyIdSchema(verb: string) {
   return z
     .string()
-    .regex(RESOURCE_ID_PATTERN, "Expected an r_ resource ID")
-    .describe(`The resource ID (r_ prefix) to ${verb}.`);
+    .regex(RESOURCE_ID_PATTERN, "Expected a resource public key, CRID, or legacy r_ ID")
+    .describe(`The resource public key, CRID, or legacy r_ ID to ${verb}.`);
 }
 
 export function qurlDisplayIdSchema(verb: string) {
   return z
     .string()
-    .regex(/^q_[0-9a-f]{11}$/, "Expected a q_ qURL display ID")
+    .regex(QURL_DISPLAY_ID_PATTERN, "Expected a q_ qURL display ID")
     .describe(`The qURL display ID (q_ prefix) to ${verb}.`);
 }

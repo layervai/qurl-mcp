@@ -16,7 +16,7 @@ describe("createServer", () => {
 
   async function connectServer() {
     const mockClient = makeMockClient();
-    server = createServer(mockClient, "0.1.0", "stdio");
+    server = createServer(mockClient, "0.1.0", "stdio", undefined, { uploads: true, email: true });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
@@ -55,7 +55,7 @@ describe("createServer", () => {
 
     it("registers http tools with correct names", async () => {
       const mockClient = makeMockClient();
-      server = createServer(mockClient, "0.1.0", "http");
+      server = createServer(mockClient, "0.1.0", "http", undefined, { uploads: true, email: true });
 
       const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
       await server.connect(serverTransport);

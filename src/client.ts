@@ -507,7 +507,7 @@ export class QURLClient implements IQURLClient {
   }
 
   async deleteQURL(id: string): Promise<void> {
-    await this.call((sdk) => sdk.delete(id));
+    await this.call((sdk) => sdk.deleteResource(id));
   }
 
   async updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }> {

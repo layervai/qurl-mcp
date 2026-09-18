@@ -36,6 +36,7 @@ import {
   DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES,
   getDefaultConfigPath,
   inspectSmtpConfig,
+  loadRuntimeConfig,
   isLoopbackHostname,
 } from "./config.js";
 import {
@@ -133,6 +134,7 @@ interface McpResponseLocals {
 export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntimeOptions) {
   const runtimeConfigPath = options.runtimeConfigPath ?? getDefaultConfigPath();
   const version = options.version;
+  const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
   const port = config.port;
   const host = config.host;
   const baseUrl = config.baseUrl;
@@ -749,6 +751,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       version,
       "http",
       config.maxUploadFileDataBytes,
+      {
+        uploads: Boolean(defaultQurlConnectorUrl),
+        email: Boolean(runtimeConfig.smtp) && bearerToken === runtimeConfig.qurlApiKey,
+      },
     );
     const transport =
       options.transportFactory?.(true) ??
@@ -853,6 +859,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
             version,
             "http",
             config.maxUploadFileDataBytes,
+            {
+              uploads: Boolean(defaultQurlConnectorUrl),
+              email: Boolean(runtimeConfig.smtp) && bearerToken === runtimeConfig.qurlApiKey,
+            },
           );
           const transport =
             options.transportFactory?.() ??

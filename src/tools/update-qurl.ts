@@ -69,7 +69,8 @@ export const updateQurlSchema = updateQurlBaseSchema
       "custom_domain and preserve_host use the resource endpoint and cannot be combined with extend_by or expires_at in one update",
   })
   .refine((data) => !(hasResourceEndpointUpdate(data) && data.resource_id.startsWith("q_")), {
-    message: "custom_domain and preserve_host updates require an r_ resource ID",
+    message:
+      "custom_domain and preserve_host updates require a resource identifier (public key, CRID, or legacy r_ ID)",
   })
   .refine(
     // Use `!== undefined` rather than truthy checks so the API's "clear"
@@ -99,7 +100,7 @@ export function updateQurlTool(
     title: "Update qURL",
     description:
       "Update a qURL's expiration, tags, description, custom domain, or proxy host-header behavior. The richer alternative to `extend_qurl` — use `update_qurl` whenever you need anything beyond a relative time push. " +
-      "Accepts both `r_` and `q_` IDs for expiration, tags, and description updates (q_ is auto-resolved); custom domain and preserve_host updates require an `r_` resource ID because the qURL API now serves them from `PATCH /v1/resources/{id}`. " +
+      "Accepts resource public keys, CRIDs, legacy `r_` IDs, and `q_` display IDs for expiration, tags, and description updates (q_ is auto-resolved); custom domain and preserve_host updates require a resource identifier (public key, CRID, or legacy `r_` ID) because the qURL API now serves them from `PATCH /v1/resources/{id}`. " +
       "**Constraints:** `extend_by` and `expires_at` are mutually exclusive; `custom_domain`/`preserve_host` cannot be combined with expiration changes in one call; at least one update field (`extend_by`, `expires_at`, `tags`, `description`, `custom_domain`, `preserve_host`) must be set. " +
       '**Clearing fields:** pass `description: ""`, `tags: []`, or `custom_domain: ""` to clear those fields explicitly. ' +
       "Use `extend_qurl` when the only change is a relative time push. " +

@@ -13,7 +13,7 @@ const { sdk, SDKClientMock } = vi.hoisted(() => {
     create: vi.fn(),
     get: vi.fn(),
     list: vi.fn(),
-    delete: vi.fn(),
+    deleteResource: vi.fn(),
     update: vi.fn(),
     updateResource: vi.fn(),
     extend: vi.fn(),
@@ -325,7 +325,7 @@ describe("QURLClient adapter", () => {
 
   describe("error translation", () => {
     it("maps an SDK NotFoundError to QURLAPIError with statusCode 404 (delete-qurl branch)", async () => {
-      sdk.delete.mockRejectedValue(
+      sdk.deleteResource.mockRejectedValue(
         new NotFoundError({
           status: 404,
           code: "resource_not_found",
