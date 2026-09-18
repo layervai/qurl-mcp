@@ -533,6 +533,20 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     return timingSafeEqual(digestBearerToken(token), expectedDigest);
   }
 
+  function getToolCapabilities(bearerToken: string) {
+    const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
+    const operatorKey = Buffer.from(runtimeConfig.qurlApiKey ?? "", "utf8");
+    const callerKey = Buffer.from(bearerToken, "utf8");
+    return {
+      uploads: Boolean(defaultQurlConnectorUrl),
+      email:
+        Boolean(runtimeConfig.smtp) &&
+        operatorKey.length > 0 &&
+        operatorKey.length === callerKey.length &&
+        timingSafeEqual(operatorKey, callerKey),
+    };
+  }
+
   function getJsonRpcMethod(body: unknown): string | undefined {
     if (!body || typeof body !== "object") return undefined;
     return "method" in body && typeof body.method === "string" ? body.method : undefined;
@@ -744,21 +758,13 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
     // Stateless transports deliberately ignore caller-provided affinity.
     delete req.headers["mcp-session-id"];
-    const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
     const server = createServer(
       options.clientFactory?.(bearerToken) ??
         createQurlClientFromBearerToken(bearerToken, { qurlApiUrl: defaultQurlApiUrl }),
       version,
       "http",
       config.maxUploadFileDataBytes,
-      {
-        uploads: Boolean(defaultQurlConnectorUrl),
-        email: Boolean(
-          runtimeConfig.smtp &&
-          runtimeConfig.qurlApiKey &&
-          bearerTokenMatches(bearerToken, digestBearerToken(runtimeConfig.qurlApiKey)),
-        ),
-      },
+      getToolCapabilities(bearerToken),
     );
     const transport =
       options.transportFactory?.(true) ??
@@ -857,21 +863,13 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
           // caller cannot use header presence to select a privileged code path.
           delete req.headers["mcp-session-id"];
 
-          const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
           const server = createServer(
             options.clientFactory?.(bearerToken) ??
               createQurlClientFromBearerToken(bearerToken, { qurlApiUrl: defaultQurlApiUrl }),
             version,
             "http",
             config.maxUploadFileDataBytes,
-            {
-              uploads: Boolean(defaultQurlConnectorUrl),
-              email: Boolean(
-                runtimeConfig.smtp &&
-                runtimeConfig.qurlApiKey &&
-                bearerTokenMatches(bearerToken, digestBearerToken(runtimeConfig.qurlApiKey)),
-              ),
-            },
+            getToolCapabilities(bearerToken),
           );
           const transport =
             options.transportFactory?.() ??
