@@ -4,8 +4,9 @@ Merge the readiness fixes before approving release PR #195. The release-please
 configuration now treats pre-1.0 features as minor releases, so the pending
 0.4.2 proposal should regenerate as 0.5.0 on the next main push. Do not manually
 bump package.json, the manifest, or server.json in a readiness PR. Verify the
-regenerated release changes all four version locations (including package-lock)
-and includes every merged fix before a human merges it.
+regenerated release updates package.json, package-lock.json, the release manifest,
+and both server.json version fields, and includes every merged fix before a
+human merges it.
 
 Use this summary when reviewing the generated release notes:
 
@@ -16,8 +17,8 @@ Use this summary when reviewing the generated release notes:
   connector. Server-local file access remains stdio-only.
 - Optional SMTP sharing with recipient policy, delivery quotas, and credential
   redaction; public legal pages and optional video pages for hosted deployments.
-- Native resource/token/session management and hardened input, upload, PDF,
-  authentication, and error-handling boundaries.
+- Hardened input, upload, PDF, authentication, and error-handling boundaries.
+  Existing resource/token/session management tools remain available.
 - npm/npx-installed entry points execute correctly through bin symlinks; the
   bundled regular-weight TrueType font preserves offline CJK PDF support with a
   smaller package. Weekly spec checks fail visibly on retrieval errors.
