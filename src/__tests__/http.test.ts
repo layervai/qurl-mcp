@@ -1675,6 +1675,49 @@ describe("HTTP MCP server", () => {
     }
   });
 
+  it("bounds pending-session replacement while teardown is stalled", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let nextId = 0;
+    const bounded = createHttpRuntime(
+      { ...testConfig, maxUnvalidatedSessions: 1 },
+      {
+        version: "0.0.0-test",
+        transportFactory: () => {
+          const id = String(++nextId);
+          const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => id });
+          if (id === "1") {
+            const close = transport.close.bind(transport);
+            transport.close = async () => {
+              await gate;
+              await close();
+            };
+          }
+          return transport;
+        },
+      },
+    );
+    const baseUrl = await start(bounded.app);
+    try {
+      await initialize(baseUrl, "first");
+      await initialize(baseUrl, "replacement");
+      // The victim is removed before its asynchronous close finishes.
+      expect(bounded.getActiveSessionCount()).toBe(1);
+      const rejected = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: bearerHeaders("third"),
+        body: JSON.stringify(initializeBody),
+      });
+      expect(rejected.status).toBe(503);
+      expect(bounded.getActiveSessionCount()).toBe(1);
+    } finally {
+      release();
+      await bounded.closeAllSessions();
+    }
+  });
+
   it.each([false, true])(
     "preserves active and validated sessions during admission pressure (validated=%s)",
     async (validated) => {

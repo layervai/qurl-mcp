@@ -851,7 +851,46 @@ describe("sendEmailMessage", () => {
     expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
   });
 
-  it("tracks two request-scoped principals independently", async () => {
+  it.each(["disabled", "blocked", "empty"])(
+    "does not disclose SMTP policy to unauthorized HTTP callers (%s)",
+    async (policy) => {
+      const configPath = join(tempDir!, "qurl-mcp.config.json");
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          policy === "disabled"
+            ? {}
+            : {
+                smtp: {
+                  host: "smtp.example.com",
+                  port: 587,
+                  secure: false,
+                  username: "mailer",
+                  password: "secret",
+                  fromEmail: "noreply@example.com",
+                },
+              },
+        ),
+      );
+      process.env.QURL_MCP_CONFIG = configPath;
+      process.env.QURL_API_KEY = "lv_live_operator";
+      await expect(
+        runWithRequestAuthContext({ qurlApiKey: "unrelated" }, () =>
+          sendEmailMessage(
+            {
+              to: policy === "empty" ? [] : ["victim@blocked.com"],
+              subject: "Subject",
+              text: "Body",
+            },
+            { allowServerApiKeyFallback: false },
+          ),
+        ),
+      ).rejects.toThrow("not authorized for this HTTP credential");
+      expect(nodemailerMocks.createTransport).not.toHaveBeenCalled();
+    },
+  );
+
+  it("tracks two direct-embedding request-scoped principals independently", async () => {
     const configPath = join(tempDir!, "qurl-mcp.config.json");
     writeFileSync(
       configPath,

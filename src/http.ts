@@ -395,6 +395,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
     const session = sessions.get(sessionId);
     if (!session) return;
+    // Admission replacement relies on removal before the first await.
     sessions.delete(sessionId);
     const closePromise = withRequestAuth(
       session.sessionId,
@@ -806,10 +807,14 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         const bearerTokenDigest = digestBearerToken(bearerToken);
         const credentialKey = bearerTokenDigest.toString("hex");
         await sweepExpiredSessions();
+        let oldestIdle: SessionContext | undefined;
         let unvalidatedSessionCount = 0;
         let credentialSessionCount = 0;
         for (const session of sessions.values()) {
-          if (!session.credentialValidated) unvalidatedSessionCount += 1;
+          if (!session.credentialValidated) {
+            unvalidatedSessionCount += 1;
+            if (!oldestIdle && session.activeRequests === 0) oldestIdle = session;
+          }
           if (session.bearerTokenDigest.equals(bearerTokenDigest)) credentialSessionCount += 1;
         }
         const pendingForCredential = pendingInitializationsByCredential.get(credentialKey) ?? 0;
@@ -825,9 +830,6 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
           // Unverified bearers must not reserve every admission slot until TTL.
           // Map insertion order selects the oldest idle, unvalidated session.
           // Bound asynchronous teardown too; never evict active or validated work.
-          const oldestIdle = [...sessions.values()].find(
-            (session) => !session.credentialValidated && session.activeRequests === 0,
-          );
           if (!oldestIdle || closingSessions.size >= config.maxUnvalidatedSessions) {
             rejectJsonRpc(
               res,

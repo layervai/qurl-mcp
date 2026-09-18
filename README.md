@@ -392,6 +392,7 @@ HTTP fields have matching environment overrides:
 | `MCP_HTTP_STATELESS`                    | `stateless`                       |
 | `MCP_MAX_CONCURRENT_REQUESTS`           | `maxConcurrentRequests`           |
 | `MCP_CREDENTIAL_RATE_LIMIT_STORE`       | `credentialRateLimitStore`        |
+| `MCP_SERVE_LAYERV_LEGAL_PAGES` | `serveLayerVLegalPages` (default `false`) |
 | `MCP_RATE_LIMIT_DYNAMODB_TABLE`         | `rateLimitDynamoDbTable`          |
 | `MCP_METRICS_NAMESPACE`                 | `metricsNamespace`                |
 | `MCP_METRICS_SERVICE`                   | `metricsService`                  |
