@@ -84,7 +84,7 @@ export function listQurlsTool(
       // drops the epistemics caveat (overhedging invites defensive
       // over-specification) and pinning is tracked separately.
       "By default only `active` qURLs are returned; pass `status: 'revoked'` to see only revoked qURLs or `'active,revoked'` to see both. " +
-      "Resources do not expire; individual access tokens do. `status: 'expired'` is not a valid resource filter. " +
+      "A past resource expires_at does not change its status; individual access tokens can expire. `status: 'expired'` is not a valid resource filter. " +
       "Sort defaults to `created_at:desc`; override with `sort: 'expires_at:asc'` etc. " +
       "**Returns:** `{ data: QURL[], meta: { has_more: boolean, next_cursor?: string, page_size?: number, request_id?: string } }` — each `data[]` item is the same stable resource shape returned by `get_qurl` minus per-token detail. " +
       'Example: `list_qurls({ status: "active", sort: "expires_at:asc", limit: 10 })` returns the 10 active qURLs expiring soonest.',

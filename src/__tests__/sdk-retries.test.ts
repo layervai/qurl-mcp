@@ -40,11 +40,30 @@ describe("create_qurl SDK retry contract", () => {
     expect(first.method).toBe("POST");
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
     expect(new globalThis.Headers(retry.headers).get("Idempotency-Key")).toBe(key);
+    expect(JSON.parse(String(first.body))).toMatchObject(input);
     expect(retry.body).toBe(first.body);
 
     // A new tools/call is a new mutation, not an SDK transport retry.
     await tool.handler(input);
     expect(fetch).toHaveBeenCalledTimes(3);
-    expect(new globalThis.Headers(fetch.mock.calls[2][1]!.headers).get("Idempotency-Key")).not.toBe(key);
+    expect(new globalThis.Headers(fetch.mock.calls[2][1]!.headers).get("Idempotency-Key")).not.toBe(
+      key,
+    );
+  });
+
+  it("does not retry a mutating 5xx", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ title: "Unavailable", status: 503 }), {
+        status: 503,
+        headers: { "Content-Type": "application/problem+json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const tool = createQurlTool(
+      new QURLClient({ apiKey: "lv_live_test", baseURL: "https://api.example.com" }),
+      { mode: "http" },
+    );
+    await expect(tool.handler({ target_url: "https://example.com/private" })).rejects.toThrow();
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

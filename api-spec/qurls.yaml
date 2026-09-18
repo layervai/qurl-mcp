@@ -3993,8 +3993,8 @@ components:
           enum: [active, revoked]
           readOnly: true
           description: |
-            Resource lifecycle status. Resources are active or revoked; expiration
-            belongs to individual access tokens and does not expire the resource.
+            Current lifecycle status. Computed at response time — resources past
+            their expires_at are reported as "expired" even if not explicitly revoked.
         created_at:
           type: string
           format: date-time

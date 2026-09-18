@@ -84,10 +84,9 @@ export const qurlSchema = z.object({
   tags: z.array(z.string()).optional(),
   expires_at: z.string(),
   created_at: z.string(),
-  // `"expired"` is first-class because api-spec/qurls.yaml's
-  // `QurlData.properties.status` description documents it as a real
-  // lifecycle value (despite the spec's `enum:` line listing only
-  // `[active, revoked]`). `"unknown"` is the fail-soft drift sentinel
+  // Resources are active/revoked; tolerate "expired" from older responses.
+  // The snapshot's expiration prose is stale; its enum is authoritative.
+  // "unknown" is the fail-soft drift sentinel
   // emitted by `.catch()` for any parse failure (unknown enum value,
   // null, wrong type, missing field) — see fail-soft-scope tests in
   // output-schemas.types.test.ts and #101 for operator-visibility.
