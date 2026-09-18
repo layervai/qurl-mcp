@@ -5,6 +5,7 @@
   "allowedHosts": ["127.0.0.1", "localhost"],
   "trustProxyHops": 0,
   "stateless": false,
+  "serveLayerVLegalPages": false,
   "maxConcurrentRequests": 20,
   "credentialRateLimitStore": "memory",
   "maxSessions": 1000,

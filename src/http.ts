@@ -806,23 +806,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         const bearerTokenDigest = digestBearerToken(bearerToken);
         const credentialKey = bearerTokenDigest.toString("hex");
         await sweepExpiredSessions();
-        if (sessions.size + pendingInitializations >= config.maxSessions) {
-          rejectJsonRpc(res, 503, "The MCP session limit has been reached. Try again later.");
-          return;
-        }
         let unvalidatedSessionCount = 0;
         let credentialSessionCount = 0;
         for (const session of sessions.values()) {
           if (!session.credentialValidated) unvalidatedSessionCount += 1;
           if (session.bearerTokenDigest.equals(bearerTokenDigest)) credentialSessionCount += 1;
-        }
-        if (unvalidatedSessionCount + pendingInitializations >= config.maxUnvalidatedSessions) {
-          rejectJsonRpc(
-            res,
-            503,
-            "The pending MCP credential-validation limit has been reached. Try again later.",
-          );
-          return;
         }
         const pendingForCredential = pendingInitializationsByCredential.get(credentialKey) ?? 0;
         if (credentialSessionCount + pendingForCredential >= config.maxSessionsPerCredential) {
@@ -831,6 +819,29 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
             503,
             "The per-credential MCP session limit has been reached. Close an existing session or try again later.",
           );
+          return;
+        }
+        if (unvalidatedSessionCount + pendingInitializations >= config.maxUnvalidatedSessions) {
+          // Unverified bearers must not reserve every admission slot until TTL.
+          // Map insertion order selects the oldest idle, unvalidated session.
+          // Bound asynchronous teardown too; never evict active or validated work.
+          const oldestIdle = [...sessions.values()].find(
+            (session) => !session.credentialValidated && session.activeRequests === 0,
+          );
+          if (!oldestIdle || closingSessions.size >= config.maxUnvalidatedSessions) {
+            rejectJsonRpc(
+              res,
+              503,
+              "The pending MCP credential-validation limit has been reached. Try again later.",
+            );
+            return;
+          }
+          // closeSession removes the entry synchronously before its first await.
+          // Reserve its replacement below without yielding to another initializer.
+          void closeSession(oldestIdle.sessionId);
+        }
+        if (sessions.size + pendingInitializations >= config.maxSessions) {
+          rejectJsonRpc(res, 503, "The MCP session limit has been reached. Try again later.");
           return;
         }
 
@@ -1102,7 +1113,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     });
   }
 
-  const legalDocuments = getLegalDocuments();
+  const legalDocuments = config.serveLayerVLegalPages ? getLegalDocuments() : [];
   for (const document of legalDocuments) {
     const html = renderLegalDocumentHtml(document.path, baseUrl);
     if (!html) continue;

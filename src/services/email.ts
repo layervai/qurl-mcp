@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { hkdf, randomBytes } from "node:crypto";
+import { createHash, hkdf, randomBytes, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
 import { getRequestQurlApiKey } from "../auth/request-context.js";
 import { loadRuntimeConfig, type RuntimeConfig, type SmtpConfig } from "../config.js";
@@ -25,6 +25,17 @@ export interface EmailMessageInput {
 
 export interface EmailMessageOptions {
   allowServerApiKeyFallback?: boolean;
+}
+
+export function isHttpEmailAuthorized(
+  requestApiKey: string | undefined,
+  operatorApiKey: string | undefined,
+): boolean {
+  if (!requestApiKey || !operatorApiKey) return false;
+  return timingSafeEqual(
+    createHash("sha256").update(requestApiKey).digest(),
+    createHash("sha256").update(operatorApiKey).digest(),
+  );
 }
 
 export function hasEmailQuotaTrackingCapacity(
@@ -264,6 +275,15 @@ export async function sendEmailMessage(
     throw new EmailDeliverySetupError(
       "authorization",
       "Request-scoped qURL credentials are unavailable for email quota tracking.",
+    );
+  }
+  if (
+    options.allowServerApiKeyFallback === false &&
+    !isHttpEmailAuthorized(requestApiKey, runtimeConfig.qurlApiKey)
+  ) {
+    throw new EmailDeliverySetupError(
+      "authorization",
+      "SMTP delivery is not authorized for this HTTP credential.",
     );
   }
   // Registered tools reject a missing qURL key before reaching delivery. The
