@@ -16,7 +16,7 @@ concurrency:
 env:
   SPEC_SNAPSHOT: api-spec/qurls.yaml
   # Override this in repo variables to point to a different spec URL
-  SPEC_URL: ${{ vars.QURL_API_SPEC_URL || 'https://api.layerv.ai/v1/openapi.yaml' }}
+  SPEC_URL: ${{ vars.QURL_API_SPEC_URL || 'https://layerv.ai/docs/qurls.yaml' }}
 
 jobs:
   check-drift:
@@ -29,20 +29,15 @@ jobs:
       - name: Fetch current API spec
         id: fetch
         run: |
-          HTTP_CODE=$(curl -sSL --retry 2 --max-time 30 -w '%{http_code}' -o /tmp/current-spec.yaml "$SPEC_URL")
-          if [ "$HTTP_CODE" != "200" ]; then
-            echo "::warning::Failed to fetch API spec (HTTP $HTTP_CODE). Skipping drift check."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          elif ! grep -m1 -q '^openapi' /tmp/current-spec.yaml; then
-            echo "::warning::Fetched content does not appear to be an OpenAPI spec. Skipping drift check."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+          curl --fail --silent --show-error --location --retry 2 --max-time 30 \
+            --output /tmp/current-spec.yaml "$SPEC_URL"
+          if ! grep -m1 -q '^openapi:' /tmp/current-spec.yaml; then
+            echo "::error::Fetched content does not appear to be an OpenAPI spec."
+            exit 1
           fi
 
       - name: Compare with stored snapshot
         id: diff
-        if: steps.fetch.outputs.skip != 'true'
         run: |
           if ! diff -q "$SPEC_SNAPSHOT" /tmp/current-spec.yaml > /dev/null 2>&1; then
             echo "drift=true" >> "$GITHUB_OUTPUT"

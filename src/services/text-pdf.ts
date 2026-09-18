@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { isControlCodePoint } from "../text.js";
 
 const bundledFontPath = fileURLToPath(
-  new URL("../../assets/fonts/NotoSansSC-VF.ttf", import.meta.url),
+  new URL("../../assets/fonts/NotoSansSC-Regular.ttf", import.meta.url),
 );
 export const MAX_TEXT_PDF_CONTENT_CHARACTERS = 100_000;
 export const MAX_TEXT_PDF_CONTENT_BYTES = 256 * 1024;

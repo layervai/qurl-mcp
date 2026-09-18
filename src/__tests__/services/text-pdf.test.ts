@@ -39,6 +39,8 @@ describe("createTextPdfTempFile", () => {
 
     expect(result.fileName).toBe("note.pdf");
     expect(result.sizeBytes).toBeGreaterThan(0);
+    // A compressed font must still subset instead of embedding the full CJK font.
+    expect(result.sizeBytes).toBeLessThan(100_000);
     expect(existsSync(result.filePath)).toBe(true);
 
     await result.cleanup();
@@ -95,7 +97,7 @@ describe("createTextPdfTempFile", () => {
   });
 
   it("ships with a bundled font asset for cross-platform rendering", () => {
-    const bundledFont = resolve(process.cwd(), "assets", "fonts", "NotoSansSC-VF.ttf");
+    const bundledFont = resolve(process.cwd(), "assets", "fonts", "NotoSansSC-Regular.ttf");
     expect(existsSync(bundledFont)).toBe(true);
   });
 
