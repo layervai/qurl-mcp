@@ -23,6 +23,11 @@ try {
     ],
     { stdio: "inherit" },
   );
+  execFileSync(process.execPath, ["--input-type=module", "-"], {
+    cwd: directory,
+    input: 'await import("@layervai/qurl-mcp"); await import("@layervai/qurl-mcp/dist/http.js");',
+    timeout: 15_000,
+  });
   for (const bin of ["qurl-mcp", "qurl-mcp-http"]) {
     const child = spawn(join(directory, "node_modules", ".bin", bin), [], {
       cwd: directory,

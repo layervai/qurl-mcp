@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { formatErrorForLog, installTimestampedConsole, logInfo } from "./logging.js";
@@ -44,5 +44,6 @@ export async function main(): Promise<void> {
 
 const isMainModule =
   typeof process.argv[1] === "string" &&
+  existsSync(process.argv[1]) &&
   realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMainModule) await main();

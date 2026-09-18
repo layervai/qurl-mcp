@@ -2,7 +2,7 @@
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { createReadStream, realpathSync } from "node:fs";
+import { createReadStream, existsSync, realpathSync } from "node:fs";
 import { lstat } from "node:fs/promises";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
@@ -1315,6 +1315,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
 const isMainModule =
   typeof process.argv[1] === "string" &&
+  existsSync(process.argv[1]) &&
   realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 export async function runHttpMain(
   start = async (): Promise<void> => {
