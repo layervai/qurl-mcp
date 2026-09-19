@@ -3,11 +3,10 @@ import { isHttpEmailAuthorized } from "./services/email.js";
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync, realpathSync } from "node:fs";
 import { lstat } from "node:fs/promises";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   clearSensitiveLogValues,
@@ -1358,7 +1357,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
 const isMainModule =
   typeof process.argv[1] === "string" &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 export async function runHttpMain(
   start = async (): Promise<void> => {
     const require = createRequire(import.meta.url);

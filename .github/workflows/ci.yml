@@ -22,6 +22,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Smoke test installed package binaries
+        run: node scripts/smoke-package.mjs
 
   test:
     name: Test

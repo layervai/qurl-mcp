@@ -782,14 +782,12 @@ listener directly when proxy trust is enabled.
 
 ## Third-Party Assets
 
-Text-to-PDF generation bundles the 17.8 MB Noto Sans SC variable font for
-offline multilingual glyph coverage. This intentionally increases the npm
-tarball to roughly 11.4 MB and the unpacked package to roughly 18.4 MB for all
-installs, including deployments that do not enable PDF workflows. Shipping the
-font in-package avoids a runtime network dependency and preserves predictable
-CJK rendering; operators prioritizing a smaller install can remove the asset
-and accept the documented Helvetica fallback with limited CJK coverage. Its SIL
-Open Font License and copyright notice are included in `assets/fonts/OFL.txt`.
+Text-to-PDF generation bundles the regular-weight Noto Sans SC font as TrueType
+(about 10 MB) for offline multilingual glyph coverage. The static font retains
+all characters from the original variable font; PDFKit embeds only the glyphs
+used by each document. No download or additional runtime dependency is needed.
+Its SIL Open Font License and copyright notice are included in
+`assets/fonts/OFL.txt`; conversion details are in `assets/fonts/README.md`.
 
 ## License
 
