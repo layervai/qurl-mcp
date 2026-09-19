@@ -219,14 +219,6 @@ describe("uploadFileDataQurlTool", () => {
           }),
       },
       {
-        description: "a malformed qurl_id",
-        response: () =>
-          Response.json({
-            success: true,
-            links: [{ qurl_id: "not-a-qurl-id", qurl_link: "https://qurl.link/#x" }],
-          }),
-      },
-      {
         description: "a 2xx that reports failure",
         response: () =>
           Response.json({ success: false, links: [{ qurl_id: "q_123456789ab", qurl_link: "x" }] }),

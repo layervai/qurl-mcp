@@ -306,6 +306,20 @@ describe("extendQurlTool", () => {
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
     });
 
+    it("warns when the API clamps the extended link to the resource's expiry", async () => {
+      const getQURL = vi.fn().mockResolvedValue({
+        data: { ...fixture, expires_at: "2026-04-09T00:00:00Z", qurls: [activeLink] },
+      });
+      const updateQurlToken = vi.fn().mockResolvedValue({
+        data: { ...activeLink, expires_at: "2026-04-09T00:00:00Z" },
+      });
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "30d" });
+
+      expect(JSON.parse(result.content[0].text).extend_warning).toContain("stops working then");
+    });
+
     it("treats a link without a status as a candidate", async () => {
       const unlabeled = { ...sampleAccessToken({ qurl_id: "q_aaaaaaaaaaa" }), status: undefined };
       const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });

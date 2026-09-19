@@ -117,7 +117,7 @@ export function extendQurlTool(
       "Use `revoke_qurl_token` or `delete_qurl` when you want to cut off access. " +
       "**Not idempotent:** calling twice with the same `extend_by` extends the link twice; use `update_qurl_token` with `expires_at` when retries must not double-push. " +
       "Requires `qurl:write` and `qurl:read` (it reads the resource to pick the link and to return it); passing `qurl_id` with a resource ID skips the link-selection read. " +
-      "A link cannot outlive its resource: if the resource's own `expires_at` is sooner, raise it with `update_qurl` first. " +
+      "A link cannot outlive its resource: if the resource's own `expires_at` is sooner, raise it with `update_qurl` first; the result then carries `extend_warning`. " +
       "Returns the resource (same shape as `get_qurl`); the extended link's new expiry is in `qurls[].expires_at`, not the resource's own `expires_at`.",
     inputSchema: extendQurlSchema,
     outputSchema: extendQurlOutputSchema,
@@ -151,14 +151,15 @@ export function extendQurlTool(
             "Do not retry. Reading the updated resource failed (the API key may lack qurl:read).",
         );
       }
-      // A link cannot outlive its resource; say so when the ceiling wins.
+      // A link cannot outlive its resource. Warn when the link now ends at or past
+      // the resource's expiry: stored past it, or clamped to it on write.
       const linkExpiry = Date.parse(token.data.expires_at ?? "");
-      const ceiling = Date.parse(result.data.expires_at);
+      const ceiling = Date.parse(result.data.expires_at ?? "");
       const data =
-        linkExpiry > ceiling
+        Number.isFinite(ceiling) && linkExpiry >= ceiling
           ? {
               ...result.data,
-              extend_warning: `Link ${qurlId} closes at the resource's expiry ${result.data.expires_at}, before its own expires_at; raise the resource with update_qurl.`,
+              extend_warning: `Link ${qurlId} expires at ${token.data.expires_at}, but its resource closes at ${result.data.expires_at}, so it stops working then; raise the resource with update_qurl for more time.`,
             }
           : result.data;
       return {

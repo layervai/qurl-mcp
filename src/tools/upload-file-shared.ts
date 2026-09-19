@@ -10,7 +10,7 @@ import { isLoopbackHostname, loadRuntimeConfig, normalizeServiceBaseUrl } from "
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters, isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN, isQurlDisplayId } from "./_shared.js";
-import { parseDurationMs } from "./duration.js";
+import { MAX_EXPIRY_MS, MIN_EXPIRY_MS, parseDurationMs } from "./duration.js";
 import type { UploadMintOptionsInput } from "./upload-mint-options.js";
 
 export type UploadMintOptions = Pick<
@@ -432,14 +432,14 @@ function mintedLinkFrom(
   );
   // Use the first deliverable link rather than strictly index 0: a malformed
   // first entry must not discard a good one, since the file cannot be re-linked.
+  // The qurl_id is informational here (it may belong to the connector's
+  // resource), so an unexpected shape does not make a working link unusable.
   const reasonFor = (entry: Record<string, unknown>) =>
-    typeof entry.qurl_id !== "string" || typeof entry.qurl_link !== "string"
+    typeof entry.qurl_id !== "string" || !entry.qurl_id || typeof entry.qurl_link !== "string"
       ? "no usable link"
-      : !isQurlDisplayId(entry.qurl_id)
-        ? "a malformed qurl_id"
-        : !isDeliverableLink(entry.qurl_link, connectorUploadUrl)
-          ? "a non-HTTPS link"
-          : undefined;
+      : !isDeliverableLink(entry.qurl_link, connectorUploadUrl)
+        ? "a non-HTTPS link"
+        : undefined;
   const index = entries.findIndex((entry) => reasonFor(entry) === undefined);
   if (index === -1) {
     const reasons = [...new Set(entries.map(reasonFor))].join(", ");
@@ -452,7 +452,8 @@ function mintedLinkFrom(
   const others = entries.filter((_, other) => other !== index);
   return {
     link: {
-      qurl_id: chosen.qurl_id as string,
+      // Untrusted: bounded and flattened before it reaches the caller or email.
+      qurl_id: flattenControlCharacters(chosen.qurl_id as string).slice(0, 64),
       qurl_link: chosen.qurl_link as string,
       expires_at: chosen.expires_at,
     },
@@ -462,6 +463,11 @@ function mintedLinkFrom(
 }
 
 /**
+ * Contract: qurl-s3-connector internal/handler/handler.go MintLink (route in
+ * main.go's uploader mode) takes { n, one_time_use, expires_at, session_duration }
+ * and passes one_time_use and session_duration to qurl-service's mint in both
+ * legacy and render-at-mint modes. Drift is tracked with #282.
+ *
  * Mint the recipient link through the connector's `/api/mint_link`, the only
  * link the connector serves for an upload. The upload resource's own target is
  * not a viewable page in the connector's tunnel mode (its per-upload qURL is
@@ -482,7 +488,10 @@ export async function mintUploadedFile(
   let extraQurlIds: string[] = [];
   try {
     const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
-    if (input.expires_in && expiresInMs === undefined) {
+    if (
+      input.expires_in &&
+      (expiresInMs === undefined || expiresInMs < MIN_EXPIRY_MS || expiresInMs > MAX_EXPIRY_MS)
+    ) {
       // Omitting expires_at would silently give the link the connector default.
       throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${input.expires_in}`);
     }
@@ -526,7 +535,15 @@ export async function mintUploadedFile(
     }
     const parsed = parseJsonBody(raw);
     // Any link in a failed response is live and unrevocable here; report it.
-    liveQurlIds = validQurlIds((parsed as { links?: unknown } | undefined)?.links).slice(0, 10);
+    liveQurlIds = (
+      (parsed as { links?: unknown } | undefined)?.links instanceof Array
+        ? ((parsed as { links: unknown[] }).links as unknown[])
+        : []
+    )
+      .map((entry) => (entry as { qurl_id?: unknown } | null)?.qurl_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0)
+      .map((id) => flattenControlCharacters(id).slice(0, 64))
+      .slice(0, 10);
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");

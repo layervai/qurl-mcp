@@ -135,7 +135,12 @@ export const createQurlOutputSchema = z.looseObject({
 
 export const getQurlOutputSchema = qurlSchema;
 export const updateQurlOutputSchema = qurlSchema;
-export const extendQurlOutputSchema = qurlSchema;
+export const extendQurlOutputSchema = qurlSchema.extend({
+  extend_warning: z
+    .string()
+    .optional()
+    .describe("Present when the resource's expiry cuts the extended link short; tell the user"),
+});
 
 /**
  * Paginated list response. When `meta.has_more` is true, pass

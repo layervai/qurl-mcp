@@ -408,7 +408,7 @@ describe("resource SDK boundary", () => {
     },
   );
 
-  it("names a malformed minted qurl_id in the operator log and rejects an unparsable session_duration", async () => {
+  it("returns a deliverable link with an unexpected qurl_id, sanitized, and rejects an unparsable session_duration", async () => {
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.stubGlobal(
       "fetch",
@@ -418,10 +418,17 @@ describe("resource SDK boundary", () => {
     );
     const config = { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" };
     const file = { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 };
-    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
-      code: "upload_mint_failed",
-    });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("links: bad id"));
+    // The qurl_id is informational: a working link is not thrown away over it.
+    const odd = await mintUploadedFile(config, publicKey, file, {});
+    expect(odd).toMatchObject({ qurl_id: "bad id", qurl_link: "https://l" });
+
+    // Overflowing expiry fails before any request, not via RangeError after it.
+    const guarded = mockConnectorFetch();
+    vi.stubGlobal("fetch", guarded);
+    await expect(
+      mintUploadedFile(config, publicKey, file, { expires_in: "999999999d" }),
+    ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    expect(guarded).not.toHaveBeenCalled();
 
     // A usable link after an unusable first one is returned, not discarded.
     vi.stubGlobal(
