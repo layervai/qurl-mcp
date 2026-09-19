@@ -25,9 +25,11 @@ export function parseDurationMs(value: string): number | undefined {
   return total;
 }
 
-// Bounds mirror qurl-service (MinExpirationDuration, MaxCustomerExpiryDuration,
-// MaxSessionDuration) so an out-of-range value fails before the upload stores
-// the file, not at mint time after it.
+// Bounds mirror qurl-service so an out-of-range value fails before the upload
+// stores the file, not at mint time after it. Keep in sync with
+// internal/api/validation/constants.go (MinExpirationDuration,
+// MaxSessionDuration) and internal/domain/qurl.go (MaxCustomerExpiryDuration);
+// the grammar mirrors internal/domain/duration.go (ParseDuration).
 const durationSchema = (minMs: number, maxMs: number, range: string) =>
   z
     .string()
@@ -65,7 +67,9 @@ export const uploadMintOptionsShape = {
     ),
   expires_in: durationSchema(60_000, 30 * 86_400_000, "1m to 30d")
     .optional()
-    .describe('Link lifetime (e.g., "1h", "24h", "7d"; max 30d)'),
+    .describe(
+      'Link lifetime (e.g., "1h", "24h", "7d"; max 30d), converted to an absolute expiry using this server\'s clock',
+    ),
   one_time_use: z
     .boolean()
     .optional()

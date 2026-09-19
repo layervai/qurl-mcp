@@ -4,7 +4,6 @@ import {
   getRequestMaxUploadFileDataBytes,
   getRequestQurlApiKey,
   getRequestQurlConnectorUrl,
-  markRequestCredentialValidated,
 } from "../auth/request-context.js";
 import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../client.js";
 import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
@@ -247,7 +246,7 @@ function throwConnectorError(response: Response, parsed: unknown, requestId?: st
   throw new QURLAPIError(
     response.status,
     code,
-    safeDetail || `Connector upload failed with HTTP ${response.status}`,
+    safeDetail || `Connector request failed with HTTP ${response.status}`,
     type,
     instance,
     requestId,
@@ -419,10 +418,6 @@ export async function mintUploadedFile(
     if (typeof link?.qurl_id !== "string" || typeof link.qurl_link !== "string") {
       throw new QURLAPIError(0, "unexpected_response", "Connector mint returned no link.");
     }
-    // The connector authorizes the upload resource with this same bearer against
-    // the qURL API before minting, so an upload-only HTTP session is validated
-    // as if it had called the API directly (same operator-configured trust boundary).
-    markRequestCredentialValidated();
   } catch (error) {
     // The connector API exposes upload but no delete endpoint. Keep the mint
     // error primary and log the orphan resource for operator cleanup.

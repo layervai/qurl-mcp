@@ -557,7 +557,7 @@ describe("uploadFileDataQurlTool", () => {
       ).rejects.toMatchObject({
         statusCode: 502,
         code: "connector_upload_failed",
-        message: "Connector upload failed with HTTP 502",
+        message: "Connector request failed with HTTP 502",
       });
     });
   });

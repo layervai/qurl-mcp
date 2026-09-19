@@ -35,13 +35,20 @@ async function linkToExtend(
   const named =
     input.qurl_id ?? (input.resource_id.startsWith("q_") ? input.resource_id : undefined);
   if (named) return { resourceId: resource.resource_id, qurlId: named };
-  const active = (resource.qurls ?? []).filter((link) => link.status === "active");
+  if (!resource.qurls) {
+    return { error: "The resource read did not include its links; pass qurl_id to choose one." };
+  }
+  const active = resource.qurls.filter((link) => link.status === "active");
   if (active.length === 1) return { resourceId: resource.resource_id, qurlId: active[0].qurl_id };
+  if (active.length === 0) {
+    return {
+      error: "This resource has no active link to extend. Use mint_link to issue a new one.",
+    };
+  }
+  const shown = active.slice(0, 10).map((link) => link.qurl_id);
+  const more = active.length > shown.length ? ` and ${active.length - shown.length} more` : "";
   return {
-    error:
-      active.length === 0
-        ? "This resource has no active link to extend. Use mint_link to issue a new one."
-        : `This resource has ${active.length} active links (${active.map((link) => link.qurl_id).join(", ")}); pass qurl_id to choose which one to extend.`,
+    error: `This resource has ${active.length} active links (${shown.join(", ")}${more}); pass qurl_id to choose which one to extend.`,
   };
 }
 

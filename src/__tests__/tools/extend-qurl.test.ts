@@ -133,6 +133,35 @@ describe("extendQurlTool", () => {
       },
     );
 
+    it("does not claim the resource has no links when the read omitted them", async () => {
+      const updateQurlToken = vi.fn();
+      const getQURL = vi.fn().mockResolvedValue({ data: { ...fixture, qurls: undefined } });
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(result).toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining("did not include its links") }],
+      });
+      expect(updateQurlToken).not.toHaveBeenCalled();
+    });
+
+    it("caps the link list in the ambiguity message", async () => {
+      const links = Array.from({ length: 12 }, (_, index) =>
+        sampleAccessToken({
+          qurl_id: `q_${index.toString(16).padStart(11, "0")}`,
+          status: "active",
+        }),
+      );
+      const tool = extendQurlTool(makeMockClient({ getQURL: withLinks(...links) }));
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(JSON.stringify(result)).toContain("12 active links");
+      expect(JSON.stringify(result)).toContain("and 2 more");
+    });
+
     it("reports a completed extension without inviting a retry when the resource read fails", async () => {
       const updateQurlToken = vi.fn().mockResolvedValue({
         data: { ...activeLink, expires_at: "2026-09-20T00:00:00Z" },
