@@ -204,11 +204,16 @@ describe("resource SDK boundary", () => {
         { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
         options,
       ),
-    ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    ).rejects.toSatisfy(
+      (error: { code?: string; message?: string }) =>
+        error.code === "upload_mint_failed" &&
+        // Nothing reached the connector, so no link can exist.
+        !error.message?.includes("may already have been minted"),
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("accepts a JSON mint body without Content-Type and reports the requested expiry", async () => {
+  it("accepts a JSON mint body without Content-Type and reports only a confirmed expiry", async () => {
     vi.stubGlobal(
       "fetch",
       mockConnectorFetch(
@@ -225,6 +230,7 @@ describe("resource SDK boundary", () => {
           ),
       ),
     );
+    const fetchMock = vi.mocked(globalThis.fetch);
     const before = Date.now();
     const result = await mintUploadedFile(
       { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
@@ -232,9 +238,14 @@ describe("resource SDK boundary", () => {
       { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
       { expires_in: "2h" },
     );
-    const lifetime = Date.parse(result.expires_at!) - before;
+    // The requested expiry is exact on the wire...
+    const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { expires_at: string };
+    const lifetime = Date.parse(sent.expires_at) - before;
     expect(lifetime).toBeGreaterThanOrEqual(7_200_000);
     expect(lifetime).toBeLessThan(7_200_000 + 60_000);
+    // ...but an unconfirmed expiry is never reported as fact.
+    expect(result.qurl_link).toBe("https://l");
+    expect(result.expires_at).toBeUndefined();
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {

@@ -17,8 +17,8 @@ export const extendQurlSchema = z.object({
   extend_by: z
     .string()
     .min(1)
-    .refine((value) => parseDurationMs(value) !== undefined, {
-      message: "Use a duration like '30m', '24h', '7d', or '1w'",
+    .refine((value) => (parseDurationMs(value) ?? 0) > 0, {
+      message: "Use a positive duration like '30m', '24h', '7d', or '1w'",
     })
     .describe('Duration to extend by (e.g., "24h", "7d")'),
   qurl_id: qurlDisplayIdSchema("extend")

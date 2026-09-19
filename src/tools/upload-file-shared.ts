@@ -75,7 +75,7 @@ export function getConnectorConfig(allowServerApiKeyFallback = false): Connector
   // or read a potentially large upload payload, including the mint route the
   // stored file will need.
   const uploadUrl = getConnectorUploadUrl(connectorURL);
-  connectorMintUrl(uploadUrl, "preflight");
+  assertConnectorMintable(uploadUrl);
 
   return { apiKey, uploadUrl };
 }
@@ -354,11 +354,19 @@ async function processConnectorResponse(response: Response): Promise<ConnectorUp
 
 // getConnectorUploadUrl guarantees the /api/upload suffix; the mint route is
 // its sibling. Fail loudly rather than POST a mint body at the upload route.
-function connectorMintUrl(uploadUrl: string, resourceId: string): string {
-  const url = new URL(uploadUrl);
-  if (!url.pathname.endsWith("/api/upload")) {
-    throw new Error("Connector upload URL must end with /api/upload");
+function assertConnectorMintable(uploadUrl: string): void {
+  if (!new URL(uploadUrl).pathname.endsWith("/api/upload")) {
+    throw new QURLAPIError(
+      0,
+      "invalid_connector_url",
+      "Connector upload URL must end with /api/upload.",
+    );
   }
+}
+
+function connectorMintUrl(uploadUrl: string, resourceId: string): string {
+  assertConnectorMintable(uploadUrl);
+  const url = new URL(uploadUrl);
   url.pathname = `${url.pathname.slice(0, -"/api/upload".length)}/api/mint_link/${encodeURIComponent(resourceId)}`;
   return url.toString();
 }
@@ -388,6 +396,7 @@ export async function mintUploadedFile(
 ) {
   let link: ConnectorMintedLink | undefined;
   let requestedExpiresAt: string | undefined;
+  let requestSent = false;
   try {
     const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
     if (input.expires_in && expiresInMs === undefined) {
@@ -404,7 +413,9 @@ export async function mintUploadedFile(
       ...(requestedExpiresAt ? { expires_at: requestedExpiresAt } : {}),
       ...(input.session_duration ? { session_duration: input.session_duration } : {}),
     };
-    const response = await fetchConnector(connectorMintUrl(connectorConfig.uploadUrl, resourceId), {
+    const mintUrl = connectorMintUrl(connectorConfig.uploadUrl, resourceId);
+    requestSent = true;
+    const response = await fetchConnector(mintUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${connectorConfig.apiKey}`,
@@ -462,8 +473,10 @@ export async function mintUploadedFile(
       "upload_mint_failed",
       `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
         "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
-        "retrying uploads another copy. " +
-        "If the request failed after reaching the connector, a link may already have been minted; check the connector before sharing a replacement.",
+        "retrying uploads another copy." +
+        (requestSent
+          ? " If the request failed after reaching the connector, a link may already have been minted; check the connector before sharing a replacement."
+          : ""),
     );
   }
 
@@ -471,7 +484,9 @@ export async function mintUploadedFile(
     resource_id: resourceId,
     qurl_id: link.qurl_id,
     qurl_link: link.qurl_link,
-    expires_at: typeof link.expires_at === "string" ? link.expires_at : requestedExpiresAt,
+    // Only a connector-confirmed expiry is reported; the requested one may have
+    // been clamped, and it reaches recipients in email.
+    expires_at: typeof link.expires_at === "string" ? link.expires_at : undefined,
     file_name: file.name,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,
@@ -486,9 +501,7 @@ function connectorTransportError(error: unknown): QURLAPIError {
   return new QURLAPIError(
     0,
     code,
-    code === "connector_timeout"
-      ? "Connector upload timed out."
-      : "Connector upload request failed.",
+    code === "connector_timeout" ? "Connector request timed out." : "Connector request failed.",
   );
 }
 

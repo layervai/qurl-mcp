@@ -199,6 +199,10 @@ describe("uploadFileDataQurlTool", () => {
         response: () => Response.json({ success: true, links: [] }),
       },
       {
+        description: "a link without its URL",
+        response: () => Response.json({ success: true, links: [{ qurl_id: "q_123456789ab" }] }),
+      },
+      {
         description: "a 2xx that reports failure",
         response: () =>
           Response.json({ success: false, links: [{ qurl_id: "q_123456789ab", qurl_link: "x" }] }),

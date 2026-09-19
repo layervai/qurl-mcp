@@ -179,9 +179,11 @@ describe("extendQurlTool", () => {
     });
 
     it("rejects an extend_by the duration grammar does not accept", () => {
-      expect(
-        extendQurlSchema.safeParse({ resource_id: validResourceId, extend_by: "3 hours" }).success,
-      ).toBe(false);
+      for (const extend_by of ["3 hours", "0s"]) {
+        expect(
+          extendQurlSchema.safeParse({ resource_id: validResourceId, extend_by }).success,
+        ).toBe(false);
+      }
     });
 
     it("caps the link list in the ambiguity message", async () => {
