@@ -107,6 +107,8 @@ describe("uploadFileQurlTool", () => {
     });
 
     it("uploads the file, mints the link through the connector, and returns a structured result", async () => {
+      // The fixture confirms a different expiry than requested: the clamp log path.
+      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
       const fetchMock = mockConnectorFetch();
       globalThis.fetch = fetchMock;
       const mintLink = vi.fn();
@@ -146,6 +148,7 @@ describe("uploadFileQurlTool", () => {
         size_bytes: expect.any(Number),
       });
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     });
 
     it("emails the generated local-file link when requested", async () => {

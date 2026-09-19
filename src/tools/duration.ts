@@ -42,6 +42,7 @@ export const durationSchema = (minMs: number, maxMs: number, range: string) =>
   z
     .string()
     .min(1)
+    .max(32)
     .refine((value) => parseDurationMs(value) !== undefined, {
       message: "Use a duration like '30m', '24h', or '7d'",
       abort: true,

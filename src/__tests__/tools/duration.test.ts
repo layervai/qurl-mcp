@@ -39,6 +39,9 @@ describe("durationSchema", () => {
   it.each(["59s", "31d", "0s"])("rejects %s outside 1m-30d", (value) => {
     expect(expiry.safeParse(value).success).toBe(false);
   });
+  it("rejects an oversized input before parsing it", () => {
+    expect(expiry.safeParse("1h".repeat(100)).success).toBe(false);
+  });
   it("tells a syntax error apart from an out-of-range value", () => {
     expect(expiry.safeParse("banana").error?.issues.map((issue) => issue.message)).toEqual([
       "Use a duration like '30m', '24h', or '7d'",

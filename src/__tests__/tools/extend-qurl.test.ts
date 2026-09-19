@@ -97,7 +97,10 @@ describe("extendQurlTool", () => {
       { description: "a q_ display ID as resource_id", input: { resource_id: "q_ccccccccccc" } },
     ])("extends the link named by $description", async ({ input }) => {
       const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });
-      const getQURL = withLinks(activeLink);
+      const getQURL = withLinks(
+        activeLink,
+        sampleAccessToken({ qurl_id: "q_ccccccccccc", status: "active" }),
+      );
       const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
       const request = { resource_id: extendResourceId, extend_by: "1h", ...input };
 
@@ -231,6 +234,18 @@ describe("extendQurlTool", () => {
         tool.handler({ resource_id: extendResourceId, qurl_id: "q_ccccccccccc", extend_by: "1h" }),
       ).rejects.toMatchObject({ statusCode: 409, code: "qurl_not_active" });
       expect(getQURL).not.toHaveBeenCalled();
+    });
+
+    it("reports a q_ link that the resource read does not list", async () => {
+      const updateQurlToken = vi.fn();
+      const tool = extendQurlTool(
+        makeMockClient({ getQURL: withLinks(activeLink), updateQurlToken }),
+      );
+
+      const result = await tool.handler({ resource_id: "q_fffffffffff", extend_by: "1h" });
+
+      expect(JSON.stringify(result)).toContain("is not on resource");
+      expect(updateQurlToken).not.toHaveBeenCalled();
     });
 
     it("refuses a q_ link that is no longer active", async () => {

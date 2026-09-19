@@ -61,7 +61,11 @@ async function linkToExtend(
   }
   const named = resourceIsLink ? input.resource_id : undefined;
   if (named) {
-    const status = resource.qurls?.find((link) => link.qurl_id === named)?.status;
+    const link = resource.qurls?.find((candidate) => candidate.qurl_id === named);
+    if (resource.qurls && !link) {
+      return { error: `Link ${named} is not on resource ${resource.resource_id}.` };
+    }
+    const status = link?.status;
     if (status && status !== "active") {
       return {
         error: `Link ${named} is ${status}, so it cannot be extended. Use mint_link to issue a new one.`,

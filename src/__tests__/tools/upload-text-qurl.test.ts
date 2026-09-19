@@ -106,6 +106,8 @@ describe("uploadTextQurlTool", () => {
 
   describe("handler", () => {
     it("renders a PDF, uploads it, mints the link through the connector, and returns a structured result", async () => {
+      // The fixture confirms a different expiry than requested: the clamp log path.
+      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
       const fetchMock = mockConnectorFetch();
       globalThis.fetch = fetchMock;
       const tool = uploadTextQurlTool(makeMockClient());
@@ -158,6 +160,7 @@ describe("uploadTextQurlTool", () => {
       });
       expect(cleanupSpy).toHaveBeenCalledOnce();
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     });
 
     it("defaults file_name to content.pdf", async () => {
