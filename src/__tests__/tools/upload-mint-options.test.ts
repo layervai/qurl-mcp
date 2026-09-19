@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { parseDurationMs, uploadMintOptionsShape } from "../../tools/upload-mint-options.js";
+import { parseDurationMs } from "../../tools/duration.js";
+import { uploadMintOptionsShape } from "../../tools/upload-mint-options.js";
 
 const uploadMintOptionsSchema = z.object(uploadMintOptionsShape).strict();
 

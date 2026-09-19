@@ -211,6 +211,14 @@ describe("uploadFileDataQurlTool", () => {
           }),
       },
       {
+        description: "a plain-HTTP link",
+        response: () =>
+          Response.json({
+            success: true,
+            links: [{ qurl_id: "q_123456789ab", qurl_link: "http://qurl.link/#x" }],
+          }),
+      },
+      {
         description: "a malformed qurl_id",
         response: () =>
           Response.json({
@@ -248,6 +256,25 @@ describe("uploadFileDataQurlTool", () => {
         expect(log).toHaveBeenCalledWith(expect.stringContaining("r_orphan12345"));
       },
     );
+
+    it("never attempts a mint when the upload itself fails", async () => {
+      const fetchMock = mockConnectorFetch({ resource_id: "r_upload12345" });
+      fetchMock.mockImplementationOnce(async () =>
+        Response.json({ error: { code: "connector_upload_failed" } }, { status: 500 }),
+      );
+      globalThis.fetch = fetchMock;
+      const tool = uploadFileDataQurlTool(makeMockClient());
+
+      await expect(
+        tool.handler({
+          file_base64: fixtureBase64,
+          file_name: "sample.pdf",
+          content_type: "application/pdf",
+        }),
+      ).rejects.toMatchObject({ code: "connector_upload_failed" });
+      expect(fetchMock).toHaveBeenCalledOnce();
+      expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(/\/api\/upload$/);
+    });
 
     it("accepts data URLs in file_base64", async () => {
       globalThis.fetch = mockConnectorFetch();

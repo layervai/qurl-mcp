@@ -119,15 +119,17 @@ describe("createServer", () => {
         vi.stubGlobal("fetch", fetchMock);
         const { client } = await connectServer();
 
-        const rejected = await client.callTool({
-          name,
-          arguments: { ...args, access_policy: { geo_allowlist: ["US"] } },
-        });
+        for (const [field, value] of [
+          ["access_policy", { geo_allowlist: ["US"] }],
+          ["max_sessions", 3],
+        ] as const) {
+          const rejected = await client.callTool({ name, arguments: { ...args, [field]: value } });
 
-        expect(rejected.isError).toBe(true);
-        expect(JSON.stringify(rejected.content)).toContain(
-          "access_policy is not supported for uploaded files",
-        );
+          expect(rejected.isError).toBe(true);
+          expect(JSON.stringify(rejected.content)).toContain(
+            `${field} is not supported for uploaded files`,
+          );
+        }
         expect(fetchMock).not.toHaveBeenCalled();
 
         // Control: the same arguments without the restriction do upload.

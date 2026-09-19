@@ -171,7 +171,11 @@ export async function uploadGeneratedFileAndMint(
   return uploadLocalFileAndMint({ ...input, file_path: canonicalSourcePath }, connectorConfig);
 }
 
-export function uploadFileQurlTool(_client: IQURLClient, runtime: ToolRuntimeOptions) {
+export function uploadFileQurlTool(
+  // Unused since links are minted by the connector; kept for the shared tool factory signature.
+  _client: IQURLClient,
+  runtime: ToolRuntimeOptions,
+) {
   return {
     name: "upload_file_qurl",
     title: "Upload File qURL",

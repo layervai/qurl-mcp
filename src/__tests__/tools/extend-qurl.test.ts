@@ -106,6 +106,10 @@ describe("extendQurlTool", () => {
       expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_ccccccccccc", {
         extend_by: "1h",
       });
+      // An explicit qurl_id with a resource ID needs no read to pick the link;
+      // the only read is the one that builds the response.
+      const reads = "qurl_id" in input ? 1 : 2;
+      expect(getQURL).toHaveBeenCalledTimes(reads);
     });
 
     it.each([

@@ -10,7 +10,8 @@ import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters, isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN, isQurlDisplayId } from "./_shared.js";
-import { parseDurationMs, type UploadMintOptionsInput } from "./upload-mint-options.js";
+import { parseDurationMs } from "./duration.js";
+import type { UploadMintOptionsInput } from "./upload-mint-options.js";
 
 export type UploadMintOptions = Pick<
   UploadMintOptionsInput,
@@ -207,7 +208,10 @@ function parseJsonBody(raw: string): unknown {
   }
 }
 
-function extractConnectorError(parsed: unknown): {
+function extractConnectorError(
+  parsed: unknown,
+  defaultCode: string,
+): {
   code: string;
   detail?: string;
   type?: string;
@@ -224,8 +228,7 @@ function extractConnectorError(parsed: unknown): {
     return typeof value === "string" ? value : undefined;
   };
   return {
-    code:
-      stringField(nestedError, "code") ?? stringField(body, "code") ?? "connector_upload_failed",
+    code: stringField(nestedError, "code") ?? stringField(body, "code") ?? defaultCode,
     detail:
       stringField(nestedError, "detail") ??
       stringField(nestedError, "message") ??
@@ -239,8 +242,13 @@ function extractConnectorError(parsed: unknown): {
 /**
  * Throw a QURLAPIError from a failed connector response.
  */
-function throwConnectorError(response: Response, parsed: unknown, requestId?: string): never {
-  const { code, detail, type, instance } = extractConnectorError(parsed);
+function throwConnectorError(
+  response: Response,
+  parsed: unknown,
+  requestId?: string,
+  defaultCode = "connector_upload_failed",
+): never {
+  const { code, detail, type, instance } = extractConnectorError(parsed, defaultCode);
   const safeDetail = detail
     ? flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024)
     : undefined;
@@ -371,9 +379,10 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
   return url.toString();
 }
 
-function isHttpUrl(value: string): boolean {
+function isHttpsUrl(value: string): boolean {
   try {
-    return ["http:", "https:"].includes(new URL(value).protocol);
+    // The link carries an access token and may be emailed, so never plain HTTP.
+    return new URL(value).protocol === "https:";
   } catch {
     return false;
   }
@@ -447,7 +456,7 @@ export async function mintUploadedFile(
       );
     }
     const parsed = parseJsonBody(raw);
-    if (!response.ok) throwConnectorError(response, parsed, requestId);
+    if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       throw new QURLAPIError(
         0,
@@ -463,7 +472,7 @@ export async function mintUploadedFile(
       typeof link?.qurl_id !== "string" ||
       !isQurlDisplayId(link.qurl_id) ||
       typeof link.qurl_link !== "string" ||
-      !isHttpUrl(link.qurl_link)
+      !isHttpsUrl(link.qurl_link)
     ) {
       throw new QURLAPIError(
         0,
@@ -493,13 +502,25 @@ export async function mintUploadedFile(
     );
   }
 
+  const confirmedExpiresAt = typeof link.expires_at === "string" ? link.expires_at : undefined;
+  if (
+    requestedExpiresAt &&
+    confirmedExpiresAt &&
+    Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > 60_000
+  ) {
+    // A clamp or host clock skew changed the link's lifetime; make it visible.
+    console.error(
+      `Connector link ${link.qurl_id} expires at ${confirmedExpiresAt}, not the requested ${requestedExpiresAt}`,
+    );
+  }
+
   return {
     resource_id: resourceId,
     qurl_id: link.qurl_id,
     qurl_link: link.qurl_link,
     // Only a connector-confirmed expiry is reported; the requested one may have
     // been clamped, and it reaches recipients in email.
-    expires_at: typeof link.expires_at === "string" ? link.expires_at : undefined,
+    expires_at: confirmedExpiresAt,
     file_name: file.name,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,

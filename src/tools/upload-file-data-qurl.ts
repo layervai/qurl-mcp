@@ -199,7 +199,11 @@ function decodeBase64File(input: string, maxBytes: number, contentType: string):
   return fileData;
 }
 
-export function uploadFileDataQurlTool(_client: IQURLClient, runtime: ToolRuntimeOptions) {
+export function uploadFileDataQurlTool(
+  // Unused since links are minted by the connector; kept for the shared tool factory signature.
+  _client: IQURLClient,
+  runtime: ToolRuntimeOptions,
+) {
   const inputSchema = createUploadFileDataQurlSchema(
     runtime.maxUploadFileDataBytes === undefined
       ? MAX_UPLOAD_FILE_BASE64_CHARACTERS

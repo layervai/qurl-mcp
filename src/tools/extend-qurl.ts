@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { QURLAPIError, type IQURLClient } from "../client.js";
 import { formatErrorForLog } from "../logging.js";
-import { parseDurationMs } from "./upload-mint-options.js";
+import { durationSchema, MAX_EXPIRY_MS, MIN_EXPIRY_MS } from "./duration.js";
 import {
   isQurlDisplayId,
   qurlDisplayIdSchema,
@@ -14,13 +14,9 @@ import { extendQurlOutputSchema } from "./output-schemas.js";
 
 export const extendQurlSchema = z.object({
   resource_id: resourceIdSchema("extend"),
-  extend_by: z
-    .string()
-    .min(1)
-    .refine((value) => (parseDurationMs(value) ?? 0) > 0, {
-      message: "Use a positive duration like '30m', '24h', '7d', or '1w'",
-    })
-    .describe('Duration to extend by (e.g., "24h", "7d")'),
+  extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d").describe(
+    'Duration to extend by (e.g., "24h", "7d")',
+  ),
   qurl_id: qurlDisplayIdSchema("extend")
     .optional()
     .describe(

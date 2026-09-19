@@ -58,7 +58,11 @@ export const uploadTextQurlSchema = z
   })
   .extend(uploadMintOptionsShape);
 
-export function uploadTextQurlTool(_client: IQURLClient, runtime: ToolRuntimeOptions) {
+export function uploadTextQurlTool(
+  // Unused since links are minted by the connector; kept for the shared tool factory signature.
+  _client: IQURLClient,
+  runtime: ToolRuntimeOptions,
+) {
   return {
     name: "upload_text_qurl",
     title: "Upload Text qURL",
