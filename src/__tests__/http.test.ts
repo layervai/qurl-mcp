@@ -301,7 +301,7 @@ describe("HTTP MCP server", () => {
   });
 
   it("requires explicit initialization for an injected credential store", async () => {
-    const injectedRuntime = createHttpRuntime(testConfig, {
+    const injectedRuntime = createHttpRuntime({ ...testConfig, port: 0 }, {
       version: "0.0.0-test",
       credentialRateLimitStore: new MemoryCredentialRateLimitStore(),
     });
