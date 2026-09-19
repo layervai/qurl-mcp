@@ -38,10 +38,21 @@ describe("HTTP listener config", () => {
         unvalidatedSessionTtlMs: 60_000,
         mcpRateLimitPerMinute: 120,
         stateless: false,
+        serveLayerVLegalPages: false,
         maxConcurrentRequests: 20,
         credentialRateLimitStore: "memory",
       }),
     );
+  });
+
+  it("loads and validates explicit LayerV legal-page opt-in", () => {
+    const configPath = join(tempDir, "http.json");
+    writeFileSync(configPath, JSON.stringify({ serveLayerVLegalPages: true }));
+    expect(loadHttpServerConfig(configPath).serveLayerVLegalPages).toBe(true);
+    process.env.MCP_SERVE_LAYERV_LEGAL_PAGES = "false";
+    expect(loadHttpServerConfig(configPath).serveLayerVLegalPages).toBe(false);
+    process.env.MCP_SERVE_LAYERV_LEGAL_PAGES = "invalid";
+    expect(() => loadHttpServerConfig(configPath)).toThrow("MCP_SERVE_LAYERV_LEGAL_PAGES");
   });
 
   it("requires Host validation for non-loopback listeners", () => {

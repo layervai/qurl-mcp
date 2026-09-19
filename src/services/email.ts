@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { hkdf, randomBytes } from "node:crypto";
+import { hkdf, randomBytes, timingSafeEqual } from "node:crypto";
 import nodemailer from "nodemailer";
 import { getRequestQurlApiKey } from "../auth/request-context.js";
 import { loadRuntimeConfig, type RuntimeConfig, type SmtpConfig } from "../config.js";
@@ -25,6 +25,16 @@ export interface EmailMessageInput {
 
 export interface EmailMessageOptions {
   allowServerApiKeyFallback?: boolean;
+}
+
+export function isHttpEmailAuthorized(
+  requestApiKey: string | undefined,
+  operatorApiKey: string | undefined,
+): boolean {
+  if (!requestApiKey || !operatorApiKey) return false;
+  const supplied = Buffer.from(requestApiKey);
+  const expected = Buffer.from(operatorApiKey);
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
 export function hasEmailQuotaTrackingCapacity(
@@ -138,9 +148,26 @@ export async function sendEmailMessage(
   input: EmailMessageInput,
   options: EmailMessageOptions = {},
 ): Promise<EmailDeliveryResult> {
+  const runtimeConfig = loadEmailRuntimeConfig();
+  const smtp = runtimeConfig.smtp;
+  const requestApiKey = getRequestQurlApiKey();
+  if (options.allowServerApiKeyFallback === false && !requestApiKey) {
+    throw new EmailDeliverySetupError(
+      "authorization",
+      "Request-scoped qURL credentials are unavailable for email quota tracking.",
+    );
+  }
+  if (
+    options.allowServerApiKeyFallback === false &&
+    !isHttpEmailAuthorized(requestApiKey, runtimeConfig.qurlApiKey)
+  ) {
+    throw new EmailDeliverySetupError(
+      "authorization",
+      "SMTP delivery is not authorized for this HTTP credential.",
+    );
+  }
   const recipients = uniqueRecipients(input.to);
   if (recipients.length === 0) {
-    const smtp = loadEmailRuntimeConfig().smtp;
     return {
       attempted: false,
       enabled: smtp !== undefined,
@@ -169,8 +196,6 @@ export async function sendEmailMessage(
     throw new EmailDeliverySetupError("input", "Email text exceeds the 10,000 character limit.");
   }
 
-  const runtimeConfig = loadEmailRuntimeConfig();
-  const smtp = runtimeConfig.smtp;
   if (!smtp) {
     return {
       attempted: false,
@@ -259,13 +284,6 @@ export async function sendEmailMessage(
     };
   }
 
-  const requestApiKey = getRequestQurlApiKey();
-  if (options.allowServerApiKeyFallback === false && !requestApiKey) {
-    throw new EmailDeliverySetupError(
-      "authorization",
-      "Request-scoped qURL credentials are unavailable for email quota tracking.",
-    );
-  }
   // Registered tools reject a missing qURL key before reaching delivery. The
   // fallback bucket exists only for direct service embedding/tests, where no
   // credential principal is available and sharing one conservative quota is

@@ -16,7 +16,7 @@ It currently supports:
 - resolving access tokens
 - managing qURL tokens and sessions
 - uploading text or file content and generating qURLs
-- serving public legal pages
+- optionally serving LayerV public legal pages
 - serving a configurable MP4 video playback page
 
 ## Runtime Modes
@@ -326,6 +326,13 @@ delivery after the prior window expires.
 As with any fixed window, traffic immediately before and after a boundary can
 total nearly twice the configured hourly value; use a provider-side sliding or
 rolling limit when that boundary burst must be prevented across replicas.
+
+HTTP SMTP delivery is restricted to the operator credential configured in
+`QURL_API_KEY`. A different customer's
+valid qURL key does not authorize use of the operator's SMTP account. Without
+that explicit operator key, HTTP email delivery is disabled. Stdio retains its
+local operator trust model. Recipient allowlists and quotas apply in both modes.
+
 Generated qURL links are included in the plain-text email body. Restrict
 recipients with the SMTP allowlists and configure transport encryption at the
 SMTP server/provider when link confidentiality matters.
@@ -397,6 +404,7 @@ HTTP fields have matching environment overrides:
 | `MCP_HTTP_STATELESS`                    | `stateless`                       |
 | `MCP_MAX_CONCURRENT_REQUESTS`           | `maxConcurrentRequests`           |
 | `MCP_CREDENTIAL_RATE_LIMIT_STORE`       | `credentialRateLimitStore`        |
+| `MCP_SERVE_LAYERV_LEGAL_PAGES` | `serveLayerVLegalPages` (default `false`) |
 | `MCP_RATE_LIMIT_DYNAMODB_TABLE`         | `rateLimitDynamoDbTable`          |
 | `MCP_METRICS_NAMESPACE`                 | `metricsNamespace`                |
 | `MCP_METRICS_SERVICE`                   | `metricsService`                  |
@@ -485,6 +493,14 @@ The first downstream qURL operation must therefore complete before that
 deadline; an unusually slow first API call may be interrupted and the client
 must re-initialize. This fail-closed behavior prevents an invalid credential
 from extending its pending slot with a deliberately long-running request.
+
+At the unvalidated-session cap, a new initialization replaces the oldest idle
+unvalidated session, so junk handshakes cannot reserve every slot for the full
+validation TTL. Validated sessions and active requests are never evicted;
+pending initializations and asynchronous teardown remain bounded. Sustained
+traffic can still churn unvalidated sessions, so public deployments should use
+stateless mode and edge admission controls.
+
 Accepting a non-empty bearer during MCP initialization is intentional: it keeps
 protocol introspection available before the first qURL operation, while the
 global session cap, per-credential session cap, pending-session cap, absolute
@@ -682,9 +698,13 @@ Start with:
 - `/healthz`
 - `/mcp`
 
+LayerV legal documents are disabled by default. Only LayerV-operated services
+should set `MCP_SERVE_LAYERV_LEGAL_PAGES=true` (or `serveLayerVLegalPages: true`
+in the HTTP config). Self-hosted operators must publish their own policies.
+
 ### Public Page Checks
 
-Also verify the legal pages and, when configured, the video page:
+When enabled, verify the legal pages and configured video page:
 
 - `/legal/privacy`
 - `/legal/terms`
@@ -713,16 +733,19 @@ docker run -i -e QURL_API_KEY=lv_live_xxx qurl-mcp
 
 If you deploy with Docker, make sure the container can still access the correct config files, or override the config file paths with environment variables.
 
-Run HTTP mode locally in Docker:
+Run the HTTP listener locally in Docker:
 
 The image defaults to the stdio entry point and the HTTP server defaults to
 container-local loopback. HTTP deployments must override the command and bind
-to `0.0.0.0` with an explicit Host allowlist:
+to `0.0.0.0` with an explicit Host allowlist and HTTPS public origin. This
+example publishes only to host loopback; put a TLS reverse proxy in front of
+it for the configured `https://mcp.example.com` origin:
 
 ```bash
-docker run --rm -p 3000:3000 \
+docker run --rm -p 127.0.0.1:3000:3000 \
   -e MCP_HOST=0.0.0.0 \
-  -e MCP_ALLOWED_HOSTS=127.0.0.1,localhost \
+  -e MCP_BASE_URL=https://mcp.example.com \
+  -e MCP_ALLOWED_HOSTS=mcp.example.com,127.0.0.1,localhost \
   qurl-mcp node dist/http.js
 ```
 

@@ -37,6 +37,7 @@ export interface HttpServerConfig {
   defaultQurlApiUrl: string;
   defaultQurlConnectorUrl?: string;
   publicVideo?: PublicVideoConfig;
+  serveLayerVLegalPages?: boolean;
 }
 
 const DEFAULT_PORT = 3000;
@@ -374,6 +375,11 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
       "MCP_UNVALIDATED_SESSION_TTL_MS/unvalidatedSessionTtlMs",
       10_000,
       5 * 60 * 1000,
+    ),
+    serveLayerVLegalPages: parseBoolean(
+      process.env.MCP_SERVE_LAYERV_LEGAL_PAGES ?? fileConfig.serveLayerVLegalPages,
+      false,
+      "MCP_SERVE_LAYERV_LEGAL_PAGES/serveLayerVLegalPages",
     ),
     stateless,
     maxConcurrentRequests,

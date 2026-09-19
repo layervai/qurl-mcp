@@ -140,6 +140,7 @@ npm run format
 | `MCP_MAX_SESSIONS*`, `MCP_SESSION_*`, `MCP_*_RATE_LIMIT_PER_MINUTE` | HTTP only | Session caps/TTLs and request limits                                 | See `README.md`         |
 | `MCP_MAX_UPLOAD_FILE_DATA_BYTES`                                    | No        | Decoded attachment limit                                             | `10485760`              |
 | `QURL_SMTP_*`                                                       | Email     | SMTP credentials, sender, allowlists, and quotas                     | Disabled                |
+| `MCP_SERVE_LAYERV_LEGAL_PAGES` | HTTP only | Serve LayerV-owned legal documents | Disabled |
 | `QURL_PUBLIC_VIDEO_*`                                               | HTTP only | Optional public video page/file settings                             | Disabled                |
 
 See `README.md` and the two tracked `*.example.json` files for the complete

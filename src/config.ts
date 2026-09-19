@@ -65,6 +65,7 @@ export type UncheckedConfigFileShape = Partial<{
   unvalidatedSessionTtlMs: number;
   mcpRateLimitPerMinute: number;
   stateless: boolean;
+  serveLayerVLegalPages: boolean;
   maxConcurrentRequests: number;
   credentialRateLimitStore: "memory" | "dynamodb";
   rateLimitDynamoDbTable: string;
