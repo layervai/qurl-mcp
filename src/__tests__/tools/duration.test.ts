@@ -23,7 +23,7 @@ describe("parseDurationMs", () => {
     expect(parseDurationMs(value)).toBe(expected);
   });
 
-  it("accepts micro sign U+00B5 but not Greek mu U+03BC, like qurl-service", () => {
+  it("accepts micro sign U+00B5 but, as a deliberate subset of qurl-service (Go also takes it), not Greek mu U+03BC", () => {
     expect(parseDurationMs("1000\u00b5s")).toBe(1);
     expect(parseDurationMs("1000\u03bcs")).toBeUndefined();
   });

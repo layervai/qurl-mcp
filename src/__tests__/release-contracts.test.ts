@@ -255,6 +255,33 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at_unconfirmed).toBe(true);
   });
 
+  it("does not count junk entries as extra links, and flags a small expiry drift", async () => {
+    const requested = Date.now() + 60_000;
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_link: "https://l", expires_at: new Date(requested + 60_000).toISOString() },
+            42,
+            {},
+          ],
+        }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "1m" },
+    );
+    expect(result.unexpected_extra_link_count).toBeUndefined();
+    // A 1m link that lives 2m is flagged, not hidden inside a 60s tolerance.
+    expect(result.expires_at_differs_from_request).toBe(true);
+  });
+
   it("flags an unconfirmed lifetime even when no expires_in was requested", async () => {
     vi.stubGlobal(
       "fetch",

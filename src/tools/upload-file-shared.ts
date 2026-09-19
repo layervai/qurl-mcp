@@ -466,7 +466,11 @@ function mintedLinkFrom(
     };
   }
   const chosen = entries[index];
-  const others = entries.filter((_, other) => other !== index);
+  // Only entries that look like links count as extra live links; junk does not.
+  const others = entries.filter(
+    (entry, other) =>
+      other !== index && (typeof entry.qurl_link === "string" || typeof entry.qurl_id === "string"),
+  );
   return {
     link: {
       // Untrusted: bounded and flattened before it reaches the caller or email.
@@ -610,8 +614,9 @@ export async function mintUploadedFile(
   const driftsFromRequest = Boolean(
     requestedExpiresAt &&
     confirmedExpiresAt &&
-    // Tolerance equals MIN_EXPIRY_MS, so a 1m link clamped to ~0 is not flagged.
-    Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > MIN_EXPIRY_MS,
+    // Small fixed tolerance for the connector's whole-second rounding and the
+    // round trip; any real clamp, even of a 1m link, is flagged.
+    Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > 5_000,
   );
   if (driftsFromRequest) {
     // A clamp or host clock skew changed the link's lifetime; make it visible.

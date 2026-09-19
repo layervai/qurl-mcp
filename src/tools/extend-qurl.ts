@@ -147,7 +147,9 @@ export function extendQurlTool(
       if (resource) {
         resource = {
           ...resource,
-          qurls: resource.qurls?.map((link) => (link.qurl_id === qurlId ? token.data : link)),
+          qurls: resource.qurls?.map((link) => (link.qurl_id === qurlId ? token.data : link)) ?? [
+            token.data,
+          ],
         };
       } else {
         try {
