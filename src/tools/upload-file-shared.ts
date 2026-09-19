@@ -601,9 +601,6 @@ export async function mintUploadedFile(
     minted = result.link;
     extraCount = result.extraCount;
     extraQurlIds = result.extraQurlIds;
-    // Last, so any throw above still reports the minted link as live.
-    liveQurlIds = [];
-    liveLinkCount = 0;
   } catch (error) {
     if ((error as { neverConnected?: boolean } | null)?.neverConnected) requestSent = false;
     // The connector API exposes upload but no delete endpoint. Keep the mint
