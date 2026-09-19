@@ -110,10 +110,21 @@ describe("extendQurlTool", () => {
       expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_ccccccccccc", {
         extend_by: "1h",
       });
-      // An explicit qurl_id with a resource ID needs no read to pick the link;
-      // the only read is the one that builds the response.
-      const reads = "qurl_id" in input ? 1 : 2;
-      expect(getQURL).toHaveBeenCalledTimes(reads);
+      // One read either way: to pick the link, or (fast path) to build the response.
+      expect(getQURL).toHaveBeenCalledOnce();
+    });
+
+    it("splices the updated link into the resource it already read", async () => {
+      const extended = { ...activeLink, expires_at: "2099-01-01T00:00:00Z" };
+      const updateQurlToken = vi.fn().mockResolvedValue({ data: extended });
+      const other = sampleAccessToken({ qurl_id: "q_eeeeeeeeeee", status: "consumed" });
+      const getQURL = withLinks(activeLink, other);
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(getQURL).toHaveBeenCalledOnce();
+      expect(result.structuredContent).toMatchObject({ qurls: [extended, other] });
     });
 
     it.each([

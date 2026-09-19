@@ -423,7 +423,7 @@ type MintedLink = { qurl_id?: string; qurl_link: string; expires_at?: unknown };
 // Every link in a mint response is live and cannot be revoked from this server,
 // so operator logs name all of them (bounded and flattened; the IDs are untrusted).
 function describeLinks(links: unknown): string {
-  if (!Array.isArray(links)) return "none";
+  if (!Array.isArray(links) || links.length === 0) return "none";
   const shown = links
     .slice(0, 10)
     .map((entry: unknown) => {
@@ -616,7 +616,7 @@ export async function mintUploadedFile(
   if (driftsFromRequest) {
     // A clamp or host clock skew changed the link's lifetime; make it visible.
     console.error(
-      `Connector link ${minted.qurl_id} expires at ${confirmedExpiresAt}, not the requested ${requestedExpiresAt}`,
+      `Connector link ${minted.qurl_id ?? "(no qurl_id)"} expires at ${confirmedExpiresAt}, not the requested ${requestedExpiresAt}`,
     );
   }
 

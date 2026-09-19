@@ -33,10 +33,12 @@ export const extendQurlSchema = z.object({
 // known inactive status excludes a link.
 const INACTIVE_LINK_STATUSES = new Set(["consumed", "expired", "revoked"]);
 
+type Resource = Awaited<ReturnType<IQURLClient["getQURL"]>>["data"];
+
 async function linkToExtend(
   client: IQURLClient,
   input: z.infer<typeof extendQurlSchema>,
-): Promise<{ resourceId: string; qurlId: string } | { error: string }> {
+): Promise<{ resourceId: string; qurlId: string; resource?: Resource } | { error: string }> {
   const resourceIsLink = isQurlDisplayId(input.resource_id);
   if (resourceIsLink && input.qurl_id && input.qurl_id !== input.resource_id) {
     return {
@@ -49,7 +51,7 @@ async function linkToExtend(
   if (input.qurl_id && !resourceIsLink) {
     return { resourceId: input.resource_id, qurlId: input.qurl_id };
   }
-  let resource: Awaited<ReturnType<IQURLClient["getQURL"]>>["data"];
+  let resource: Resource;
   try {
     resource = (await client.getQURL(input.resource_id)).data;
   } catch (error) {
@@ -75,13 +77,15 @@ async function linkToExtend(
         error: `Link ${named} is ${status}, so it cannot be extended. Use mint_link to issue a new one.`,
       };
     }
-    return { resourceId: resource.resource_id, qurlId: named };
+    return { resourceId: resource.resource_id, qurlId: named, resource };
   }
   if (!resource.qurls) {
     return { error: "The resource read did not include its links; pass qurl_id to choose one." };
   }
   const active = resource.qurls.filter((link) => !INACTIVE_LINK_STATUSES.has(link.status));
-  if (active.length === 1) return { resourceId: resource.resource_id, qurlId: active[0].qurl_id };
+  if (active.length === 1) {
+    return { resourceId: resource.resource_id, qurlId: active[0].qurl_id, resource };
+  }
   if (active.length === 0) {
     return {
       error:
@@ -136,33 +140,43 @@ export function extendQurlTool(
       const token = await client.updateQurlToken(resourceId, qurlId, {
         extend_by: input.extend_by,
       });
-      let result: Awaited<ReturnType<IQURLClient["getQURL"]>>;
-      try {
-        result = await client.getQURL(resourceId);
-      } catch (error) {
-        // The extension already happened; a retry would push the link out twice.
-        // isError is deliberate: the declared output is the resource shape, which
-        // this path cannot produce, and a success without it would fail hosts that
-        // validate structuredContent. The text carries the new expiry.
-        console.error(
-          `extend_qurl extended ${qurlId} but reading the resource failed (${formatErrorForLog(error)})`,
-        );
-        return errorResult(
-          `Link ${qurlId} was extended; it now expires at ${token.data.expires_at ?? "the new time"}. ` +
-            "Do not retry. Reading the updated resource failed (the API key may lack qurl:read).",
-        );
+      // A token update leaves resource fields alone, so a resource already read
+      // to pick the link only needs the updated link spliced in. Only the
+      // qurl_id fast path, which skipped that read, reads after the update.
+      let resource = target.resource;
+      if (resource) {
+        resource = {
+          ...resource,
+          qurls: resource.qurls?.map((link) => (link.qurl_id === qurlId ? token.data : link)),
+        };
+      } else {
+        try {
+          resource = (await client.getQURL(resourceId)).data;
+        } catch (error) {
+          // The extension already happened; a retry would push the link out twice.
+          // isError is deliberate: the declared output is the resource shape, which
+          // this path cannot produce, and a success without it would fail hosts that
+          // validate structuredContent. The text carries the new expiry.
+          console.error(
+            `extend_qurl extended ${qurlId} but reading the resource failed (${formatErrorForLog(error)})`,
+          );
+          return errorResult(
+            `Link ${qurlId} was extended; it now expires at ${token.data.expires_at ?? "the new time"}. ` +
+              "Do not retry. Reading the updated resource failed (the API key may lack qurl:read).",
+          );
+        }
       }
       // A link cannot outlive its resource. Warn when the link now ends at or past
       // the resource's expiry: stored past it, or clamped to it on write.
       const linkExpiry = Date.parse(token.data.expires_at ?? "");
-      const ceiling = Date.parse(result.data.expires_at ?? "");
+      const ceiling = Date.parse(resource.expires_at ?? "");
       const data =
         Number.isFinite(ceiling) && linkExpiry >= ceiling
           ? {
-              ...result.data,
-              extend_warning: `Link ${qurlId} expires at ${token.data.expires_at}, but its resource closes at ${result.data.expires_at}, so it stops working then; raise the resource with update_qurl for more time.`,
+              ...resource,
+              extend_warning: `Link ${qurlId} expires at ${token.data.expires_at}, but its resource closes at ${resource.expires_at}, so it stops working then; raise the resource with update_qurl for more time.`,
             }
-          : result.data;
+          : resource;
       return {
         content: [{ type: "text" as const, text: JSON.stringify(data) }],
         structuredContent: toStructuredContent(data),

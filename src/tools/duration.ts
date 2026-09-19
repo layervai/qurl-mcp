@@ -61,6 +61,8 @@ export const durationSchema = (minMs: number, maxMs: number, range: string) =>
 // links take them too: the connector forwards the requested expiry to
 // qurl-service's mint, which enforces the same ceiling.
 export const MIN_EXPIRY_MS = 60_000;
+// Global, not per plan: qurl-service's MaxCustomerExpiryDuration is 30d on
+// every customer plan (get_quota's max_expiry_seconds reports the same value).
 export const MAX_EXPIRY_MS = 30 * 86_400_000;
 
 // MAX_SESSION_MS mirrors validation.MaxSessionDuration (24h). MIN_SESSION_MS is

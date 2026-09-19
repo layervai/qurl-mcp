@@ -459,6 +459,16 @@ describe("resource SDK boundary", () => {
       expect(log).toHaveBeenCalledWith(expect.stringContaining(reason));
     }
 
+    // An empty link list reads as "none" in the operator log, not "(links: )".
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () => Response.json({ success: true, links: [] })),
+    );
+    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+      code: "upload_mint_failed",
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("(links: none)"));
+
     // A link that arrives already expired (host clock behind) is refused, and says why.
     vi.stubGlobal(
       "fetch",

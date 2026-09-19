@@ -94,7 +94,11 @@ export const createQurlSchema = z.object({
     .max(500)
     .optional()
     .describe("Human-readable label identifying who this qURL is for (max 500 chars)"),
-  expires_in: z.string().min(1).optional().describe('Duration string (e.g., "1h", "24h", "7d")'),
+  expires_in: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Duration string (e.g., "1h", "24h", "7d"; 1m to 30d)'),
   one_time_use: z.boolean().optional().describe("Whether the link can only be used once"),
   max_sessions: z
     .number()

@@ -12,15 +12,12 @@ import {
 // silently minting a link without the restriction the caller asked for.
 // This guards the two named options only; the schema is not strict, so other
 // unknown keys are still stripped, as for every tool.
-// z.unknown() emits a plain `{}` JSON Schema, which every host accepts; `not`
-// (from z.never) is dropped or rejected by some non-TypeScript hosts.
+// z.null() emits a portable {"type":"null"} that advertises "no value here";
+// `not` (from z.never) is dropped or rejected by some non-TypeScript hosts.
+// null itself is tolerated: some hosts serialize unused optional fields that way.
 const unsupportedForUploads = (field: string) =>
   z
-    .unknown()
-    // null is tolerated: some hosts serialize unused optional fields that way.
-    .refine((value) => value === undefined || value === null, {
-      message: `${field} is not supported for uploaded files`,
-    })
+    .null({ error: `${field} is not supported for uploaded files` })
     .optional()
     .describe(`Not supported for uploaded files; setting ${field} rejects the request.`);
 
