@@ -28,6 +28,7 @@ jobs:
             chore
             revert
           scopes: |
+            main
             tools
             client
             resources
