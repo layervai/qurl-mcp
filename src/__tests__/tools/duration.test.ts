@@ -40,7 +40,9 @@ describe("durationSchema", () => {
     expect(expiry.safeParse(value).success).toBe(false);
   });
   it("rejects an oversized input before parsing it", () => {
-    expect(expiry.safeParse("1h".repeat(100)).success).toBe(false);
+    const result = expiry.safeParse("1h".repeat(100));
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.code).toBe("too_big");
   });
   it("tells a syntax error apart from an out-of-range value", () => {
     expect(expiry.safeParse("banana").error?.issues.map((issue) => issue.message)).toEqual([

@@ -401,6 +401,19 @@ function isDeliverableLink(value: string, connectorUploadUrl: string): boolean {
 type MintedLink = { qurl_id: string; qurl_link: string; expires_at?: unknown };
 
 /** The single link the connector minted, or why its response is unusable. */
+// Every link in a mint response is live and cannot be revoked from this server,
+// so operator logs name all of them (bounded and flattened; the IDs are untrusted).
+function describeLinks(links: unknown): string {
+  if (!Array.isArray(links)) return "none";
+  return links
+    .slice(0, 10)
+    .map((entry: unknown) => {
+      const id = (entry as { qurl_id?: unknown } | null)?.qurl_id;
+      return typeof id === "string" ? flattenControlCharacters(id).slice(0, 64) : "(no qurl_id)";
+    })
+    .join(", ");
+}
+
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
@@ -411,18 +424,14 @@ function mintedLinkFrom(
     string,
     unknown
   >;
+  const problem = (reason: string) => ({
+    problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
+  });
   if (typeof link.qurl_id !== "string" || typeof link.qurl_link !== "string") {
-    return { problem: "Connector mint returned no link." };
+    return problem("no usable first link");
   }
-  if (!isQurlDisplayId(link.qurl_id)) {
-    // The connector minted a live link; echo its (untrusted) ID bounded and flattened.
-    const shown = flattenControlCharacters(link.qurl_id).slice(0, 64);
-    return { problem: `Connector mint returned a malformed qurl_id (${shown}).` };
-  }
-  if (!isDeliverableLink(link.qurl_link, connectorUploadUrl)) {
-    // The connector did mint a live link; name it so an operator can act on it.
-    return { problem: `Connector mint returned a non-HTTPS link (${link.qurl_id}).` };
-  }
+  if (!isQurlDisplayId(link.qurl_id)) return problem("a malformed qurl_id");
+  if (!isDeliverableLink(link.qurl_link, connectorUploadUrl)) return problem("a non-HTTPS link");
   return {
     link: { qurl_id: link.qurl_id, qurl_link: link.qurl_link, expires_at: link.expires_at },
     extraCount: Array.isArray(links) ? links.length - 1 : 0,
@@ -508,14 +517,15 @@ export async function mintUploadedFile(
     if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(
-        `Connector minted ${result.extraCount + 1} links for ${resourceId}; returning the first`,
+        `Connector minted ${result.extraCount + 1} links for ${resourceId}; returning the first ` +
+          `(links: ${describeLinks((parsed as { links?: unknown }).links)})`,
       );
     }
     minted = result.link;
     extraCount = result.extraCount;
     extraQurlIds = result.extraQurlIds;
   } catch (error) {
-    if ((error as { neverConnected?: boolean }).neverConnected) requestSent = false;
+    if ((error as { neverConnected?: boolean } | null)?.neverConnected) requestSent = false;
     // The connector API exposes upload but no delete endpoint. Keep the mint
     // error primary and log the orphan resource for operator cleanup.
     console.error(

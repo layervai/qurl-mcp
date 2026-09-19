@@ -36,6 +36,19 @@ describe("updateQurlTokenTool", () => {
       ).toBe(true);
     });
 
+    it("keeps session_duration's empty-string meaning and bounds any other value", () => {
+      const parse = (session_duration: string) =>
+        updateQurlTokenSchema.safeParse({
+          resource_id: resourceId,
+          qurl_id: qurlId,
+          session_duration,
+        }).success;
+      expect(parse("")).toBe(true);
+      expect(parse("1h")).toBe(true);
+      expect(parse("1 hour")).toBe(false);
+      expect(parse("25h")).toBe(false);
+    });
+
     it("bounds extend_by like qurl-service's ValidateDuration", () => {
       for (const extend_by of ["31d", "30s", "3 hours"]) {
         const result = updateQurlTokenSchema.safeParse({

@@ -133,6 +133,9 @@ export function extendQurlTool(
         result = await client.getQURL(resourceId);
       } catch (error) {
         // The extension already happened; a retry would push the link out twice.
+        // isError is deliberate: the declared output is the resource shape, which
+        // this path cannot produce, and a success without it would fail hosts that
+        // validate structuredContent. The text carries the new expiry.
         console.error(
           `extend_qurl extended ${qurlId} but reading the resource failed (${formatErrorForLog(error)})`,
         );

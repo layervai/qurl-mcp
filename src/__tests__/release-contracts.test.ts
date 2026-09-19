@@ -414,7 +414,25 @@ describe("resource SDK boundary", () => {
     await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
       code: "upload_mint_failed",
     });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("malformed qurl_id (bad"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("links: bad id"));
+
+    // A usable link after an unusable first one is still named for operators.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_link: "https://x" },
+            { qurl_id: "q_0000000000a", qurl_link: "https://real" },
+          ],
+        }),
+      ),
+    );
+    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+      code: "upload_mint_failed",
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("(no qurl_id), q_0000000000a"));
 
     const fetchMock = mockConnectorFetch();
     vi.stubGlobal("fetch", fetchMock);

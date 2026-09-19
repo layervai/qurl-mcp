@@ -1,7 +1,13 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { accessPolicySchema } from "./create-qurl.js";
-import { durationSchema, MAX_EXPIRY_MS, MIN_EXPIRY_MS } from "./duration.js";
+import {
+  durationSchema,
+  MAX_EXPIRY_MS,
+  MAX_SESSION_MS,
+  MIN_EXPIRY_MS,
+  MIN_SESSION_MS,
+} from "./duration.js";
 import {
   qurlDisplayIdSchema,
   resourceOnlyIdSchema,
@@ -34,8 +40,9 @@ export const updateQurlTokenBaseSchema = z.object({
     .max(1000)
     .optional()
     .describe("Maximum concurrent sessions for this token (0 = unlimited, max 1000)"),
+  // "" keeps its meaning (apply the parent resource cap); anything else is a bounded duration.
   session_duration: z
-    .string()
+    .union([z.literal(""), durationSchema(MIN_SESSION_MS, MAX_SESSION_MS, "1s to 24h")])
     .optional()
     .describe(
       'How long access lasts after clicking (e.g., "1h"). Empty string applies the parent resource cap when one is set.',
