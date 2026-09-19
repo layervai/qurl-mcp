@@ -233,7 +233,9 @@ function extractConnectorError(
       stringField(nestedError, "detail") ??
       stringField(nestedError, "message") ??
       stringField(body, "detail") ??
-      stringField(body, "message"),
+      stringField(body, "message") ??
+      // The connector's gin handlers answer {"error": "<text>"}.
+      stringField(body, "error"),
     type: stringField(nestedError, "type"),
     instance: stringField(nestedError, "instance"),
   };
@@ -484,11 +486,7 @@ export async function mintUploadedFile(
     const parsed = parseJsonBody(raw);
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
-      // The connector's gin handlers answer {"error": "<text>"}.
-      const bodyError = (parsed as { error?: unknown }).error;
-      const detail =
-        extractConnectorError(parsed, "connector_mint_failed").detail ??
-        (typeof bodyError === "string" ? bodyError : undefined);
+      const { detail } = extractConnectorError(parsed, "connector_mint_failed");
       const reason = detail
         ? `: ${flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024)}`
         : "";
@@ -524,9 +522,10 @@ export async function mintUploadedFile(
     );
   }
 
+  // Normalized so the reported (and emailed) expiry is always ISO 8601 or absent.
   const confirmedExpiresAt =
     typeof minted.expires_at === "string" && !Number.isNaN(Date.parse(minted.expires_at))
-      ? minted.expires_at
+      ? new Date(minted.expires_at).toISOString()
       : undefined;
   if (
     requestedExpiresAt &&
