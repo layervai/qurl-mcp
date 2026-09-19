@@ -267,6 +267,18 @@ describe("extendQurlTool", () => {
       }
     });
 
+    it("falls through to the named q_ link when the read omits the link list", async () => {
+      const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });
+      const getQURL = vi.fn().mockResolvedValue({ data: { ...fixture, qurls: undefined } });
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      await tool.handler({ resource_id: "q_ccccccccccc", extend_by: "1h" });
+
+      expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_ccccccccccc", {
+        extend_by: "1h",
+      });
+    });
+
     it("treats a link without a status as a candidate", async () => {
       const unlabeled = { ...sampleAccessToken({ qurl_id: "q_aaaaaaaaaaa" }), status: undefined };
       const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });

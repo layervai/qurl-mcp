@@ -427,24 +427,38 @@ function mintedLinkFrom(
   | { link: MintedLink; extraCount: number; extraQurlIds: string[] }
   | { problem: string; liveQurlIds: string[] } {
   const links = (parsed as { links?: unknown } | undefined)?.links;
-  const first: unknown = Array.isArray(links) ? links[0] : undefined;
-  const link = (typeof first === "object" && first !== null ? first : {}) as Record<
-    string,
-    unknown
-  >;
-  const problem = (reason: string) => ({
-    problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
-    liveQurlIds: validQurlIds(links).slice(0, 10),
-  });
-  if (typeof link.qurl_id !== "string" || typeof link.qurl_link !== "string") {
-    return problem("no usable first link");
+  const entries = (Array.isArray(links) ? links : []).map(
+    (entry: unknown) =>
+      (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>,
+  );
+  // Use the first deliverable link rather than strictly index 0: a malformed
+  // first entry must not discard a good one, since the file cannot be re-linked.
+  const reasonFor = (entry: Record<string, unknown>) =>
+    typeof entry.qurl_id !== "string" || typeof entry.qurl_link !== "string"
+      ? "no usable link"
+      : !isQurlDisplayId(entry.qurl_id)
+        ? "a malformed qurl_id"
+        : !isDeliverableLink(entry.qurl_link, connectorUploadUrl)
+          ? "a non-HTTPS link"
+          : undefined;
+  const index = entries.findIndex((entry) => reasonFor(entry) === undefined);
+  if (index === -1) {
+    const reason = entries.length > 0 ? reasonFor(entries[0]) : "no usable link";
+    return {
+      problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
+      liveQurlIds: validQurlIds(links).slice(0, 10),
+    };
   }
-  if (!isQurlDisplayId(link.qurl_id)) return problem("a malformed qurl_id");
-  if (!isDeliverableLink(link.qurl_link, connectorUploadUrl)) return problem("a non-HTTPS link");
+  const chosen = entries[index];
+  const others = entries.filter((_, other) => other !== index);
   return {
-    link: { qurl_id: link.qurl_id, qurl_link: link.qurl_link, expires_at: link.expires_at },
-    extraCount: Array.isArray(links) ? links.length - 1 : 0,
-    extraQurlIds: validQurlIds(Array.isArray(links) ? links.slice(1) : []).slice(0, 10),
+    link: {
+      qurl_id: chosen.qurl_id as string,
+      qurl_link: chosen.qurl_link as string,
+      expires_at: chosen.expires_at,
+    },
+    extraCount: others.length,
+    extraQurlIds: validQurlIds(others).slice(0, 10),
   };
 }
 
@@ -528,7 +542,7 @@ export async function mintUploadedFile(
     if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(
-        `Connector minted ${result.extraCount + 1} links for ${resourceId}; returning the first ` +
+        `Connector minted ${result.extraCount + 1} links for ${resourceId}; returning one ` +
           `(links: ${describeLinks((parsed as { links?: unknown }).links)})`,
       );
     }
@@ -581,9 +595,7 @@ export async function mintUploadedFile(
     // Only a connector-confirmed expiry is reported as expires_at; the request
     // may have been clamped, and expires_at reaches recipients in email.
     expires_at: confirmedExpiresAt,
-    ...(requestedExpiresAt && !confirmedExpiresAt
-      ? { requested_expires_at: requestedExpiresAt }
-      : {}),
+    ...(requestedExpiresAt ? { requested_expires_at: requestedExpiresAt } : {}),
     ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
     ...(extraCount > 0
       ? { unexpected_extra_link_count: extraCount, unexpected_extra_qurl_ids: extraQurlIds }

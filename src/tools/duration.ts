@@ -62,6 +62,8 @@ export const durationSchema = (minMs: number, maxMs: number, range: string) =>
 export const MIN_EXPIRY_MS = 60_000;
 export const MAX_EXPIRY_MS = 30 * 86_400_000;
 
-// validation.MaxSessionDuration (24h); a sub-second session expires on arrival.
+// MAX_SESSION_MS mirrors validation.MaxSessionDuration (24h). MIN_SESSION_MS is
+// an MCP-local floor with no service counterpart: a sub-second session expires
+// on arrival.
 export const MIN_SESSION_MS = 1_000;
 export const MAX_SESSION_MS = 86_400_000;

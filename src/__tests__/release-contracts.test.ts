@@ -316,7 +316,7 @@ describe("resource SDK boundary", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 4 links"));
     expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     expect(result.expires_at).toBe("2000-01-01T00:00:00.000Z");
-    expect(result).not.toHaveProperty("requested_expires_at");
+    expect(result.requested_expires_at).toBe(sent.expires_at);
     // The extra live link reaches the caller, not only stderr.
     expect(result.unexpected_extra_link_count).toBe(3);
     expect(result.expires_at_differs_from_request).toBe(true);
@@ -417,7 +417,7 @@ describe("resource SDK boundary", () => {
     });
     expect(log).toHaveBeenCalledWith(expect.stringContaining("links: bad id"));
 
-    // A usable link after an unusable first one is still named for operators.
+    // A usable link after an unusable first one is returned, not discarded.
     vi.stubGlobal(
       "fetch",
       mockConnectorFetch(undefined, () =>
@@ -430,13 +430,29 @@ describe("resource SDK boundary", () => {
         }),
       ),
     );
+    const recovered = await mintUploadedFile(config, publicKey, file, {});
+    expect(recovered).toMatchObject({
+      qurl_id: "q_0000000000a",
+      qurl_link: "https://real",
+      unexpected_extra_link_count: 1,
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("(no qurl_id), q_0000000000a"));
+
+    // When no entry is deliverable, the caller still learns which live links exist.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [{ qurl_id: "q_0000000000b", qurl_link: "http://example.test/x" }],
+        }),
+      ),
+    );
     const refused = await mintUploadedFile(config, publicKey, file, {}).catch(
       (error: Error) => error,
     );
     expect(refused).toMatchObject({ code: "upload_mint_failed" });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("(no qurl_id), q_0000000000a"));
-    // The caller learns the live link exists, not just the operator.
-    expect((refused as Error).message).toContain("q_0000000000a; tell the user");
+    expect((refused as Error).message).toContain("q_0000000000b; tell the user");
 
     const fetchMock = mockConnectorFetch();
     vi.stubGlobal("fetch", fetchMock);

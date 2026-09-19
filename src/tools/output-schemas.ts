@@ -205,7 +205,7 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .string()
     .optional()
     .describe(
-      "The expiry this server requested, present only when the connector did not confirm one; not guaranteed",
+      "The expiry this server requested from expires_in; compare with expires_at, which is what the connector confirmed",
     ),
   expires_at_differs_from_request: z
     .boolean()

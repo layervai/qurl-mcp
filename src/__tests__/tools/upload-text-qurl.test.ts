@@ -155,6 +155,7 @@ describe("uploadTextQurlTool", () => {
         resource_id: "r_upload12345",
         ...connectorMintedLink,
         expires_at_differs_from_request: true,
+        requested_expires_at: expect.any(String),
         content_type: "application/pdf",
         file_name: "hello.pdf",
         size_bytes: fixtureSize,
