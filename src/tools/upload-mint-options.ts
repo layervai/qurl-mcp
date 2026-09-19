@@ -57,6 +57,8 @@ const unsupportedForUploads = (field: string) =>
     .describe(`Not supported for uploaded files; setting ${field} rejects the request.`);
 
 export const uploadMintOptionsShape = {
+  // label is not a restriction, so unlike access_policy/max_sessions it is kept:
+  // it still drives the email and the text-PDF title, only not the link.
   label: z
     .string()
     .min(1)

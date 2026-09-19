@@ -172,6 +172,9 @@ describe("uploadFileDataQurlTool", () => {
       const mint = connectorMintBody(fetchMock);
       expect(mint.url).toBe("https://connector.test/api/mint_link/r_upload12345");
       expect(mint.init).toEqual(expect.objectContaining({ method: "POST", redirect: "error" }));
+      expect(mint.init?.headers).toEqual(
+        expect.objectContaining({ Authorization: "Bearer lv_live_test" }),
+      );
       expect(mint.body).toEqual({ n: 1, one_time_use: true });
 
       const parsed = JSON.parse(result.content[0].text);

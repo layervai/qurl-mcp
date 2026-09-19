@@ -416,21 +416,39 @@ export async function mintUploadedFile(
     const requestId = response.headers.get("x-request-id") ?? undefined;
     const raw = await readConnectorResponseBody(response);
     const contentType = response.headers.get("content-type")?.toLowerCase();
-    if (response.ok && !contentType?.includes("json")) {
+    // Same predicate as processConnectorResponse: a missing Content-Type is tolerated.
+    if (response.ok && contentType && !contentType.includes("json")) {
       throw new QURLAPIError(
         0,
         "unexpected_response",
         "Connector mint returned a non-JSON response.",
+        undefined,
+        undefined,
+        requestId,
       );
     }
     const parsed = parseJsonBody(raw);
     if (!response.ok) throwConnectorError(response, parsed, requestId);
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
-      throw new QURLAPIError(0, "unexpected_response", "Connector mint reported failure.");
+      throw new QURLAPIError(
+        0,
+        "unexpected_response",
+        "Connector mint reported failure.",
+        undefined,
+        undefined,
+        requestId,
+      );
     }
     link = firstMintedLink(parsed);
     if (typeof link?.qurl_id !== "string" || typeof link.qurl_link !== "string") {
-      throw new QURLAPIError(0, "unexpected_response", "Connector mint returned no link.");
+      throw new QURLAPIError(
+        0,
+        "unexpected_response",
+        "Connector mint returned no link.",
+        undefined,
+        undefined,
+        requestId,
+      );
     }
   } catch (error) {
     // The connector API exposes upload but no delete endpoint. Keep the mint
@@ -453,7 +471,7 @@ export async function mintUploadedFile(
     resource_id: resourceId,
     qurl_id: link.qurl_id,
     qurl_link: link.qurl_link,
-    expires_at: typeof link.expires_at === "string" ? link.expires_at : undefined,
+    expires_at: typeof link.expires_at === "string" ? link.expires_at : requestedExpiresAt,
     file_name: file.name,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,

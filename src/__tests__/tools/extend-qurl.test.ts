@@ -166,6 +166,24 @@ describe("extendQurlTool", () => {
       expect(updateQurlToken).not.toHaveBeenCalled();
     });
 
+    it("explains a failed pre-update read instead of throwing it raw", async () => {
+      const updateQurlToken = vi.fn();
+      const getQURL = vi.fn().mockRejectedValue(new Error("insufficient_scope"));
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(JSON.stringify(result)).toContain("may lack qurl:read");
+      expect(result).toMatchObject({ isError: true });
+      expect(updateQurlToken).not.toHaveBeenCalled();
+    });
+
+    it("rejects an extend_by the duration grammar does not accept", () => {
+      expect(
+        extendQurlSchema.safeParse({ resource_id: validResourceId, extend_by: "3 hours" }).success,
+      ).toBe(false);
+    });
+
     it("caps the link list in the ambiguity message", async () => {
       const links = Array.from({ length: 12 }, (_, index) =>
         sampleAccessToken({

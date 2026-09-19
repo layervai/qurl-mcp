@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { IQURLClient } from "../client.js";
+import { QURLAPIError, type IQURLClient } from "../client.js";
 import { formatErrorForLog } from "../logging.js";
+import { parseDurationMs } from "./upload-mint-options.js";
 import {
   isQurlDisplayId,
   qurlDisplayIdSchema,
@@ -13,7 +14,13 @@ import { extendQurlOutputSchema } from "./output-schemas.js";
 
 export const extendQurlSchema = z.object({
   resource_id: resourceIdSchema("extend"),
-  extend_by: z.string().min(1).describe('Duration to extend by (e.g., "24h", "7d")'),
+  extend_by: z
+    .string()
+    .min(1)
+    .refine((value) => parseDurationMs(value) !== undefined, {
+      message: "Use a duration like '30m', '24h', '7d', or '1w'",
+    })
+    .describe('Duration to extend by (e.g., "24h", "7d")'),
   qurl_id: qurlDisplayIdSchema("extend")
     .optional()
     .describe(
@@ -38,8 +45,19 @@ async function linkToExtend(
   if (input.qurl_id && !resourceIsLink) {
     return { resourceId: input.resource_id, qurlId: input.qurl_id };
   }
-  const { data: resource } = await client.getQURL(input.resource_id);
-  const named = input.qurl_id ?? (resourceIsLink ? input.resource_id : undefined);
+  let resource: Awaited<ReturnType<IQURLClient["getQURL"]>>["data"];
+  try {
+    resource = (await client.getQURL(input.resource_id)).data;
+  } catch (error) {
+    // The shared wrapper turns a missing key into its own guidance.
+    if (error instanceof QURLAPIError && error.code === "missing_api_key") throw error;
+    return {
+      error:
+        `Reading the resource to pick a link failed (${error instanceof Error ? error.message : "unknown error"}; ` +
+        "the API key may lack qurl:read). Pass qurl_id with a resource ID to extend a specific link without a read.",
+    };
+  }
+  const named = resourceIsLink ? input.resource_id : undefined;
   if (named) return { resourceId: resource.resource_id, qurlId: named };
   if (!resource.qurls) {
     return { error: "The resource read did not include its links; pass qurl_id to choose one." };

@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -205,6 +206,35 @@ describe("resource SDK boundary", () => {
       ),
     ).rejects.toMatchObject({ code: "upload_mint_failed" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts a JSON mint body without Content-Type and reports the requested expiry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(
+        undefined,
+        // A byte body carries no Content-Type, unlike a string body.
+        () =>
+          new Response(
+            Buffer.from(
+              JSON.stringify({
+                success: true,
+                links: [{ qurl_id: "q_123456789ab", qurl_link: "https://l" }],
+              }),
+            ),
+          ),
+      ),
+    );
+    const before = Date.now();
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "2h" },
+    );
+    const lifetime = Date.parse(result.expires_at!) - before;
+    expect(lifetime).toBeGreaterThanOrEqual(7_200_000);
+    expect(lifetime).toBeLessThan(7_200_000 + 60_000);
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {
