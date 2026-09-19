@@ -66,6 +66,8 @@ qurl-mcp/
 │   ├── client.ts          # Adapter over the @layervai/qurl SDK (IQURLClient + QURLAPIError)
 │   ├── tools/
 │   │   ├── _shared.ts       # resourceIdSchema, zodErrorToToolResult
+│   │   ├── duration.ts      # Duration grammar and bounds mirrored from qurl-service
+│   │   ├── upload-mint-options.ts # Shared upload link options and descriptions
 │   │   ├── create-qurl.ts
 │   │   ├── resolve-qurl.ts
 │   │   ├── list-qurls.ts
@@ -170,7 +172,7 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 | `list_qurls`              | `qurl:read`    | List qURLs with filtering                               |
 | `get_qurl`                | `qurl:read`    | Get qURL details                                        |
 | `delete_qurl`             | `qurl:write`   | Revoke a qURL                                           |
-| `extend_qurl`             | `qurl:write`   | Extend expiration (shorthand alias for `update_qurl`)   |
+| `extend_qurl`             | `qurl:write`, `qurl:read` | Extend a link's expiration                  |
 | `update_qurl`             | `qurl:write`   | Update expiration, tags, description                    |
 | `share_by_crid`           | `qurl:resolve` | Mint a temporary link from a resource CRID              |
 | `mint_link`               | `qurl:write`   | Mint a new access link for an existing resource         |
@@ -182,6 +184,8 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 | `upload_file_qurl`        | `qurl:write`   | Upload a server-local file and mint a qURL (stdio only) |
 | `upload_file_data_qurl`   | `qurl:write`   | Upload base64 file content and mint a qURL              |
 | `upload_text_qurl`        | `qurl:write`   | Render text to PDF, upload it, and mint a qURL          |
+
+Upload tools call only the file connector, which authorizes the forwarded bearer against the qURL API itself; `qurl:write` is what that check requires.
 
 ## Commit Convention (Release Please)
 

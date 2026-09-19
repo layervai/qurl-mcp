@@ -135,7 +135,17 @@ export const createQurlOutputSchema = z.looseObject({
 
 export const getQurlOutputSchema = qurlSchema;
 export const updateQurlOutputSchema = qurlSchema;
-export const extendQurlOutputSchema = qurlSchema;
+export const extendQurlOutputSchema = qurlSchema.extend({
+  extended_qurl_id: z.string().optional().describe("The link that was extended"),
+  extended_link_expires_at: z
+    .string()
+    .optional()
+    .describe("The extended link's new expiry; report this, not the resource's own expires_at"),
+  extend_warning: z
+    .string()
+    .optional()
+    .describe("Present when the resource's expiry cuts the extended link short; tell the user"),
+});
 
 /**
  * Paginated list response. When `meta.has_more` is true, pass
@@ -200,24 +210,64 @@ export const shareByCRIDOutputSchema = z.looseObject({
 export const uploadFileQurlOutputSchema = z.looseObject({
   resource_id: z
     .string()
-    .describe("Stable resource identifier (public key or legacy r_ ID) returned by the connector"),
-  qurl_id: z.string().describe("Display-friendly qURL ID (q_ prefix) for the minted token"),
+    .describe(
+      "Stable resource identifier (public key or legacy r_ ID) returned by the connector. Do not pass it to mint_link for another link; run the upload tool again.",
+    ),
+  qurl_id: z
+    .string()
+    .optional()
+    .describe(
+      "The minted link's ID as the connector reports it (usually a q_ display ID, but not guaranteed), when it reports one. The link is minted by the connector and may belong to a different resource than resource_id, so do not pair them in revoke_qurl_token, update_qurl_token, or extend_qurl.",
+    ),
   qurl_link: z
     .string()
     .describe("One-shot display access link for the uploaded file — share immediately"),
-  qurl_site: z
+  expires_at: z.string().optional().describe("Link expiry as confirmed by the connector"),
+  requested_expires_at: z
     .string()
     .optional()
-    .describe("Resource site URL when it could be read back from get_qurl"),
-  expires_at: z.string().optional(),
+    .describe(
+      "The expiry this server requested from expires_in; compare with expires_at, which is what the connector confirmed",
+    ),
+  expires_at_differs_from_request: z
+    .boolean()
+    .optional()
+    .describe(
+      "Present when the connector's confirmed expiry differs from the requested expires_in by more than 5 seconds (clamped or clock skew); tell the user the actual expires_at",
+    ),
+  expires_at_later_than_requested: z
+    .boolean()
+    .optional()
+    .describe(
+      "Present when the confirmed expiry is later than requested: the link lives longer than asked and cannot be revoked from this server, so tell the user when it actually expires",
+    ),
+  expires_at_already_past: z
+    .boolean()
+    .optional()
+    .describe(
+      "Present when the confirmed expiry is already past by this server's clock (the connector clamped it, or this host's clock runs ahead); the link may not work, so tell the user and check the time",
+    ),
+  expires_at_unconfirmed: z
+    .boolean()
+    .optional()
+    .describe(
+      "Present when the connector confirmed no expiry, whether or not expires_in was given; tell the user the link's lifetime is unknown",
+    ),
+  unexpected_extra_link_count: z
+    .number()
+    .optional()
+    .describe(
+      "Present only if the connector minted more links than the one requested; those links may be live and should be reported to the user",
+    ),
+  unexpected_extra_qurl_ids: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Up to 10 identifiers the connector reported for those extra links (not necessarily q_ display IDs); may be fewer than unexpected_extra_link_count",
+    ),
   file_name: z.string().describe("Filename registered with the connector"),
   content_type: z.string().describe("MIME type used for the uploaded file"),
   size_bytes: z.number().describe("Uploaded file size in bytes"),
-  branded_domain: z
-    .string()
-    .optional()
-    .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
-  type: z.string().optional().describe("Resource type echoed from the minted token"),
   email_delivery: emailDeliveryResultSchema.optional(),
 });
 

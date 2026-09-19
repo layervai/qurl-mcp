@@ -37,7 +37,7 @@ It currently supports:
 | `list_qurls`              | List qURL resources                                 |
 | `get_qurl`                | Fetch details for a single qURL                     |
 | `delete_qurl`             | Delete a qURL                                       |
-| `extend_qurl`             | Extend qURL expiration                              |
+| `extend_qurl`             | Extend a link's expiration (needs `qurl:read` too)  |
 | `update_qurl`             | Update qURL metadata or expiration                  |
 | `mint_link`               | Mint a new access link for an existing resource     |
 | `share_by_crid`           | Mint a temporary access link from a resource CRID   |
@@ -84,9 +84,25 @@ whose filesystem access is limited to intended shareable content. HTTP mode
 never registers this host-file tool.
 The byte/text tools are also available in stdio so local clients can share
 in-chat attachments without first materializing them at a known host path.
-Connector upload and qURL minting are separate operations. If minting fails
-after upload, the connector currently has no delete endpoint; the server logs
-the orphaned `resource_id` for operator cleanup and returns the mint failure.
+Connector upload and link minting are separate operations. The link comes from
+the connector's `POST /api/mint_link/:resource_id` (in tunnel mode, a
+per-recipient watermarked view), not from qURL `mint_link`, so uploaded files
+cannot be re-linked with `mint_link`; run the upload tool again. Upload links
+support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
+clock, so a host clock that is off shortens or lengthens the link; a link whose returned expiry
+is already past by this host's clock is returned with `expires_at_already_past`), `one_time_use`, and `session_duration` (whole seconds, up to 24h); `access_policy` and
+`max_sessions` must be omitted or null; non-null values are rejected before the upload. If the connector ever mints more
+links than requested, the result reports how many extra in
+`unexpected_extra_link_count` and any IDs it returned in
+`unexpected_extra_qurl_ids` (at most 10); they may be live even when this host's clock suggests expiry, so tell the user. If minting
+fails after upload, the connector currently has no delete endpoint; the server logs the orphaned
+`resource_id` for operator cleanup and returns the mint failure. Upload links
+cannot yet be revoked from this server: `delete_qurl` on the upload's
+`resource_id` does not stop a connector-minted link (revocation needs the
+connector's `/api/revoke_links`), so prefer short expiries for sensitive files.
+Duration inputs accept whole days or weeks (`7d`, `1w`), or unsigned Go-unit
+sequences (`1h30m`, `1.5h`). Mixed day/week sequences (`1d12h`), leading signs,
+leading-dot fractions, and Greek mu (`μs`) are rejected; micro sign (`µs`) is accepted.
 HTTP upload attempts remain bounded by the per-IP and per-credential MCP rate
 limits; stdio operators should separately constrain autonomous retry loops.
 Upload validation binds the declared media type to the filename plus format
@@ -238,9 +254,10 @@ configured; startup warns when complete SMTP credentials lack that policy.
 Raising `maxUploadFileDataBytes` also raises the HTTP JSON parser's per-request
 memory ceiling to roughly 1.5 times that value (up to about 150 MB at the
 100 MB maximum), before base64 decoding applies the exact byte cap. Until a
-session has completed a successful downstream qURL API call, its parser ceiling
-remains at the smaller 10 MB default upload setting; clients configured for a
-larger first upload must validate the session with a small qURL API call first.
+session has completed a successful downstream qURL API call (a completed upload's
+link mint counts), its parser ceiling remains at the smaller 10 MB default upload
+setting; clients configured for a larger first upload must validate the session
+with a small qURL API call or a smaller upload first.
 Size the configured maximum and reverse-proxy concurrency limit together.
 
 Set `QURL_API_KEY` in the environment for `stdio` mode. In HTTP mode, every
@@ -403,30 +420,30 @@ shows every store and metric field required by a deployed stateless service.
 
 HTTP fields have matching environment overrides:
 
-| Environment variable                    | Config field                      |
-| --------------------------------------- | --------------------------------- |
-| `MCP_PORT`                              | `port`                            |
-| `MCP_HOST`                              | `host`                            |
-| `MCP_BASE_URL`                          | `baseUrl`                         |
-| `MCP_ALLOWED_HOSTS`                     | `allowedHosts`                    |
-| `MCP_TRUST_PROXY_HOPS`                  | `trustProxyHops`                  |
-| `MCP_HTTP_STATELESS`                    | `stateless`                       |
-| `MCP_MAX_CONCURRENT_REQUESTS`           | `maxConcurrentRequests`           |
-| `MCP_CREDENTIAL_RATE_LIMIT_STORE`       | `credentialRateLimitStore`        |
-| `MCP_SERVE_LAYERV_LEGAL_PAGES` | `serveLayerVLegalPages` (default `false`) |
-| `MCP_RATE_LIMIT_DYNAMODB_TABLE`         | `rateLimitDynamoDbTable`          |
-| `MCP_METRICS_NAMESPACE`                 | `metricsNamespace`                |
-| `MCP_METRICS_SERVICE`                   | `metricsService`                  |
-| `MCP_METRICS_ENVIRONMENT`               | `metricsEnvironment`              |
-| `MCP_MAX_SESSIONS`                      | `maxSessions`                     |
-| `MCP_MAX_SESSIONS_PER_CREDENTIAL`       | `maxSessionsPerCredential`        |
-| `MCP_MAX_UNVALIDATED_SESSIONS`          | `maxUnvalidatedSessions`          |
-| `MCP_SESSION_IDLE_TTL_MS`               | `sessionIdleTtlMs`                |
-| `MCP_SESSION_ABSOLUTE_TTL_MS`           | `sessionAbsoluteTtlMs`            |
-| `MCP_UNVALIDATED_SESSION_TTL_MS`        | `unvalidatedSessionTtlMs`         |
-| `MCP_RATE_LIMIT_PER_MINUTE`             | `mcpRateLimitPerMinute`           |
-| `MCP_PUBLIC_FILE_RATE_LIMIT_PER_MINUTE` | `publicFileRateLimitPerMinute`    |
-| `MCP_MAX_UPLOAD_FILE_DATA_BYTES`        | `maxUploadFileDataBytes` (shared) |
+| Environment variable                    | Config field                              |
+| --------------------------------------- | ----------------------------------------- |
+| `MCP_PORT`                              | `port`                                    |
+| `MCP_HOST`                              | `host`                                    |
+| `MCP_BASE_URL`                          | `baseUrl`                                 |
+| `MCP_ALLOWED_HOSTS`                     | `allowedHosts`                            |
+| `MCP_TRUST_PROXY_HOPS`                  | `trustProxyHops`                          |
+| `MCP_HTTP_STATELESS`                    | `stateless`                               |
+| `MCP_MAX_CONCURRENT_REQUESTS`           | `maxConcurrentRequests`                   |
+| `MCP_CREDENTIAL_RATE_LIMIT_STORE`       | `credentialRateLimitStore`                |
+| `MCP_SERVE_LAYERV_LEGAL_PAGES`          | `serveLayerVLegalPages` (default `false`) |
+| `MCP_RATE_LIMIT_DYNAMODB_TABLE`         | `rateLimitDynamoDbTable`                  |
+| `MCP_METRICS_NAMESPACE`                 | `metricsNamespace`                        |
+| `MCP_METRICS_SERVICE`                   | `metricsService`                          |
+| `MCP_METRICS_ENVIRONMENT`               | `metricsEnvironment`                      |
+| `MCP_MAX_SESSIONS`                      | `maxSessions`                             |
+| `MCP_MAX_SESSIONS_PER_CREDENTIAL`       | `maxSessionsPerCredential`                |
+| `MCP_MAX_UNVALIDATED_SESSIONS`          | `maxUnvalidatedSessions`                  |
+| `MCP_SESSION_IDLE_TTL_MS`               | `sessionIdleTtlMs`                        |
+| `MCP_SESSION_ABSOLUTE_TTL_MS`           | `sessionAbsoluteTtlMs`                    |
+| `MCP_UNVALIDATED_SESSION_TTL_MS`        | `unvalidatedSessionTtlMs`                 |
+| `MCP_RATE_LIMIT_PER_MINUTE`             | `mcpRateLimitPerMinute`                   |
+| `MCP_PUBLIC_FILE_RATE_LIMIT_PER_MINUTE` | `publicFileRateLimitPerMinute`            |
+| `MCP_MAX_UPLOAD_FILE_DATA_BYTES`        | `maxUploadFileDataBytes` (shared)         |
 
 The listener defaults to `127.0.0.1`. A non-loopback `host` is rejected unless
 `allowedHosts` is explicitly configured. Set `trustProxyHops` (or
@@ -674,11 +691,16 @@ That catalog is assembled from static schemas and descriptions and does not
 include bearer tokens, SMTP credentials, or other operator configuration.
 Unvalidated-session caps, a short validation deadline, and request rate limits
 bound that pre-validation state; the supplied token is forwarded only to the
-configured qURL API.
+configured qURL API and, for upload tools, the configured qURL Connector.
 Introspection-only sessions therefore remain unvalidated and are closed at
 `unvalidatedSessionTtlMs`; clients can re-initialize if they need a longer-lived
-session. A session is promoted only after a successful qURL API call—rejected
-or rate-limited calls do not prove the credential valid. Disconnected sessions
+session. A session is promoted only after a successful qURL API call or a
+deliverable upload-link mint through the configured connector (which forwards the
+bearer to the qURL API)—rejected or rate-limited calls do not prove the credential
+valid. The connector is therefore part of this trust boundary: point
+`QURL_CONNECTOR_URL` only at a connector that authenticates the bearer. Its
+upload error text (bounded to 1 KiB, control characters flattened) and the links
+it mints are returned to the agent, and minted links may be emailed. Disconnected sessions
 remain registered for a 30-second SSE reconnect grace period, while
 `maxSessions` and `maxSessionsPerCredential` bound that allowance under churn.
 

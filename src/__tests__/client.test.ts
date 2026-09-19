@@ -272,23 +272,6 @@ describe("QURLClient adapter", () => {
       expect((out.data as { access_tokens?: unknown }).access_tokens).toBeUndefined();
     });
 
-    it("extendQURL delegates to sdk.extend and maps the resource result", async () => {
-      // extend changed code paths (old client delegated to updateQURL); confirm
-      // it hits sdk.extend and the resource is mapped (access_tokens → qurls).
-      sdk.extend.mockResolvedValue({
-        resource_id: "r_x",
-        status: "active",
-        created_at: "t",
-        expires_at: "t2",
-        access_tokens: [{ qurl_id: "q_a", status: "active" }],
-      });
-      const out = await newClient().extendQURL("r_x", { extend_by: "24h" });
-
-      expect(sdk.extend).toHaveBeenCalledWith("r_x", { extend_by: "24h" });
-      expect(out.data.qurls).toEqual([{ qurl_id: "q_a", status: "active" }]);
-      expect((out.data as { access_tokens?: unknown }).access_tokens).toBeUndefined();
-    });
-
     it("listQURLs reshapes the SDK envelope into { data, meta } and maps each item", async () => {
       sdk.list.mockResolvedValue({
         qurls: [{ resource_id: "r_x", access_tokens: [] }],

@@ -5,6 +5,7 @@ import type { IQURLClient } from "../client.js";
 import { toolFactories } from "../server.js";
 import {
   makeMockClient,
+  mockConnectorFetch,
   readApiSpec,
   sampleAccessToken,
   sampleBatchCreateOutput,
@@ -375,7 +376,12 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
     },
     extend_qurl: {
       input: { resource_id: "r_test1234567", extend_by: "24h" },
-      clientOverrides: { extendQURL: vi.fn().mockResolvedValue({ data: qurlFixture }) },
+      clientOverrides: {
+        getQURL: vi.fn().mockResolvedValue({
+          data: { ...qurlFixture, qurls: [sampleAccessToken({ status: "active" })] },
+        }),
+        updateQurlToken: vi.fn().mockResolvedValue({ data: sampleAccessToken() }),
+      },
     },
     update_qurl: {
       input: { resource_id: "r_test1234567", extend_by: "24h" },
@@ -433,32 +439,14 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
         file_name: "sample.pdf",
         content_type: "application/pdf",
       },
-      clientOverrides: {
-        mintLink: vi.fn().mockResolvedValue({
-          data: sampleMintLinkOutput({
-            qurl_id: "q_123456789ab",
-            qurl_link: "https://qurl.link/#at_upload_data",
-          }),
-        }),
-        getQURL: vi.fn().mockResolvedValue({
-          data: sampleQURL({
-            resource_id: "r_upload12345",
-            qurl_site: "https://r_upload12345.qurl.site",
-          }),
-        }),
-      },
+      clientOverrides: {},
       setup: () => {
         const originalApiKey = process.env.QURL_API_KEY;
         const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
         const originalFetch = globalThis.fetch;
         process.env.QURL_API_KEY = "lv_live_test";
         process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        );
+        globalThis.fetch = mockConnectorFetch();
         return () => {
           process.env.QURL_API_KEY = originalApiKey;
           process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
@@ -472,32 +460,14 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
         content: "hello from qurl",
         file_name: "sample.txt",
       },
-      clientOverrides: {
-        mintLink: vi.fn().mockResolvedValue({
-          data: sampleMintLinkOutput({
-            qurl_id: "q_123456789ab",
-            qurl_link: "https://qurl.link/#at_upload_text",
-          }),
-        }),
-        getQURL: vi.fn().mockResolvedValue({
-          data: sampleQURL({
-            resource_id: "r_upload12345",
-            qurl_site: "https://r_upload12345.qurl.site",
-          }),
-        }),
-      },
+      clientOverrides: {},
       setup: () => {
         const originalApiKey = process.env.QURL_API_KEY;
         const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
         const originalFetch = globalThis.fetch;
         process.env.QURL_API_KEY = "lv_live_test";
         process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        );
+        globalThis.fetch = mockConnectorFetch();
         return () => {
           process.env.QURL_API_KEY = originalApiKey;
           process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
@@ -507,32 +477,14 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
     },
     upload_file_qurl: {
       input: { file_path: uploadFixturePath },
-      clientOverrides: {
-        mintLink: vi.fn().mockResolvedValue({
-          data: sampleMintLinkOutput({
-            qurl_id: "q_123456789ab",
-            qurl_link: "https://qurl.link/#at_upload",
-          }),
-        }),
-        getQURL: vi.fn().mockResolvedValue({
-          data: sampleQURL({
-            resource_id: "r_upload12345",
-            qurl_site: "https://r_upload12345.qurl.site",
-          }),
-        }),
-      },
+      clientOverrides: {},
       setup: () => {
         const originalApiKey = process.env.QURL_API_KEY;
         const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
         const originalFetch = globalThis.fetch;
         process.env.QURL_API_KEY = "lv_live_test";
         process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        );
+        globalThis.fetch = mockConnectorFetch();
         return () => {
           process.env.QURL_API_KEY = originalApiKey;
           process.env.QURL_CONNECTOR_URL = originalConnectorUrl;

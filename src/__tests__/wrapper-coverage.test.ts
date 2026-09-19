@@ -46,9 +46,7 @@ type ToolCase = {
     runtime: ToolRuntimeOptions,
   ) => { handler: (input: never) => Promise<unknown> };
   // Mock methods on the client to throw missing_api_key. Keyed so each
-  // tool only stubs the method it actually invokes (defensive against
-  // future delegation changes — extendQURL currently delegates to
-  // updateQURL, so the test stubs both).
+  // tool only stubs the method it actually invokes.
   stubs: Array<keyof IQURLClient>;
   // Minimal valid input that satisfies the handler's schema.
   input: unknown;
@@ -87,10 +85,9 @@ const toolCases: ToolCase[] = [
   },
   {
     name: "extend_qurl",
-    // extendQURL delegates to updateQURL on the client — stub both so the
-    // assertion holds whether or not the delegation is preserved.
+    // extend_qurl reads the resource's links, then updates the link.
     build: extendQurlTool,
-    stubs: ["extendQURL", "updateQURL"],
+    stubs: ["getQURL", "updateQurlToken"],
     input: { resource_id: "r_test1234567", extend_by: "1h" },
   },
   {
