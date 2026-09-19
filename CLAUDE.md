@@ -66,6 +66,8 @@ qurl-mcp/
 │   ├── client.ts          # Adapter over the @layervai/qurl SDK (IQURLClient + QURLAPIError)
 │   ├── tools/
 │   │   ├── _shared.ts       # resourceIdSchema, zodErrorToToolResult
+│   │   ├── duration.ts      # Duration grammar and bounds mirrored from qurl-service
+│   │   ├── upload-mint-options.ts # Shared upload link options and descriptions
 │   │   ├── create-qurl.ts
 │   │   ├── resolve-qurl.ts
 │   │   ├── list-qurls.ts

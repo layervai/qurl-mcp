@@ -309,8 +309,9 @@ async function readConnectorResponseBody(response: Response): Promise<string> {
     totalBytes += value.byteLength;
     if (totalBytes > 64 * 1024) {
       await reader.cancel();
+      // Keep an error status (e.g. a proxy's HTML 502) so it is still reported.
       throw new QURLAPIError(
-        0,
+        response.ok ? 0 : response.status,
         "connector_response_too_large",
         "Connector response exceeded the 64 KiB limit.",
       );
@@ -463,7 +464,11 @@ function reportedLinkIds(links: unknown): string[] {
 function isPossiblyLiveLink(entry: unknown): boolean {
   const link = entry as { qurl_link?: unknown; qurl_id?: unknown; expires_at?: unknown } | null;
   const expired = typeof link?.expires_at === "string" && Date.parse(link.expires_at) <= Date.now();
-  return !expired && (typeof link?.qurl_link === "string" || typeof link?.qurl_id === "string");
+  // Real evidence of a minted token: a non-empty ID, or a link that parses.
+  const hasId = typeof link?.qurl_id === "string" && link.qurl_id.length > 0;
+  return (
+    !expired && (hasId || (typeof link?.qurl_link === "string" && URL.canParse(link.qurl_link)))
+  );
 }
 
 function mintedLinkFrom(
@@ -641,7 +646,8 @@ export async function mintUploadedFile(
         (liveLinkCount > 0
           ? ` The connector did mint ${liveLinkCount} live link(s) this server refused to return` +
             (liveQurlIds.length > 0
-              ? `: ${liveQurlIds.join(", ")}`
+              ? `: ${liveQurlIds.join(", ")}` +
+                (liveLinkCount > liveQurlIds.length ? " (IDs listed may be incomplete)" : "")
               : " (the connector reported no IDs for them)") +
             "; tell the user."
           : requestSent

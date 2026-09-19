@@ -36,6 +36,7 @@ afterEach(async () => {
   for (const fn of close.splice(0)) await fn();
   // Spies (console.error especially) must not carry calls into later tests.
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 async function connect() {
@@ -300,6 +301,7 @@ describe("resource SDK boundary", () => {
             42,
             {},
             { qurl_id: "q_000000000ee", expires_at: "2000-01-01T00:00:00Z" },
+            { qurl_link: "" },
           ],
         }),
       ),
@@ -349,6 +351,21 @@ describe("resource SDK boundary", () => {
     expect(lifetime).toBeGreaterThan(86_400_000 - 60_000);
     expect(lifetime).toBeLessThanOrEqual(86_400_000);
     expect(result.expires_at_unconfirmed).toBe(true);
+  });
+
+  it("keeps the connector's error status when an error body is oversized", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () => new Response("x".repeat(64 * 1024 + 1), { status: 502 })),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = (await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    ).catch((caught: unknown) => caught)) as Error;
+    expect(error.message).toContain("(connector responded HTTP 502)");
   });
 
   it("names only live links on a failed mint, never an expired one", async () => {

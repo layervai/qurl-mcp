@@ -106,7 +106,7 @@ export function updateQurlTool(
       "**Constraints:** `extend_by` and `expires_at` are mutually exclusive; `custom_domain`/`preserve_host` cannot be combined with expiration changes in one call; at least one update field (`extend_by`, `expires_at`, `tags`, `description`, `custom_domain`, `preserve_host`) must be set. " +
       '**Clearing fields:** pass `description: ""`, `tags: []`, or `custom_domain: ""` to clear those fields explicitly. ' +
       "Use `delete_qurl` when you want to revoke entirely. " +
-      "**Errors:** if the input fails schema refinements (both extend_by + expires_at, or no fields set), the handler returns an `isError: true` content block before any API call. Other API errors throw with the API's `code`/`statusCode`. " +
+      "**Errors:** a malformed or out-of-range `extend_by` is rejected by input validation; if the input fails schema refinements (both extend_by + expires_at, or no fields set), the handler returns an `isError: true` content block. Both happen before any API call. Other API errors throw with the API's `code`/`statusCode`. " +
       "Returns the updated resource (same shape as `get_qurl`).",
     // Base shape for MCP tool registration; refinements run in the handler
     inputSchema: updateQurlBaseSchema,
