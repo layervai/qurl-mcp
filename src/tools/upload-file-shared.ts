@@ -387,6 +387,7 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
 }
 
 const MAX_LINK_LENGTH = 8192;
+const DEFAULT_UPLOAD_EXPIRES_IN = "24h";
 
 // Why a minted link cannot be returned, or undefined when it can. The link
 // carries an access token and may be emailed, so never plain HTTP, except from
@@ -510,13 +511,12 @@ export async function mintUploadedFile(
   let liveQurlIds: string[] = [];
   let extraQurlIds: string[] = [];
   try {
-    const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
-    if (
-      input.expires_in &&
-      (expiresInMs === undefined || expiresInMs < MIN_EXPIRY_MS || expiresInMs > MAX_EXPIRY_MS)
-    ) {
-      // Omitting expires_at would silently give the link the connector default.
-      throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${input.expires_in}`);
+    // Upload links cannot be revoked from here (#281), so never leave the
+    // lifetime to the connector's default: 24h, as create_qurl's API default.
+    const expiresIn = input.expires_in || DEFAULT_UPLOAD_EXPIRES_IN;
+    const expiresInMs = parseDurationMs(expiresIn);
+    if (expiresInMs === undefined || expiresInMs < MIN_EXPIRY_MS || expiresInMs > MAX_EXPIRY_MS) {
+      throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${expiresIn}`);
     }
     // session_duration is forwarded verbatim; check it too for direct callers.
     const sessionMs = input.session_duration ? parseDurationMs(input.session_duration) : undefined;
@@ -532,8 +532,7 @@ export async function mintUploadedFile(
     }
     // The connector's mint contract takes an absolute expires_at, so the
     // relative expires_in is anchored to this host's clock.
-    requestedExpiresAt =
-      expiresInMs !== undefined ? new Date(Date.now() + expiresInMs).toISOString() : undefined;
+    requestedExpiresAt = new Date(Date.now() + expiresInMs).toISOString();
     const body = {
       n: 1,
       one_time_use: input.one_time_use ?? true,

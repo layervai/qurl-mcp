@@ -283,11 +283,15 @@ describe("extendQurlTool", () => {
       const getQURL = vi.fn().mockResolvedValue({ data: { ...fixture, qurls: undefined } });
       const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
 
-      await tool.handler({ resource_id: "q_ccccccccccc", extend_by: "1h" });
+      const result = await tool.handler({ resource_id: "q_ccccccccccc", extend_by: "1h" });
 
       expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_ccccccccccc", {
         extend_by: "1h",
       });
+      // No link list to splice into, so the response is the server's reread,
+      // never a synthesized one-link list.
+      expect(getQURL).toHaveBeenCalledTimes(2);
+      expect((result.structuredContent as { qurls?: unknown }).qurls).toBeUndefined();
     });
 
     it("extends a named q_ link whose status is unrecognized, like auto-selection", async () => {

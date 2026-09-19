@@ -175,7 +175,7 @@ describe("uploadFileDataQurlTool", () => {
       expect(mint.init?.headers).toEqual(
         expect.objectContaining({ Authorization: "Bearer lv_live_test" }),
       );
-      expect(mint.body).toEqual({ n: 1, one_time_use: true });
+      expect(mint.body).toEqual({ n: 1, one_time_use: true, expires_at: expect.any(String) });
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed).toEqual({
@@ -184,6 +184,9 @@ describe("uploadFileDataQurlTool", () => {
         content_type: "application/pdf",
         file_name: "sample.pdf",
         size_bytes: expect.any(Number),
+        // The 24h default is requested; the fixture's fixed expiry differs from it.
+        requested_expires_at: mint.body.expires_at,
+        expires_at_differs_from_request: true,
       });
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
     });

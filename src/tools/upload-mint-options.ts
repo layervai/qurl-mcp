@@ -35,7 +35,7 @@ export const uploadMintOptionsShape = {
   expires_in: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d")
     .optional()
     .describe(
-      'Link lifetime (e.g., "1h", "24h", "7d"; max 30d), converted to an absolute expiry using this server\'s clock',
+      'Link lifetime (e.g., "1h", "24h", "7d"; max 30d; default 24h), converted to an absolute expiry using this server\'s clock',
     ),
   one_time_use: z
     .boolean()

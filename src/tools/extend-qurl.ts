@@ -77,7 +77,12 @@ async function linkToExtend(
         error: `Link ${named} is ${status}, so it cannot be extended. Use mint_link to issue a new one.`,
       };
     }
-    return { resourceId: resource.resource_id, qurlId: named, resource };
+    // A read without the link list cannot be spliced; the handler rereads.
+    return {
+      resourceId: resource.resource_id,
+      qurlId: named,
+      ...(resource.qurls ? { resource } : {}),
+    };
   }
   if (!resource.qurls) {
     return { error: "The resource read did not include its links; pass qurl_id to choose one." };
@@ -147,9 +152,7 @@ export function extendQurlTool(
       if (resource) {
         resource = {
           ...resource,
-          qurls: resource.qurls?.map((link) => (link.qurl_id === qurlId ? token.data : link)) ?? [
-            token.data,
-          ],
+          qurls: resource.qurls?.map((link) => (link.qurl_id === qurlId ? token.data : link)),
         };
       } else {
         try {

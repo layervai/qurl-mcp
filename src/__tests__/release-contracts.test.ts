@@ -282,7 +282,7 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at_differs_from_request).toBe(true);
   });
 
-  it("flags an unconfirmed lifetime even when no expires_in was requested", async () => {
+  it("defaults the lifetime to 24h and flags it unconfirmed when the connector does not echo it", async () => {
     vi.stubGlobal(
       "fetch",
       mockConnectorFetch(undefined, () =>
@@ -296,7 +296,10 @@ describe("resource SDK boundary", () => {
       {},
     );
     expect(result.expires_at).toBeUndefined();
-    expect(result.requested_expires_at).toBeUndefined();
+    // Omitted expires_in defaults to 24h rather than the connector's default.
+    const lifetime = Date.parse(result.requested_expires_at ?? "") - Date.now();
+    expect(lifetime).toBeGreaterThan(86_400_000 - 60_000);
+    expect(lifetime).toBeLessThanOrEqual(86_400_000);
     expect(result.expires_at_unconfirmed).toBe(true);
   });
 
