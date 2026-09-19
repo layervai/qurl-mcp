@@ -40,11 +40,20 @@ It currently supports:
 | `extend_qurl`             | Extend a link's expiration (needs `qurl:read` too)  |
 | `update_qurl`             | Update qURL metadata or expiration                  |
 | `mint_link`               | Mint a new access link for an existing resource     |
+| `share_by_crid`           | Mint a temporary access link from a resource CRID   |
 | `batch_create_qurls`      | Create multiple qURLs in one request                |
 | `revoke_qurl_token`       | Revoke a specific token                             |
 | `update_qurl_token`       | Update a specific token                             |
 | `list_qurl_sessions`      | List active access sessions                         |
 | `terminate_qurl_sessions` | Terminate one or all active sessions                |
+
+`share_by_crid` recognizes a standalone `$<CRID>` value as an explicit request
+to mint a temporary link for that CRID. The `$` is a user-facing marker and is
+removed before the CRID is sent to the qURL API. A bare CRID remains supported.
+This tool requires `qurl:resolve`. Its optional Go-duration `ttl` must resolve to
+a positive whole number of seconds. The service clamps the requested lifetime.
+Sharing makes one request with a 30-second timeout and does not automatically
+retry. Repeating the tool call can mint another link.
 
 Resource status filters accept `active`, `revoked`, or `active,revoked`.
 A resource remains active or revoked even when its `expires_at` is in the past;
@@ -81,7 +90,7 @@ per-recipient watermarked view), not from qURL `mint_link`, so uploaded files
 cannot be re-linked with `mint_link`; run the upload tool again. Upload links
 support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
 clock, so a host clock that is off shortens or lengthens the link; a link whose returned expiry
-is already past by this host's clock is returned with `expires_at_already_past`), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
+is already past by this host's clock is returned with `expires_at_already_past`), `one_time_use`, and `session_duration` (whole seconds, up to 24h); `access_policy` and
 `max_sessions` are rejected before the upload. If the connector ever mints more
 links than requested, the result reports how many extra in
 `unexpected_extra_link_count` and any IDs it returned in

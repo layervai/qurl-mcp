@@ -11,6 +11,7 @@ import {
   sampleBatchCreateOutput,
   sampleCreateQURLData,
   sampleMintLinkOutput,
+  sampleShareCRIDOutput,
   sampleQURL,
   sampleResolveOutput,
   sampleSession,
@@ -390,6 +391,12 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       input: { resource_id: "r_test1234567" },
       clientOverrides: {
         mintLink: vi.fn().mockResolvedValue({ data: sampleMintLinkOutput() }),
+      },
+    },
+    share_by_crid: {
+      input: { crid: "crid_test" },
+      clientOverrides: {
+        shareByCRID: vi.fn().mockResolvedValue({ data: sampleShareCRIDOutput() }),
       },
     },
     batch_create_qurls: {

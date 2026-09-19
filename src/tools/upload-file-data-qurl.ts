@@ -26,6 +26,7 @@ import {
 import { uploadFileQurlOutputSchema } from "./output-schemas.js";
 import {
   uploadMintOptionsShape,
+  uploadMintOptionsSchema,
   UPLOAD_LINK_DESCRIPTION,
   UPLOAD_RETURNS_DESCRIPTION,
 } from "./upload-mint-options.js";
@@ -239,6 +240,7 @@ export function uploadFileDataQurlTool(
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: UploadFileDataQurlInput) => {
+      uploadMintOptionsSchema.parse(input);
       const allowServerApiKeyFallback = allowsServerApiKeyFallback(runtime);
       // Preflight connector config before decoding payloads so auth/config errors fail fast.
       const connectorConfig = getConnectorConfig(allowServerApiKeyFallback);

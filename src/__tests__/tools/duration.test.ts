@@ -58,6 +58,11 @@ describe("durationSchema", () => {
       "Use a duration like '30m', '24h', or '7d'",
     ]);
   });
+  it("reports one syntax instruction for an empty duration", () => {
+    expect(expiry.safeParse("").error?.issues.map((issue) => issue.message)).toEqual([
+      "Use a duration like '30m', '24h', or '7d'",
+    ]);
+  });
   it("tells a syntax error apart from an out-of-range value", () => {
     expect(expiry.safeParse("banana").error?.issues.map((issue) => issue.message)).toEqual([
       "Use a duration like '30m', '24h', or '7d'",

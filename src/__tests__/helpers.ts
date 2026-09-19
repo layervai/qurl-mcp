@@ -31,6 +31,7 @@ export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClien
     resolveQURL: vi.fn(),
     getQuota: vi.fn(),
     mintLink: vi.fn(),
+    shareByCRID: vi.fn(),
     batchCreate: vi.fn(),
     revokeQurlToken: vi.fn(),
     updateQurlToken: vi.fn(),
@@ -111,6 +112,17 @@ export function sampleMintLinkOutput(overrides: Partial<MintLinkOutput> = {}): M
     qurl_link: "https://qurl.link/at_xyz",
     expires_at: "2026-03-10T00:00:00Z",
     ...overrides,
+  };
+}
+
+export function sampleShareCRIDOutput() {
+  return {
+    qurl: "https://qurl.link/#at_share",
+    crid: "crid_test",
+    type: "qv2",
+    expires_at: "2026-03-10T00:00:00Z",
+    expires_in_seconds: 300,
+    single_use: true,
   };
 }
 

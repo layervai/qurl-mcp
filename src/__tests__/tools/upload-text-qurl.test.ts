@@ -147,7 +147,7 @@ describe("uploadTextQurlTool", () => {
         n: 1,
         one_time_use: false,
         expires_at: expect.any(String),
-        session_duration: "1h",
+        session_duration: "3600s",
       });
 
       const parsed = JSON.parse(result.content[0].text);

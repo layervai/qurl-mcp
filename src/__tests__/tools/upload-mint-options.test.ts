@@ -51,6 +51,7 @@ describe("uploadMintOptionsShape", () => {
     { description: "an expiry under a minute", input: { expires_in: "30s" } },
     { description: "a session over 24h", input: { session_duration: "25h" } },
     { description: "a sub-second session", input: { session_duration: "500ms" } },
+    { description: "a fractional-second session", input: { session_duration: "1500ms" } },
   ])("rejects $description", ({ input }) => {
     expect(uploadMintOptionsSchema.safeParse(input).success).toBe(false);
   });

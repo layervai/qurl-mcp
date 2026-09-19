@@ -5,6 +5,7 @@ import {
   MAX_SESSION_MS,
   MIN_EXPIRY_MS,
   MIN_SESSION_MS,
+  parseDurationMs,
 } from "./duration.js";
 
 // The file connector mints uploaded-file links, and its mint contract carries
@@ -46,13 +47,17 @@ export const uploadMintOptionsShape = {
     .optional()
     .describe("Whether the link can only be used once. Defaults to true for uploaded content."),
   session_duration: durationSchema(MIN_SESSION_MS, MAX_SESSION_MS, "1s to 24h")
+    .refine((value) => (parseDurationMs(value) ?? 0) % 1000 === 0, {
+      message: "Uploaded-file session_duration must be a whole number of seconds",
+    })
     .optional()
-    .describe('How long access lasts after clicking (e.g., "1h"; max 24h)'),
+    .describe('How long access lasts after clicking (e.g., "1h"; whole seconds, max 24h)'),
   max_sessions: unsupportedForUploads("max_sessions"),
   access_policy: unsupportedForUploads("access_policy"),
 };
 
-export type UploadMintOptionsInput = z.infer<z.ZodObject<typeof uploadMintOptionsShape>>;
+export const uploadMintOptionsSchema = z.object(uploadMintOptionsShape);
+export type UploadMintOptionsInput = z.infer<typeof uploadMintOptionsSchema>;
 
 // Shared by the three upload tools so their descriptions cannot drift apart.
 export const UPLOAD_LINK_DESCRIPTION =

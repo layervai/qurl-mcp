@@ -43,7 +43,8 @@ const RESOURCE_LINK_PREVIEW_LIMIT = 100;
 
 // Whether resource.qurls lists every link. qurl_count counts all retained
 // links, revoked and expired included (OpenAPI Resource.qurl_count), and the
-// preview lists those too, so a revoked link does not make the list look
+// preview uses tokenRepo.ListByResourceLimited without a status filter
+// (qurl-service internal/service/qurl_service.go), so a revoked link does not make the list look
 // short; when qurl_count is omitted, only a list under the cap is known whole.
 function linkListComplete(resource: Resource): boolean {
   // A list at the cap is never trusted as whole, whatever qurl_count says.

@@ -18,6 +18,7 @@ import {
 } from "./email-delivery.js";
 import {
   uploadMintOptionsShape,
+  uploadMintOptionsSchema,
   UPLOAD_LINK_DESCRIPTION,
   UPLOAD_RETURNS_DESCRIPTION,
 } from "./upload-mint-options.js";
@@ -108,6 +109,8 @@ async function uploadLocalFileAndMint(
   input: UploadFileQurlInput,
   connectorConfig: ConnectorConfig,
 ) {
+  // Direct generated-file callers also validate before reading or storing a file.
+  uploadMintOptionsSchema.parse(input);
   const sourcePath = resolve(input.file_path);
   // O_NOFOLLOW protects the final component. Intermediate directory symlinks
   // still follow normal filesystem semantics; this tool is stdio-only and the

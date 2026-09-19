@@ -563,11 +563,15 @@ export async function mintUploadedFile(
     if (expiresInMs === undefined || expiresInMs < MIN_EXPIRY_MS || expiresInMs > MAX_EXPIRY_MS) {
       throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${expiresIn}`);
     }
-    // session_duration is forwarded verbatim; check it too for direct callers.
+    // The connector requires whole seconds in Go duration syntax (no d/w units).
+    // Check direct callers too, then normalize accepted day/week input below.
     const sessionMs = input.session_duration ? parseDurationMs(input.session_duration) : undefined;
     if (
       input.session_duration &&
-      (sessionMs === undefined || sessionMs < MIN_SESSION_MS || sessionMs > MAX_SESSION_MS)
+      (sessionMs === undefined ||
+        sessionMs < MIN_SESSION_MS ||
+        sessionMs > MAX_SESSION_MS ||
+        sessionMs % 1000 !== 0)
     ) {
       throw new QURLAPIError(
         0,
@@ -582,7 +586,7 @@ export async function mintUploadedFile(
       n: 1,
       one_time_use: input.one_time_use ?? true,
       expires_at: requestedExpiresAt,
-      ...(input.session_duration ? { session_duration: input.session_duration } : {}),
+      ...(sessionMs !== undefined ? { session_duration: `${sessionMs / 1000}s` } : {}),
     };
     const mintUrl = connectorMintUrl(connectorConfig.uploadUrl, resourceId);
     requestSent = true;
@@ -633,7 +637,7 @@ export async function mintUploadedFile(
     if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(
-        `Connector minted ${result.extraCount + 1} links for ${resourceId}; returning one ` +
+        `Connector returned ${result.extraCount} additional possibly live links for ${resourceId}; returning one ` +
           `(links: ${describeLinks([result.link, ...result.others])})`,
       );
     }

@@ -75,6 +75,7 @@ qurl-mcp/
 │   │   ├── delete-qurl.ts
 │   │   ├── extend-qurl.ts
 │   │   ├── update-qurl.ts
+│   │   ├── share-by-crid.ts
 │   │   ├── mint-link.ts
 │   │   ├── batch-create.ts
 │   │   ├── revoke-qurl-token.ts
@@ -173,6 +174,7 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 | `delete_qurl`             | `qurl:write`   | Revoke a qURL                                           |
 | `extend_qurl`             | `qurl:write`, `qurl:read` | Extend a link's expiration                  |
 | `update_qurl`             | `qurl:write`   | Update expiration, tags, description                    |
+| `share_by_crid`           | `qurl:resolve` | Mint a temporary link from a resource CRID              |
 | `mint_link`               | `qurl:write`   | Mint a new access link for an existing resource         |
 | `batch_create_qurls`      | `qurl:write`   | Create multiple qURLs at once                           |
 | `revoke_qurl_token`       | `qurl:write`   | Revoke one access token                                 |
@@ -247,6 +249,13 @@ The repository includes an API spec drift detection system:
 - **Action:** When the drift check fails, review the diff, update `api-spec/qurls.yaml`, update client types/tools as needed, and verify with `npm run build && npm run lint && npm test`.
 - **Spec URL:** Configurable via the `QURL_API_SPEC_URL` repository variable. Defaults to `https://layerv.ai/docs/qurls.yaml`.
 - **Native UDP invariant:** The retired HTTP agent lifecycle operations (`/v1/agent/bootstrap`, `/v1/agent/registration-info`, and `/v1/agent/registration/complete`) and their operation IDs/schemas must not reappear in the snapshot. Keep the `qurl:agent` scope: it authorizes minting native UDP Connector enrollment credentials, not an HTTP lifecycle endpoint.
+
+The additive `POST /v1/resources/{id}/share` route is not yet in this older
+snapshot. Its `ttl_seconds` request and share response were checked against
+qurl-service `3e06b0b` (`internal/api/handlers/resource_share.go` and the generated
+API types), plus live CRID share smoke tests. The raw share client makes one
+attempt with a 30-second timeout because SDK 0.3.1 has no share method or public
+request API. A repeated MCP call is a new mint and can create another link.
 
 ## npm Publishing (Trusted Publishing / OIDC)
 

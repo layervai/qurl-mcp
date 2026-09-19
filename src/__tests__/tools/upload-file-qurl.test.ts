@@ -81,6 +81,22 @@ describe("uploadFileQurlTool", () => {
   });
 
   describe("handler", () => {
+    it.each([{ expires_in: "31d" }, { session_duration: "25h" }, { session_duration: "1500ms" }])(
+      "rejects invalid options before a direct generated-file upload: %j",
+      async (options) => {
+        const filePath = join(tempDir!, "direct.pdf");
+        writeFileSync(filePath, "%PDF-1.4\n%%EOF");
+        const fetchMock = vi.fn();
+        globalThis.fetch = fetchMock;
+        await expect(
+          uploadGeneratedFileAndMint(
+            { file_path: filePath, ...options },
+            { uploadUrl: "https://connector.test/api/upload", apiKey: "lv_live_test" },
+          ),
+        ).rejects.toThrow(/Duration must be|whole number of seconds/);
+        expect(fetchMock).not.toHaveBeenCalled();
+      },
+    );
     it("rejects generated-file helper paths outside the server temporary directory", async () => {
       await expect(
         uploadGeneratedFileAndMint(
@@ -133,7 +149,7 @@ describe("uploadFileQurlTool", () => {
         n: 1,
         one_time_use: true,
         expires_at: expect.any(String),
-        session_duration: "15m",
+        session_duration: "900s",
       });
       const lifetimeMs = Date.parse(mint.body.expires_at) - Date.now();
       expect(lifetimeMs).toBeGreaterThan(2 * 3_600_000 - 60_000);

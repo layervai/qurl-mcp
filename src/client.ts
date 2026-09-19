@@ -230,6 +230,21 @@ export interface MintLinkOutput {
   type?: string;
 }
 
+/**
+ * Response returned by the CRID share endpoint. Unlike `mint_link`, this
+ * operation identifies the resource with its integration CRID and the API
+ * returns the wire field `qurl`.
+ */
+export interface ShareCRIDOutput {
+  qurl: string;
+  qurl_id?: string;
+  crid?: string;
+  type: string;
+  expires_at?: string;
+  expires_in_seconds: number;
+  single_use: boolean;
+}
+
 // Discriminated on `success` so consumers narrowing on the boolean get
 // type-safe access to the success-only fields (qurl_link, etc.) and the
 // failure-only `error` shape. The API contract is mutually exclusive at
@@ -303,6 +318,8 @@ export interface IQURLClient {
   resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }>;
   getQuota(): Promise<{ data: QuotaOutput }>;
   mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }>;
+  /** Mint a temporary qURL link for a resource identified by CRID. */
+  shareByCRID(crid: string, ttlSeconds?: number): Promise<{ data: ShareCRIDOutput }>;
   batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput>;
   revokeQurlToken(resourceId: string, qurlId: string): Promise<void>;
   updateQurlToken(
@@ -398,6 +415,16 @@ function mapResource(raw: SDKQURL | SDKResource): QURL {
       ? rest
       : { ...rest, qurls: access_tokens };
   return mapped as unknown as QURL;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 // --- Client implementation ---
@@ -519,6 +546,100 @@ export class QURLClient implements IQURLClient {
 
   async mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }> {
     return this.call(async (sdk) => ({ data: (await sdk.mintLink(id, input)) as MintLinkOutput }));
+  }
+
+  /**
+   * Mint a temporary access link for a resource identified by CRID.
+   *
+   * The published JavaScript SDK does not currently expose the service's
+   * CRID share route, so this small call uses the same API origin and bearer
+   * credential directly. The endpoint requires a JSON object body even when
+   * no options are supplied.
+   */
+  async shareByCRID(crid: string, ttlSeconds?: number): Promise<{ data: ShareCRIDOutput }> {
+    if (!this.apiKey) {
+      throw new QURLAPIError(0, "missing_api_key", MISSING_API_KEY_MESSAGE);
+    }
+
+    // The published SDK has no share method or public request API. Do not
+    // retry this mint here: a lost response may already have created a link.
+    try {
+      const response = await fetch(
+        `${this.baseURL}/v1/resources/${encodeURIComponent(crid)}/share`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(ttlSeconds === undefined ? {} : { ttl_seconds: ttlSeconds }),
+          signal: globalThis.AbortSignal.timeout(30_000),
+        },
+      );
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (err) {
+        if (!(err instanceof SyntaxError)) throw err;
+        throw new QURLAPIError(
+          response.status,
+          "unexpected_response",
+          "qURL API returned invalid JSON",
+        );
+      }
+
+      const envelope = asRecord(payload);
+      if (!response.ok) {
+        const error = asRecord(envelope?.error);
+        const code = asString(error?.code) ?? asString(envelope?.code) ?? "api_error";
+        const message =
+          asString(error?.detail) ??
+          asString(error?.message) ??
+          asString(error?.title) ??
+          `qURL API request failed with status ${response.status}`;
+        const meta = asRecord(envelope?.meta);
+        throw new QURLAPIError(
+          response.status,
+          code,
+          message,
+          asString(error?.type),
+          asString(error?.instance),
+          asString(meta?.request_id) ?? asString(envelope?.request_id),
+        );
+      }
+
+      const data = asRecord(envelope?.data);
+      if (
+        !data ||
+        typeof data.qurl !== "string" ||
+        (data.qurl_id !== undefined && typeof data.qurl_id !== "string") ||
+        (data.crid !== undefined && typeof data.crid !== "string") ||
+        typeof data.type !== "string" ||
+        (data.expires_at !== undefined && typeof data.expires_at !== "string") ||
+        typeof data.expires_in_seconds !== "number" ||
+        typeof data.single_use !== "boolean"
+      ) {
+        throw new QURLAPIError(
+          response.status,
+          "unexpected_response",
+          "qURL API returned an invalid share response",
+        );
+      }
+
+      markRequestCredentialValidated();
+      return { data: data as unknown as ShareCRIDOutput };
+    } catch (err) {
+      if (err instanceof QURLAPIError) throw err;
+      const timeout =
+        err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+      throw new QURLAPIError(
+        0,
+        timeout ? "timeout" : "network_error",
+        timeout ? "qURL API request timed out" : "qURL API network request failed",
+      );
+    }
   }
 
   async batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput> {

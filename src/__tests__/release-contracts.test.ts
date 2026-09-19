@@ -499,6 +499,20 @@ describe("resource SDK boundary", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("q_123456789ab"));
   });
 
+  it("normalizes day-based sessions to the connector's Go duration grammar", async () => {
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://connector.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { session_duration: "1d" },
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      session_duration: "86400s",
+    });
+  });
+
   it("sends session_duration, logs extra links and expiry drift, and keeps an unconfirmed expiry separate", async () => {
     const fetchMock = mockConnectorFetch(undefined, () =>
       Response.json({
@@ -520,8 +534,8 @@ describe("resource SDK boundary", () => {
       { expires_in: "2h", session_duration: "15m" },
     );
     const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
-    expect(sent).toMatchObject({ n: 1, one_time_use: true, session_duration: "15m" });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 4 links"));
+    expect(sent).toMatchObject({ n: 1, one_time_use: true, session_duration: "900s" });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("3 additional possibly live links"));
     expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     expect(result.expires_at).toBe("2099-01-01T00:00:00.000Z");
     expect(result.requested_expires_at).toBe(sent.expires_at);
@@ -754,7 +768,7 @@ describe("resource SDK boundary", () => {
 
     const fetchMock = mockConnectorFetch();
     vi.stubGlobal("fetch", fetchMock);
-    for (const session_duration of ["1 hour", "25h", "500ms"]) {
+    for (const session_duration of ["1 hour", "25h", "500ms", "1500ms"]) {
       await expect(
         mintUploadedFile(config, publicKey, file, { session_duration }),
       ).rejects.toMatchObject({ code: "upload_mint_failed" });
@@ -838,6 +852,16 @@ describe("resource SDK boundary", () => {
       return { run, markCredentialValidated };
     };
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const uploadValidated = vi.fn();
+    vi.stubGlobal("fetch", mockConnectorFetch());
+    await runWithRequestAuthContext({ markCredentialValidated: uploadValidated }, () =>
+      uploadToConnector(new Uint8Array([1]), "a.pdf", "application/pdf", {
+        apiKey: "lv_live_caller",
+        uploadUrl: "https://c.test/api/upload",
+      }),
+    );
+    expect(uploadValidated).not.toHaveBeenCalled();
 
     const ok = mint(() => Response.json({ success: true, links: [{ qurl_link: "https://l" }] }));
     await ok.run;
