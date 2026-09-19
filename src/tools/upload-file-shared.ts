@@ -398,7 +398,7 @@ function isDeliverableLink(value: string, connectorUploadUrl: string): boolean {
   }
 }
 
-type MintedLink = { qurl_id: string; qurl_link: string; expires_at?: unknown };
+type MintedLink = { qurl_id?: string; qurl_link: string; expires_at?: unknown };
 
 /** The single link the connector minted, or why its response is unusable. */
 // Every link in a mint response is live and cannot be revoked from this server,
@@ -433,9 +433,9 @@ function mintedLinkFrom(
   // Use the first deliverable link rather than strictly index 0: a malformed
   // first entry must not discard a good one, since the file cannot be re-linked.
   // The qurl_id is informational here (it may belong to the connector's
-  // resource), so an unexpected shape does not make a working link unusable.
+  // resource), so an unexpected or missing ID does not make a working link unusable.
   const reasonFor = (entry: Record<string, unknown>) =>
-    typeof entry.qurl_id !== "string" || !entry.qurl_id || typeof entry.qurl_link !== "string"
+    typeof entry.qurl_link !== "string"
       ? "no usable link"
       : !isDeliverableLink(entry.qurl_link, connectorUploadUrl)
         ? "a non-HTTPS link"
@@ -453,7 +453,9 @@ function mintedLinkFrom(
   return {
     link: {
       // Untrusted: bounded and flattened before it reaches the caller or email.
-      qurl_id: flattenControlCharacters(chosen.qurl_id as string).slice(0, 64),
+      ...(typeof chosen.qurl_id === "string" && chosen.qurl_id
+        ? { qurl_id: flattenControlCharacters(chosen.qurl_id).slice(0, 64) }
+        : {}),
       qurl_link: chosen.qurl_link as string,
       expires_at: chosen.expires_at,
     },
@@ -606,7 +608,7 @@ export async function mintUploadedFile(
 
   return {
     resource_id: resourceId,
-    qurl_id: minted.qurl_id,
+    ...(minted.qurl_id ? { qurl_id: minted.qurl_id } : {}),
     qurl_link: minted.qurl_link,
     // Only a connector-confirmed expiry is reported as expires_at; the request
     // may have been clamped, and expires_at reaches recipients in email.

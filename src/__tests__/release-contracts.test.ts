@@ -437,7 +437,7 @@ describe("resource SDK boundary", () => {
         Response.json({
           success: true,
           links: [
-            { qurl_link: "https://x" },
+            { qurl_id: "q_0000000000z", qurl_link: "not a url" },
             { qurl_id: "q_0000000000a", qurl_link: "https://real" },
           ],
         }),
@@ -449,7 +449,18 @@ describe("resource SDK boundary", () => {
       qurl_link: "https://real",
       unexpected_extra_link_count: 1,
     });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("(no qurl_id), q_0000000000a"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("q_0000000000z, q_0000000000a"));
+
+    // A deliverable link without any qurl_id is still returned, not discarded.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_link: "https://no-id" }] }),
+      ),
+    );
+    const idless = await mintUploadedFile(config, publicKey, file, {});
+    expect(idless.qurl_link).toBe("https://no-id");
+    expect(idless).not.toHaveProperty("qurl_id");
 
     // When no entry is deliverable, the caller still learns which live links exist.
     vi.stubGlobal(

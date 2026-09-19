@@ -4,14 +4,15 @@ import { z } from "zod";
 // dot, or U+03BC mu): whole days/weeks ("7d", "1w") or a
 // Go duration ("30m", "1h30m", "1.5h").
 const DURATION_PATTERN = /^(?:\d+[dw]|(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+)$/;
-const GO_DURATION_UNIT_MS = {
-  ns: 1e-6,
-  us: 1e-3,
-  µs: 1e-3,
-  ms: 1,
-  s: 1_000,
-  m: 60_000,
-  h: 3_600_000,
+// Nanoseconds per unit, so sub-millisecond units sum exactly before one division.
+const GO_DURATION_UNIT_NS = {
+  ns: 1,
+  us: 1e3,
+  µs: 1e3,
+  ms: 1e6,
+  s: 1e9,
+  m: 6e10,
+  h: 3.6e12,
 } as const;
 
 /**
@@ -23,11 +24,11 @@ export function parseDurationMs(value: string): number | undefined {
   if (!DURATION_PATTERN.test(value)) return undefined;
   const whole = /^(\d+)([dw])$/.exec(value);
   if (whole) return Number(whole[1]) * (whole[2] === "d" ? 86_400_000 : 604_800_000);
-  let total = 0;
+  let totalNs = 0;
   for (const [, amount, unit] of value.matchAll(/(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g)) {
-    total += Number(amount) * GO_DURATION_UNIT_MS[unit as keyof typeof GO_DURATION_UNIT_MS];
+    totalNs += Number(amount) * GO_DURATION_UNIT_NS[unit as keyof typeof GO_DURATION_UNIT_NS];
   }
-  return total;
+  return totalNs / 1e6;
 }
 
 // Bounds mirror qurl-service so an out-of-range value fails before any side

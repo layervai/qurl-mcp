@@ -223,7 +223,7 @@ export function uploadFileDataQurlTool(
       "Supported MIME types are application/pdf, image/png, image/jpeg, image/webp, and image/gif. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +
       "Requires `QURL_CONNECTOR_URL`; stdio reads `QURL_API_KEY` from server config, while HTTP uses the caller's bearer credential. " +
-      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, expires_at?: string, requested_expires_at?: string, expires_at_differs_from_request?: boolean, expires_at_unconfirmed?: boolean, unexpected_extra_link_count?: number, unexpected_extra_qurl_ids?: string[], file_name: string, content_type: string, size_bytes: number, email_delivery?: object }`. If `unexpected_extra_link_count` is present, the connector minted extra live links: tell the user. If `expires_at_differs_from_request` is set, tell the user the actual `expires_at`; if `expires_at_unconfirmed` is set, say the requested lifetime was not confirmed.",
+      "**Returns:** `{ resource_id: string, qurl_id?: string, qurl_link: string, expires_at?: string, requested_expires_at?: string, expires_at_differs_from_request?: boolean, expires_at_unconfirmed?: boolean, unexpected_extra_link_count?: number, unexpected_extra_qurl_ids?: string[], file_name: string, content_type: string, size_bytes: number, email_delivery?: object }`. If `unexpected_extra_link_count` is present, the connector minted extra live links: tell the user. If `expires_at_differs_from_request` is set, tell the user the actual `expires_at`; if `expires_at_unconfirmed` is set, say the requested lifetime was not confirmed.",
     inputSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {

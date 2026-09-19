@@ -18,6 +18,7 @@ describe("parseDurationMs", () => {
     ["2000000us", 2_000],
     ["3000000µs", 3_000],
     ["4000000000ns", 4_000],
+    ["60000000000ns", 60_000],
   ])("parses %s like qurl-service", (value, expected) => {
     expect(parseDurationMs(value)).toBe(expected);
   });
