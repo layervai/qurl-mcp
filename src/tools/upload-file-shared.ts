@@ -390,7 +390,13 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
 // except from a loopback development connector: the same exception the
 // connector URL itself gets in normalizeServiceBaseUrl, and only when the
 // configured connector is itself loopback.
+const MAX_LINK_LENGTH = 8192;
+
 function isDeliverableLink(value: string, connectorUploadUrl: string): boolean {
+  // The URL parser silently strips tab/CR/LF, so control characters are
+  // refused here rather than returned inside a link that parsed cleanly.
+  // eslint-disable-next-line no-control-regex
+  if (value.length > MAX_LINK_LENGTH || /[\u0000-\u001f\u007f]/.test(value)) return false;
   try {
     const url = new URL(value);
     if (url.protocol === "https:") return true;
@@ -421,7 +427,7 @@ function describeLinks(links: unknown): string {
   return links.length > 10 ? `${shown} (+${links.length - 10} more)` : shown;
 }
 
-function validQurlIds(links: unknown): string[] {
+function reportedLinkIds(links: unknown): string[] {
   return (Array.isArray(links) ? links : [])
     .map((entry: unknown) => (entry as { qurl_id?: unknown } | null)?.qurl_id)
     .filter((id): id is string => typeof id === "string" && id.length > 0)
@@ -467,7 +473,7 @@ function mintedLinkFrom(
       expires_at: chosen.expires_at,
     },
     extraCount: others.length,
-    extraQurlIds: validQurlIds(others).slice(0, 10),
+    extraQurlIds: reportedLinkIds(others).slice(0, 10),
   };
 }
 
@@ -548,7 +554,7 @@ export async function mintUploadedFile(
     }
     const parsed = parseJsonBody(raw);
     // Any link in a failed response is live and unrevocable here; report it.
-    liveQurlIds = validQurlIds((parsed as { links?: unknown } | undefined)?.links).slice(0, 10);
+    liveQurlIds = reportedLinkIds((parsed as { links?: unknown } | undefined)?.links).slice(0, 10);
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");
@@ -600,6 +606,7 @@ export async function mintUploadedFile(
   const driftsFromRequest = Boolean(
     requestedExpiresAt &&
     confirmedExpiresAt &&
+    // Tolerance equals MIN_EXPIRY_MS, so a 1m link clamped to ~0 is not flagged.
     Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > 60_000,
   );
   if (driftsFromRequest) {
@@ -615,7 +622,7 @@ export async function mintUploadedFile(
     qurl_link: minted.qurl_link,
     // Only a connector-confirmed expiry is reported as expires_at; the request
     // may have been clamped, and expires_at reaches recipients in email.
-    expires_at: confirmedExpiresAt,
+    ...(confirmedExpiresAt ? { expires_at: confirmedExpiresAt } : {}),
     ...(requestedExpiresAt ? { requested_expires_at: requestedExpiresAt } : {}),
     ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
     ...(!confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),

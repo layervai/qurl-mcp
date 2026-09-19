@@ -235,7 +235,7 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .array(z.string())
     .optional()
     .describe(
-      "Up to 10 valid q_ IDs of those extra links; may be fewer than unexpected_extra_link_count",
+      "Up to 10 identifiers the connector reported for those extra links (not necessarily q_ display IDs); may be fewer than unexpected_extra_link_count",
     ),
   file_name: z.string().describe("Filename registered with the connector"),
   content_type: z.string().describe("MIME type used for the uploaded file"),

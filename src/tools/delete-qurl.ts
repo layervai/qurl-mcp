@@ -7,6 +7,11 @@ import {
 } from "./_shared.js";
 import { deleteQurlOutputSchema } from "./output-schemas.js";
 
+// Upload links live on the connector's resource, so revoking this one leaves
+// them serving (#281). Said in the result, which agents relay to the user.
+const UPLOAD_LINKS_NOTE =
+  "Links minted by the upload tools are served by the file connector and are not affected.";
+
 export const deleteQurlSchema = z.object({
   resource_id: resourceOnlyIdSchema("revoke (all tokens; q_ display IDs are not accepted)"),
 });
@@ -74,7 +79,7 @@ export function deleteQurlTool(
         resource_id: input.resource_id,
         revoked: true as const,
         was_already_revoked: wasAlreadyRevoked,
-        message: `qURL ${input.resource_id} is revoked.`,
+        message: `qURL ${input.resource_id} is revoked. ${UPLOAD_LINKS_NOTE}`,
       };
       return {
         content: [

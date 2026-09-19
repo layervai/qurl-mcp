@@ -23,6 +23,11 @@ describe("parseDurationMs", () => {
     expect(parseDurationMs(value)).toBe(expected);
   });
 
+  it("accepts micro sign U+00B5 but not Greek mu U+03BC, like qurl-service", () => {
+    expect(parseDurationMs("1000\u00b5s")).toBe(1);
+    expect(parseDurationMs("1000\u03bcs")).toBeUndefined();
+  });
+
   it("returns the magnitude for oversized values so callers can bound them", () => {
     expect(parseDurationMs("999999999d")).toBe(999_999_999 * 86_400_000);
   });

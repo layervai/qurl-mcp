@@ -441,6 +441,19 @@ describe("resource SDK boundary", () => {
     const odd = await mintUploadedFile(config, publicKey, file, {});
     expect(odd).toMatchObject({ qurl_id: "bad id", qurl_link: "https://l" });
 
+    // A link with control characters or an oversized link is not deliverable.
+    for (const qurl_link of ["https://exa\nmple.com/x", `https://l/${"a".repeat(8192)}`]) {
+      vi.stubGlobal(
+        "fetch",
+        mockConnectorFetch(undefined, () =>
+          Response.json({ success: true, links: [{ qurl_link }] }),
+        ),
+      );
+      await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+        code: "upload_mint_failed",
+      });
+    }
+
     // Overflowing expiry fails before any request, not via RangeError after it.
     const guarded = mockConnectorFetch();
     vi.stubGlobal("fetch", guarded);
