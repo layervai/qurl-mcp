@@ -315,6 +315,20 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at_differs_from_request).toBe(true);
   });
 
+  it("accepts a 2xx mint body without a success field (only success: false fails)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () => Response.json({ links: [{ qurl_link: "https://l" }] })),
+    );
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.qurl_link).toBe("https://l");
+  });
+
   it("defaults the lifetime to 24h and flags it unconfirmed when the connector does not echo it", async () => {
     vi.stubGlobal(
       "fetch",

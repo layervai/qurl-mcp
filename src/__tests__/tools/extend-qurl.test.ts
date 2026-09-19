@@ -140,7 +140,13 @@ describe("extendQurlTool", () => {
       const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
 
       expect(getQURL).toHaveBeenCalledOnce();
-      expect(result.structuredContent).toMatchObject({ qurls: [extended, other] });
+      expect(result.structuredContent).toMatchObject({
+        qurls: [extended, other],
+        // The changed expiry is named at the top level, apart from the resource's.
+        extended_qurl_id: extended.qurl_id,
+        extended_link_expires_at: "2099-01-01T00:00:00Z",
+      });
+      expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
     });
 
     it.each([

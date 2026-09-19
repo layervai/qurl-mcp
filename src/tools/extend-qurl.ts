@@ -149,10 +149,10 @@ export function extendQurlTool(
       "Use `update_qurl_token` instead to set an absolute `expires_at` or change the link's label, policy, or sessions. " +
       "Use `revoke_qurl_token` or `delete_qurl` when you want to cut off access. " +
       "**Not idempotent:** calling twice with the same `extend_by` extends the link twice; use `update_qurl_token` with `expires_at` when retries must not double-push. " +
-      "Requires `qurl:write` and `qurl:read`: it reads the resource before updating, to check the link and to return it, so each extend costs two API calls. " +
+      "Requires `qurl:write` and `qurl:read`: it reads the resource before updating, to check the link and to return it, so each extend costs two API calls (three when the read does not list the link). " +
       "A link cannot outlive its resource: if the resource's own `expires_at` is sooner, raise it with `update_qurl` first; the result then carries `extend_warning`. " +
       "Link-selection problems return an error result; a rejected update throws with its HTTP status and error code. " +
-      "Returns the resource (same shape as `get_qurl`); the extended link's new expiry is in `qurls[].expires_at`, not the resource's own `expires_at`.",
+      "Returns the resource (same shape as `get_qurl`); the extended link's new expiry is in `extended_link_expires_at` (and `qurls[].expires_at`), not the resource's own `expires_at`.",
     inputSchema: extendQurlSchema,
     outputSchema: extendQurlOutputSchema,
     annotations: {
@@ -202,13 +202,20 @@ export function extendQurlTool(
       // the resource's expiry: stored past it, or clamped to it on write.
       const linkExpiry = Date.parse(token.data.expires_at ?? "");
       const ceiling = Date.parse(resource.expires_at ?? "");
+      // The change is on the link, so name it at the top level; the resource's
+      // own expires_at is the ceiling, not the new expiry.
+      const extended = {
+        ...resource,
+        extended_qurl_id: qurlId,
+        ...(token.data.expires_at ? { extended_link_expires_at: token.data.expires_at } : {}),
+      };
       const data =
         Number.isFinite(ceiling) && linkExpiry >= ceiling
           ? {
-              ...resource,
+              ...extended,
               extend_warning: `Link ${qurlId} expires at ${token.data.expires_at}, but its resource closes at ${resource.expires_at}, so it stops working then; raise the resource with update_qurl (extend_by up to 30d, or expires_at for further out).`,
             }
-          : resource;
+          : extended;
       return {
         content: [{ type: "text" as const, text: JSON.stringify(data) }],
         structuredContent: toStructuredContent(data),

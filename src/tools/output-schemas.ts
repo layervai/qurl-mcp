@@ -136,6 +136,11 @@ export const createQurlOutputSchema = z.looseObject({
 export const getQurlOutputSchema = qurlSchema;
 export const updateQurlOutputSchema = qurlSchema;
 export const extendQurlOutputSchema = qurlSchema.extend({
+  extended_qurl_id: z.string().optional().describe("The link that was extended"),
+  extended_link_expires_at: z
+    .string()
+    .optional()
+    .describe("The extended link's new expiry; report this, not the resource's own expires_at"),
   extend_warning: z
     .string()
     .optional()
