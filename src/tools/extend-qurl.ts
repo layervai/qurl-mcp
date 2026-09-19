@@ -27,6 +27,9 @@ async function linkToExtend(
   client: IQURLClient,
   input: z.infer<typeof extendQurlSchema>,
 ): Promise<{ resourceId: string; qurlId: string }> {
+  if (input.qurl_id && !input.resource_id.startsWith("q_")) {
+    return { resourceId: input.resource_id, qurlId: input.qurl_id };
+  }
   const { data: resource } = await client.getQURL(input.resource_id);
   const named =
     input.qurl_id ?? (input.resource_id.startsWith("q_") ? input.resource_id : undefined);

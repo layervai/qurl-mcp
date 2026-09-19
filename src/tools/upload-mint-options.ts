@@ -25,12 +25,20 @@ export function parseDurationMs(value: string): number | undefined {
   return total;
 }
 
-const durationSchema = z
-  .string()
-  .min(1)
-  .refine((value) => parseDurationMs(value) !== undefined, {
-    message: "Use a duration like '30m', '24h', '7d', or '1w'",
-  });
+// Bounds mirror qurl-service (MinExpirationDuration, MaxCustomerExpiryDuration,
+// MaxSessionDuration) so an out-of-range value fails before the upload stores
+// the file, not at mint time after it.
+const durationSchema = (minMs: number, maxMs: number, range: string) =>
+  z
+    .string()
+    .min(1)
+    .refine(
+      (value) => {
+        const ms = parseDurationMs(value);
+        return ms !== undefined && ms >= minMs && ms <= maxMs;
+      },
+      { message: `Use a duration like '30m', '24h', or '7d' (${range})` },
+    );
 
 // The file connector mints uploaded-file links, and its mint contract carries
 // no access policy or session cap. Reject them before the upload instead of
@@ -48,16 +56,18 @@ export const uploadMintOptionsShape = {
     .max(500)
     .optional()
     .describe(
-      "Human-readable label for the upload (max 500 chars), used as the document title and in email delivery",
+      "Human-readable label (max 500 chars) shown in email delivery and used as the PDF title by upload_text_qurl. It is not attached to the minted link.",
     ),
-  expires_in: durationSchema.optional().describe('Link lifetime (e.g., "1h", "24h", "7d")'),
+  expires_in: durationSchema(60_000, 30 * 86_400_000, "1m to 30d")
+    .optional()
+    .describe('Link lifetime (e.g., "1h", "24h", "7d"; max 30d)'),
   one_time_use: z
     .boolean()
     .optional()
     .describe("Whether the link can only be used once. Defaults to true for uploaded content."),
-  session_duration: durationSchema
+  session_duration: durationSchema(1, 86_400_000, "up to 24h")
     .optional()
-    .describe('How long access lasts after clicking (e.g., "1h")'),
+    .describe('How long access lasts after clicking (e.g., "1h"; max 24h)'),
   max_sessions: unsupportedForUploads("max_sessions"),
   access_policy: unsupportedForUploads("access_policy"),
 };

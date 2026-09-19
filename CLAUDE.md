@@ -169,7 +169,7 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 | `list_qurls`              | `qurl:read`    | List qURLs with filtering                               |
 | `get_qurl`                | `qurl:read`    | Get qURL details                                        |
 | `delete_qurl`             | `qurl:write`   | Revoke a qURL                                           |
-| `extend_qurl`             | `qurl:write`   | Extend expiration (shorthand alias for `update_qurl`)   |
+| `extend_qurl`             | `qurl:write`, `qurl:read` | Extend a link's expiration                  |
 | `update_qurl`             | `qurl:write`   | Update expiration, tags, description                    |
 | `mint_link`               | `qurl:write`   | Mint a new access link for an existing resource         |
 | `batch_create_qurls`      | `qurl:write`   | Create multiple qURLs at once                           |

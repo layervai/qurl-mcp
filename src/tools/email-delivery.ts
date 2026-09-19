@@ -51,7 +51,6 @@ export interface UploadEmailDetails {
   contentType: string;
   qurlLink: string;
   expiresAt?: string;
-  qurlSite?: string;
   label?: string;
   extraLines?: string[];
 }
@@ -67,7 +66,6 @@ export function uploadEmailDetailLines(details: UploadEmailDetails): string[] {
     `Content Type: ${singleLineEmailDetail(details.contentType)}`,
     `Secure Link: ${singleLineEmailDetail(details.qurlLink)}`,
     ...(details.expiresAt ? [`Expires At: ${singleLineEmailDetail(details.expiresAt)}`] : []),
-    ...(details.qurlSite ? [`qURL Site: ${singleLineEmailDetail(details.qurlSite)}`] : []),
     ...(details.label ? [`Label: ${singleLineEmailDetail(details.label)}`] : []),
     ...(details.extraLines ?? []),
   ];

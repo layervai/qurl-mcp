@@ -351,12 +351,14 @@ async function processConnectorResponse(response: Response): Promise<ConnectorUp
   return { resource_id: resourceId };
 }
 
+// getConnectorUploadUrl guarantees the /api/upload suffix; the mint route is
+// its sibling. Fail loudly rather than POST a mint body at the upload route.
 function connectorMintUrl(uploadUrl: string, resourceId: string): string {
   const url = new URL(uploadUrl);
-  url.pathname = url.pathname.replace(
-    /\/api\/upload$/,
-    `/api/mint_link/${encodeURIComponent(resourceId)}`,
-  );
+  if (!url.pathname.endsWith("/api/upload")) {
+    throw new Error("Connector upload URL must end with /api/upload");
+  }
+  url.pathname = `${url.pathname.slice(0, -"/api/upload".length)}/api/mint_link/${encodeURIComponent(resourceId)}`;
   return url.toString();
 }
 
@@ -383,18 +385,19 @@ export async function mintUploadedFile(
   file: { name: string; contentType: string; sizeBytes: number },
   input: UploadMintOptions,
 ) {
-  const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
-  const body = {
-    n: 1,
-    one_time_use: input.one_time_use ?? true,
-    ...(expiresInMs !== undefined
-      ? { expires_at: new Date(Date.now() + expiresInMs).toISOString() }
-      : {}),
-    ...(input.session_duration ? { session_duration: input.session_duration } : {}),
-  };
-
   let link: ConnectorMintedLink | undefined;
   try {
+    const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
+    const body = {
+      n: 1,
+      one_time_use: input.one_time_use ?? true,
+      // The connector's mint contract takes an absolute expires_at, so the
+      // relative expires_in is anchored to this host's clock.
+      ...(expiresInMs !== undefined
+        ? { expires_at: new Date(Date.now() + expiresInMs).toISOString() }
+        : {}),
+      ...(input.session_duration ? { session_duration: input.session_duration } : {}),
+    };
     const response = await fetchConnector(connectorMintUrl(connectorConfig.uploadUrl, resourceId), {
       method: "POST",
       headers: {

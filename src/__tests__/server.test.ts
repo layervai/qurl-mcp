@@ -1,15 +1,19 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../server.js";
-import { makeMockClient } from "./helpers.js";
+import { makeMockClient, mockConnectorFetch } from "./helpers.js";
 
 describe("createServer", () => {
   let client: Client;
   let server: McpServer;
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     await client?.close();
     await server?.close();
   });
@@ -94,21 +98,42 @@ describe("createServer", () => {
       }
     });
 
-    it.each(["upload_file_data_qurl", "upload_file_qurl", "upload_text_qurl"])(
-      "%s rejects access restrictions it cannot enforce before uploading",
-      async (name) => {
-        const { client, mockClient } = await connectServer();
+    const samplePdf = resolve("src/__tests__/fixtures/sample.pdf");
+    it.each([
+      {
+        name: "upload_file_data_qurl",
+        args: {
+          file_base64: readFileSync(samplePdf).toString("base64"),
+          file_name: "sample.pdf",
+          content_type: "application/pdf",
+        },
+      },
+      { name: "upload_file_qurl", args: { file_path: samplePdf } },
+      { name: "upload_text_qurl", args: { type: "text", content: "hello" } },
+    ])(
+      "$name rejects access restrictions it cannot enforce before uploading",
+      async ({ name, args }) => {
+        vi.stubEnv("QURL_API_KEY", "lv_live_test");
+        vi.stubEnv("QURL_CONNECTOR_URL", "https://connector.test");
+        const fetchMock = mockConnectorFetch();
+        vi.stubGlobal("fetch", fetchMock);
+        const { client } = await connectServer();
 
-        const result = await client.callTool({
+        const rejected = await client.callTool({
           name,
-          arguments: { access_policy: { geo_allowlist: ["US"] } },
+          arguments: { ...args, access_policy: { geo_allowlist: ["US"] } },
         });
 
-        expect(result.isError).toBe(true);
-        expect(JSON.stringify(result.content)).toContain(
+        expect(rejected.isError).toBe(true);
+        expect(JSON.stringify(rejected.content)).toContain(
           "access_policy is not supported for uploaded files",
         );
-        expect(mockClient.mintLink).not.toHaveBeenCalled();
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        // Control: the same arguments without the restriction do upload.
+        const accepted = await client.callTool({ name, arguments: args });
+        expect(accepted.isError).not.toBe(true);
+        expect(fetchMock).toHaveBeenCalled();
       },
     );
 

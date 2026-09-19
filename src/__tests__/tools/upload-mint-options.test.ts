@@ -38,6 +38,11 @@ describe("uploadMintOptionsShape", () => {
     { description: "a unitless expiry", input: { expires_in: "24" } },
     { description: "an empty session duration", input: { session_duration: "" } },
     { description: "a malformed session duration", input: { session_duration: "1 hour" } },
+    // Bounds: an overflowing value used to pass and then throw after upload.
+    { description: "an overflowing expiry", input: { expires_in: "999999999d" } },
+    { description: "an expiry past the 30-day ceiling", input: { expires_in: "31d" } },
+    { description: "an expiry under a minute", input: { expires_in: "30s" } },
+    { description: "a session over 24h", input: { session_duration: "25h" } },
   ])("rejects $description", ({ input }) => {
     expect(uploadMintOptionsSchema.safeParse(input).success).toBe(false);
   });
@@ -53,6 +58,10 @@ describe("parseDurationMs", () => {
     ["1w", 604_800_000],
   ])("parses %s like qurl-service", (value, expected) => {
     expect(parseDurationMs(value)).toBe(expected);
+  });
+
+  it("returns the magnitude for oversized values so callers can bound them", () => {
+    expect(parseDurationMs("999999999d")).toBe(999_999_999 * 86_400_000);
   });
 
   it.each(["", "banana", "24", "1.5d", "-1h", "1 h"])("rejects %j", (value) => {
