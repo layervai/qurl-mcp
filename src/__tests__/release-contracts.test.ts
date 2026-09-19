@@ -255,6 +255,36 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at_unconfirmed).toBe(true);
   });
 
+  it("reports a connector-echoed expiry as confirmed, with no drift or unconfirmed flag", async () => {
+    // The production path: the connector mints with the exact expires_at sent.
+    let echoed = "";
+    const fetchMock = vi.fn(
+      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        if (String(input).endsWith("/api/upload"))
+          return Response.json({ resource_id: "r_x1234567890" });
+        echoed = (JSON.parse(String(init?.body)) as { expires_at: string }).expires_at;
+        return Response.json({
+          success: true,
+          links: [{ qurl_link: "https://l", expires_at: echoed }],
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "1h" },
+    );
+    expect(result.expires_at).toBe(echoed);
+    expect(result.requested_expires_at).toBe(echoed);
+    expect(result).not.toHaveProperty("expires_at_differs_from_request");
+    expect(result).not.toHaveProperty("expires_at_unconfirmed");
+    // No drift line for this upload (the spy may carry earlier tests' calls).
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
+  });
+
   it("does not count junk entries as extra links, and flags a small expiry drift", async () => {
     const requested = Date.now() + 60_000;
     vi.stubGlobal(
