@@ -246,6 +246,7 @@ describe("resource SDK boundary", () => {
     // ...but an unconfirmed expiry is never reported as fact.
     expect(result.qurl_link).toBe("https://l");
     expect(result.expires_at).toBeUndefined();
+    expect(result.requested_expires_at).toBe(sent.expires_at);
   });
 
   it("accepts a plain-HTTP link only from a loopback development connector", async () => {
@@ -265,6 +266,53 @@ describe("resource SDK boundary", () => {
       {},
     );
     expect(result.qurl_link).toBe("http://127.0.0.1:8080/views/x");
+  });
+
+  it("rejects a plain-HTTP loopback link from a non-loopback connector", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [{ qurl_id: "q_123456789ab", qurl_link: "http://127.0.0.1:8080/views/x" }],
+        }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(
+      mintUploadedFile(
+        { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+        publicKey,
+        { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+        {},
+      ),
+    ).rejects.toMatchObject({ code: "upload_mint_failed" });
+  });
+
+  it("sends session_duration, logs extra links and expiry drift, and keeps an unconfirmed expiry separate", async () => {
+    const fetchMock = mockConnectorFetch(undefined, () =>
+      Response.json({
+        success: true,
+        links: [
+          { qurl_id: "q_123456789ab", qurl_link: "https://l", expires_at: "2000-01-01T00:00:00Z" },
+          { qurl_id: "q_0000000000a", qurl_link: "https://m" },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "2h", session_duration: "15m" },
+    );
+    const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
+    expect(sent).toMatchObject({ n: 1, one_time_use: true, session_duration: "15m" });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 2 links"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
+    expect(result.expires_at).toBe("2000-01-01T00:00:00Z");
+    expect(result).not.toHaveProperty("requested_expires_at");
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {

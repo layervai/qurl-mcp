@@ -194,6 +194,15 @@ describe("extendQurlTool", () => {
       ).rejects.toMatchObject({ statusCode: 429, code: "rate_limited" });
     });
 
+    it("does not blame scopes for a non-API failure", async () => {
+      const getQURL = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+      const tool = extendQurlTool(makeMockClient({ getQURL }));
+
+      await expect(
+        tool.handler({ resource_id: extendResourceId, extend_by: "1h" }),
+      ).rejects.toThrow("fetch failed");
+    });
+
     it("refuses a q_ link that is no longer active", async () => {
       const updateQurlToken = vi.fn();
       const getQURL = withLinks(sampleAccessToken({ qurl_id: "q_eeeeeeeeeee", status: "revoked" }));

@@ -380,27 +380,48 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
 }
 
 // The link carries an access token and may be emailed, so never plain HTTP,
-// except from a loopback development connector (the same exception the
-// connector URL itself gets in normalizeServiceBaseUrl).
-function isDeliverableLink(value: string): boolean {
+// except from a loopback development connector: the same exception the
+// connector URL itself gets in normalizeServiceBaseUrl, and only when the
+// configured connector is itself loopback.
+function isDeliverableLink(value: string, connectorUploadUrl: string): boolean {
   try {
     const url = new URL(value);
+    if (url.protocol === "https:") return true;
     return (
-      url.protocol === "https:" || (url.protocol === "http:" && isLoopbackHostname(url.hostname))
+      url.protocol === "http:" &&
+      isLoopbackHostname(url.hostname) &&
+      isLoopbackHostname(new URL(connectorUploadUrl).hostname)
     );
   } catch {
     return false;
   }
 }
 
-type ConnectorMintedLink = { qurl_id?: unknown; qurl_link?: unknown; expires_at?: unknown };
+type MintedLink = { qurl_id: string; qurl_link: string; expires_at?: unknown };
 
-function firstMintedLink(parsed: unknown): ConnectorMintedLink | undefined {
-  if (typeof parsed !== "object" || parsed === null || !("links" in parsed)) return undefined;
-  const links = (parsed as { links?: unknown }).links;
-  return Array.isArray(links) && typeof links[0] === "object" && links[0] !== null
-    ? (links[0] as ConnectorMintedLink)
-    : undefined;
+/** The single link the connector minted, or why its response is unusable. */
+function mintedLinkFrom(
+  parsed: unknown,
+  connectorUploadUrl: string,
+): { link: MintedLink; extra: number } | { problem: string } {
+  const links = (parsed as { links?: unknown } | undefined)?.links;
+  const first: unknown = Array.isArray(links) ? links[0] : undefined;
+  const link = (typeof first === "object" && first !== null ? first : {}) as Record<
+    string,
+    unknown
+  >;
+  if (typeof link.qurl_id !== "string" || typeof link.qurl_link !== "string") {
+    return { problem: "Connector mint returned no link." };
+  }
+  if (!isQurlDisplayId(link.qurl_id))
+    return { problem: "Connector mint returned a malformed qurl_id." };
+  if (!isDeliverableLink(link.qurl_link, connectorUploadUrl)) {
+    return { problem: "Connector mint returned a non-HTTPS link." };
+  }
+  return {
+    link: { qurl_id: link.qurl_id, qurl_link: link.qurl_link, expires_at: link.expires_at },
+    extra: Array.isArray(links) ? links.length - 1 : 0,
+  };
 }
 
 /**
@@ -416,22 +437,22 @@ export async function mintUploadedFile(
   file: { name: string; contentType: string; sizeBytes: number },
   input: UploadMintOptions,
 ) {
-  let minted: { qurl_id: string; qurl_link: string; expires_at?: unknown } | undefined;
   let requestedExpiresAt: string | undefined;
   let requestSent = false;
+  let minted: MintedLink;
   try {
     const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
     if (input.expires_in && expiresInMs === undefined) {
       // Omitting expires_at would silently give the link the connector default.
       throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${input.expires_in}`);
     }
+    // The connector's mint contract takes an absolute expires_at, so the
+    // relative expires_in is anchored to this host's clock.
     requestedExpiresAt =
       expiresInMs !== undefined ? new Date(Date.now() + expiresInMs).toISOString() : undefined;
     const body = {
       n: 1,
       one_time_use: input.one_time_use ?? true,
-      // The connector's mint contract takes an absolute expires_at, so the
-      // relative expires_in is anchored to this host's clock.
       ...(requestedExpiresAt ? { expires_at: requestedExpiresAt } : {}),
       ...(input.session_duration ? { session_duration: input.session_duration } : {}),
     };
@@ -449,49 +470,26 @@ export async function mintUploadedFile(
     const requestId = response.headers.get("x-request-id") ?? undefined;
     const raw = await readConnectorResponseBody(response);
     const contentType = response.headers.get("content-type")?.toLowerCase();
+    const unexpected = (message: string) =>
+      new QURLAPIError(0, "unexpected_response", message, undefined, undefined, requestId);
     // Same predicate as processConnectorResponse: a missing Content-Type is tolerated.
     if (response.ok && contentType && !contentType.includes("json")) {
-      throw new QURLAPIError(
-        0,
-        "unexpected_response",
-        "Connector mint returned a non-JSON response.",
-        undefined,
-        undefined,
-        requestId,
-      );
+      throw unexpected("Connector mint returned a non-JSON response.");
     }
     const parsed = parseJsonBody(raw);
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
-      throw new QURLAPIError(
-        0,
-        "unexpected_response",
-        "Connector mint reported failure.",
-        undefined,
-        undefined,
-        requestId,
-      );
+      throw unexpected("Connector mint reported failure.");
     }
-    const links = (parsed as { links?: unknown } | undefined)?.links;
-    if (Array.isArray(links) && links.length > 1) {
+    const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
+    if ("problem" in result) throw unexpected(result.problem);
+    if (result.extra > 0) {
       // n: 1 was requested; extra links would be live and unreported.
       console.error(
-        `Connector minted ${links.length} links for ${resourceId}; returning the first`,
+        `Connector minted ${result.extra + 1} links for ${resourceId}; returning the first`,
       );
     }
-    const link = firstMintedLink(parsed);
-    const problem =
-      typeof link?.qurl_id !== "string" || typeof link.qurl_link !== "string"
-        ? "Connector mint returned no link."
-        : !isQurlDisplayId(link.qurl_id)
-          ? "Connector mint returned a malformed qurl_id."
-          : !isDeliverableLink(link.qurl_link)
-            ? "Connector mint returned a non-HTTPS link."
-            : undefined;
-    if (problem) {
-      throw new QURLAPIError(0, "unexpected_response", problem, undefined, undefined, requestId);
-    }
-    minted = link as { qurl_id: string; qurl_link: string; expires_at?: unknown };
+    minted = result.link;
   } catch (error) {
     // The connector API exposes upload but no delete endpoint. Keep the mint
     // error primary and log the orphan resource for operator cleanup.
@@ -511,7 +509,6 @@ export async function mintUploadedFile(
     );
   }
 
-  if (!minted) throw new Error("unreachable: mint returned without a link");
   const confirmedExpiresAt =
     typeof minted.expires_at === "string" && !Number.isNaN(Date.parse(minted.expires_at))
       ? minted.expires_at
@@ -531,9 +528,12 @@ export async function mintUploadedFile(
     resource_id: resourceId,
     qurl_id: minted.qurl_id,
     qurl_link: minted.qurl_link,
-    // Only a connector-confirmed expiry is reported; the requested one may have
-    // been clamped, and it reaches recipients in email.
+    // Only a connector-confirmed expiry is reported as expires_at; the request
+    // may have been clamped, and expires_at reaches recipients in email.
     expires_at: confirmedExpiresAt,
+    ...(requestedExpiresAt && !confirmedExpiresAt
+      ? { requested_expires_at: requestedExpiresAt }
+      : {}),
     file_name: file.name,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,

@@ -38,6 +38,9 @@ async function linkToExtend(
       error: `resource_id names link ${input.resource_id} but qurl_id names ${input.qurl_id}; pass one link.`,
     };
   }
+  // Fast path: the caller named the link and its resource, so skip the read.
+  // Without it there is no status check here; the token route rejects a link
+  // that is no longer active.
   if (input.qurl_id && !resourceIsLink) {
     return { resourceId: input.resource_id, qurlId: input.qurl_id };
   }
@@ -46,10 +49,9 @@ async function linkToExtend(
     resource = (await client.getQURL(input.resource_id)).data;
   } catch (error) {
     // The shared wrapper turns a missing key into its own guidance.
-    if (error instanceof QURLAPIError && error.code === "missing_api_key") throw error;
-    // Only not-found and forbidden are what the guidance below describes; rate
-    // limits, 5xx, and transport failures keep their status and code.
-    if (error instanceof QURLAPIError && ![403, 404].includes(error.statusCode)) throw error;
+    // Only not-found and forbidden are what the guidance below describes; a
+    // missing key, rate limits, 5xx, and transport failures keep their metadata.
+    if (!(error instanceof QURLAPIError && [403, 404].includes(error.statusCode))) throw error;
     return {
       error:
         `Reading the resource to pick a link failed (${error instanceof Error ? error.message : "unknown error"}; ` +

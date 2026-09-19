@@ -200,7 +200,13 @@ export const uploadFileQurlOutputSchema = z.looseObject({
   qurl_link: z
     .string()
     .describe("One-shot display access link for the uploaded file — share immediately"),
-  expires_at: z.string().optional(),
+  expires_at: z.string().optional().describe("Link expiry as confirmed by the connector"),
+  requested_expires_at: z
+    .string()
+    .optional()
+    .describe(
+      "The expiry this server requested, present only when the connector did not confirm one; not guaranteed",
+    ),
   file_name: z.string().describe("Filename registered with the connector"),
   content_type: z.string().describe("MIME type used for the uploaded file"),
   size_bytes: z.number().describe("Uploaded file size in bytes"),

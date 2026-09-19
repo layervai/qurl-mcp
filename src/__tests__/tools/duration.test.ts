@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { parseDurationMs } from "../../tools/duration.js";
+import {
+  durationSchema,
+  MAX_EXPIRY_MS,
+  MIN_EXPIRY_MS,
+  parseDurationMs,
+} from "../../tools/duration.js";
 
 describe("parseDurationMs", () => {
   it.each([
@@ -19,5 +24,15 @@ describe("parseDurationMs", () => {
 
   it.each(["", "banana", "24", "1.5d", "-1h", "1 h"])("rejects %j", (value) => {
     expect(parseDurationMs(value)).toBeUndefined();
+  });
+});
+
+describe("durationSchema", () => {
+  const expiry = durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d");
+  it.each(["1m", "24h", "30d"])("accepts %s within 1m-30d", (value) => {
+    expect(expiry.safeParse(value).success).toBe(true);
+  });
+  it.each(["59s", "31d", "0s"])("rejects %s outside 1m-30d", (value) => {
+    expect(expiry.safeParse(value).success).toBe(false);
   });
 });

@@ -83,7 +83,10 @@ support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
 clock), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
 `max_sessions` are rejected before the upload. If minting fails after upload,
 the connector currently has no delete endpoint; the server logs the orphaned
-`resource_id` for operator cleanup and returns the mint failure.
+`resource_id` for operator cleanup and returns the mint failure. Upload links
+cannot yet be revoked from this server: `delete_qurl` on the upload's
+`resource_id` does not stop a connector-minted link (revocation needs the
+connector's `/api/revoke_links`), so prefer short expiries for sensitive files.
 HTTP upload attempts remain bounded by the per-IP and per-credential MCP rate
 limits; stdio operators should separately constrain autonomous retry loops.
 Upload validation binds the declared media type to the filename plus format

@@ -181,6 +181,8 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 | `upload_file_data_qurl`   | `qurl:write`   | Upload base64 file content and mint a qURL              |
 | `upload_text_qurl`        | `qurl:write`   | Render text to PDF, upload it, and mint a qURL          |
 
+Upload tools call only the file connector, which authorizes the forwarded bearer against the qURL API itself; `qurl:write` is what that check requires.
+
 ## Commit Convention (Release Please)
 
 This repository uses [Release Please](https://github.com/googleapis/release-please) for automated releases. Commits **must** follow [Conventional Commits](https://www.conventionalcommits.org/) format.

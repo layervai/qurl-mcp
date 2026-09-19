@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-// Mirrors qurl-service's duration grammar: whole days/weeks ("7d", "1w") or a
+// Accepts a safe subset of qurl-service's duration grammar (no sign, leading
+// dot, or U+03BC mu): whole days/weeks ("7d", "1w") or a
 // Go duration ("30m", "1h30m", "1.5h").
 const DURATION_PATTERN = /^(?:\d+[dw]|(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+)$/;
 const GO_DURATION_UNIT_MS: Record<string, number> = {
