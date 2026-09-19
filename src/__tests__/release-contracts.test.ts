@@ -692,7 +692,7 @@ describe("resource SDK boundary", () => {
   });
 
   it("bounds the returned extra link IDs while counting all of them", async () => {
-    const links = Array.from({ length: 30 }, (_, index) => ({
+    const links = Array.from({ length: 130 }, (_, index) => ({
       qurl_id: `q_${index.toString(16).padStart(11, "0")}`,
       qurl_link: "https://l",
     }));
@@ -707,9 +707,10 @@ describe("resource SDK boundary", () => {
       { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
       {},
     );
-    expect(result.unexpected_extra_link_count).toBe(29);
+    expect(result.unexpected_extra_link_count).toBe(129);
+    // The caller gets 10 IDs; the operator log names up to 100 for cleanup.
     expect(result.unexpected_extra_qurl_ids).toHaveLength(10);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("(+20 more)"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("q_00000000063 (+30 more)"));
   });
 
   it("reports live links named in a failed mint response", async () => {

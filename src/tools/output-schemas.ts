@@ -206,7 +206,7 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .string()
     .optional()
     .describe(
-      "Display-friendly qURL ID (q_ prefix) for the minted token, when the connector reports one. The link is minted by the connector and may belong to a different resource than resource_id, so do not pair them in revoke_qurl_token, update_qurl_token, or extend_qurl.",
+      "The minted link's ID as the connector reports it (usually a q_ display ID, but not guaranteed), when it reports one. The link is minted by the connector and may belong to a different resource than resource_id, so do not pair them in revoke_qurl_token, update_qurl_token, or extend_qurl.",
     ),
   qurl_link: z
     .string()

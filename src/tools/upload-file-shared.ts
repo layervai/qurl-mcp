@@ -257,9 +257,7 @@ function throwConnectorError(
   defaultCode = "connector_upload_failed",
 ): never {
   const { code, detail, type, instance } = extractConnectorError(parsed, defaultCode);
-  const safeDetail = detail
-    ? flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024)
-    : undefined;
+  const safeDetail = detail ? sanitizeConnectorDetail(detail) : undefined;
   throw new QURLAPIError(
     response.status,
     code,
@@ -393,7 +391,10 @@ const DEFAULT_UPLOAD_EXPIRES_IN = "24h";
 // Why a minted link cannot be returned, or undefined when it can. The link
 // carries an access token and may be emailed, so never plain HTTP, except from
 // a loopback development connector: the same exception the connector URL
-// itself gets in normalizeServiceBaseUrl.
+// itself gets in normalizeServiceBaseUrl. The host is deliberately not pinned:
+// connector-minted links are served from the qURL link domain, not the
+// connector's own host, and the operator-configured connector is already
+// trusted with the file and the bearer.
 function linkProblem(entry: Record<string, unknown>, connectorIsLoopback: boolean) {
   const value = entry.qurl_link;
   if (typeof value !== "string") return "no usable link";
@@ -425,16 +426,26 @@ type MintedLink = { qurl_id?: string; qurl_link: string; expires_at?: unknown };
 
 // Every link in a mint response is live and cannot be revoked from this server,
 // so operator logs name all of them (bounded and flattened; the IDs are untrusted).
+// Operator-log only (never the caller), so the cap is generous: these links
+// are live and unrevocable here, and the log is where cleanup starts.
+const LOGGED_LINK_LIMIT = 100;
+
+function sanitizeConnectorDetail(detail: string): string {
+  return flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024);
+}
+
 function describeLinks(links: unknown): string {
   if (!Array.isArray(links) || links.length === 0) return "none";
   const shown = links
-    .slice(0, 10)
+    .slice(0, LOGGED_LINK_LIMIT)
     .map((entry: unknown) => {
       const id = (entry as { qurl_id?: unknown } | null)?.qurl_id;
       return typeof id === "string" ? flattenControlCharacters(id).slice(0, 64) : "(no qurl_id)";
     })
     .join(", ");
-  return links.length > 10 ? `${shown} (+${links.length - 10} more)` : shown;
+  return links.length > LOGGED_LINK_LIMIT
+    ? `${shown} (+${links.length - LOGGED_LINK_LIMIT} more)`
+    : shown;
 }
 
 function reportedLinkIds(links: unknown): string[] {
@@ -583,9 +594,7 @@ export async function mintUploadedFile(
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");
-      const reason = detail
-        ? `: ${flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024)}`
-        : "";
+      const reason = detail ? `: ${sanitizeConnectorDetail(detail)}` : "";
       throw unexpected(`Connector mint reported failure${reason}.`);
     }
     const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
