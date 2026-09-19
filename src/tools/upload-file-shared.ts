@@ -386,33 +386,40 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
   return url.toString();
 }
 
-// The link carries an access token and may be emailed, so never plain HTTP,
-// except from a loopback development connector: the same exception the
-// connector URL itself gets in normalizeServiceBaseUrl, and only when the
-// configured connector is itself loopback.
 const MAX_LINK_LENGTH = 8192;
 
-function isDeliverableLink(value: string, connectorUploadUrl: string): boolean {
+// Why a minted link cannot be returned, or undefined when it can. The link
+// carries an access token and may be emailed, so never plain HTTP, except from
+// a loopback development connector: the same exception the connector URL
+// itself gets in normalizeServiceBaseUrl.
+function linkProblem(entry: Record<string, unknown>, connectorIsLoopback: boolean) {
+  const value = entry.qurl_link;
+  if (typeof value !== "string") return "no usable link";
+  if (value.length > MAX_LINK_LENGTH) return "an oversized link";
   // The URL parser silently strips tab/CR/LF, so control characters are
   // refused here rather than returned inside a link that parsed cleanly.
   // eslint-disable-next-line no-control-regex
-  if (value.length > MAX_LINK_LENGTH || /[\u0000-\u001f\u007f]/.test(value)) return false;
+  if (/[\u0000-\u001f\u007f]/.test(value)) return "a link with control characters";
+  let url: URL;
   try {
-    const url = new URL(value);
-    if (url.protocol === "https:") return true;
-    return (
-      url.protocol === "http:" &&
-      isLoopbackHostname(url.hostname) &&
-      isLoopbackHostname(new URL(connectorUploadUrl).hostname)
-    );
+    url = new URL(value);
   } catch {
-    return false;
+    return "an unparsable link";
   }
+  const deliverable =
+    url.protocol === "https:" ||
+    (url.protocol === "http:" && connectorIsLoopback && isLoopbackHostname(url.hostname));
+  if (!deliverable) return "a non-HTTPS link";
+  // The expiry was computed on this host's clock; a link already expired on
+  // arrival means that clock is behind, and the link is useless.
+  if (typeof entry.expires_at === "string" && Date.parse(entry.expires_at) <= Date.now()) {
+    return "an already-expired link (check this host's clock)";
+  }
+  return undefined;
 }
 
 type MintedLink = { qurl_id?: string; qurl_link: string; expires_at?: unknown };
 
-/** The single link the connector minted, or why its response is unusable. */
 // Every link in a mint response is live and cannot be revoked from this server,
 // so operator logs name all of them (bounded and flattened; the IDs are untrusted).
 function describeLinks(links: unknown): string {
@@ -434,6 +441,7 @@ function reportedLinkIds(links: unknown): string[] {
     .map((id) => flattenControlCharacters(id).slice(0, 64));
 }
 
+/** The single link the connector minted, or why its response is unusable. */
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
@@ -447,12 +455,8 @@ function mintedLinkFrom(
   // first entry must not discard a good one, since the file cannot be re-linked.
   // The qurl_id is informational here (it may belong to the connector's
   // resource), so an unexpected or missing ID does not make a working link unusable.
-  const reasonFor = (entry: Record<string, unknown>) =>
-    typeof entry.qurl_link !== "string"
-      ? "no usable link"
-      : !isDeliverableLink(entry.qurl_link, connectorUploadUrl)
-        ? "a non-HTTPS link"
-        : undefined;
+  const connectorIsLoopback = isLoopbackHostname(new URL(connectorUploadUrl).hostname);
+  const reasonFor = (entry: Record<string, unknown>) => linkProblem(entry, connectorIsLoopback);
   const index = entries.findIndex((entry) => reasonFor(entry) === undefined);
   if (index === -1) {
     const reasons = [...new Set(entries.map(reasonFor))].join(", ");
@@ -589,7 +593,7 @@ export async function mintUploadedFile(
       "upload_mint_failed",
       `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
         "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
-        "retrying uploads another copy." +
+        "do not retry automatically, since each retry stores another copy; tell the user and ask." +
         (liveQurlIds.length > 0
           ? ` The connector did mint live link(s) this server refused to return: ${liveQurlIds.join(", ")}; tell the user.`
           : requestSent
@@ -607,7 +611,7 @@ export async function mintUploadedFile(
     requestedExpiresAt &&
     confirmedExpiresAt &&
     // Tolerance equals MIN_EXPIRY_MS, so a 1m link clamped to ~0 is not flagged.
-    Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > 60_000,
+    Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > MIN_EXPIRY_MS,
   );
   if (driftsFromRequest) {
     // A clamp or host clock skew changed the link's lifetime; make it visible.

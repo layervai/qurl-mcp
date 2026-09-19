@@ -320,7 +320,7 @@ describe("resource SDK boundary", () => {
       Response.json({
         success: true,
         links: [
-          { qurl_id: "q_123456789ab", qurl_link: "https://l", expires_at: "2000-01-01T00:00:00Z" },
+          { qurl_id: "q_123456789ab", qurl_link: "https://l", expires_at: "2099-01-01T00:00:00Z" },
           { qurl_id: "q_0000000000a", qurl_link: "https://m" },
           { qurl_link: "https://n" },
           { qurl_id: "not-a-qurl", qurl_link: "https://o" },
@@ -339,7 +339,7 @@ describe("resource SDK boundary", () => {
     expect(sent).toMatchObject({ n: 1, one_time_use: true, session_duration: "15m" });
     expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 4 links"));
     expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
-    expect(result.expires_at).toBe("2000-01-01T00:00:00.000Z");
+    expect(result.expires_at).toBe("2099-01-01T00:00:00.000Z");
     expect(result.requested_expires_at).toBe(sent.expires_at);
     // The extra live link reaches the caller, not only stderr.
     expect(result.unexpected_extra_link_count).toBe(3);
@@ -442,7 +442,10 @@ describe("resource SDK boundary", () => {
     expect(odd).toMatchObject({ qurl_id: "bad id", qurl_link: "https://l" });
 
     // A link with control characters or an oversized link is not deliverable.
-    for (const qurl_link of ["https://exa\nmple.com/x", `https://l/${"a".repeat(8192)}`]) {
+    for (const [qurl_link, reason] of [
+      ["https://exa\nmple.com/x", "a link with control characters"],
+      [`https://l/${"a".repeat(8192)}`, "an oversized link"],
+    ]) {
       vi.stubGlobal(
         "fetch",
         mockConnectorFetch(undefined, () =>
@@ -452,7 +455,26 @@ describe("resource SDK boundary", () => {
       await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
         code: "upload_mint_failed",
       });
+      // The operator log names the actual reason, not a generic scheme error.
+      expect(log).toHaveBeenCalledWith(expect.stringContaining(reason));
     }
+
+    // A link that arrives already expired (host clock behind) is refused, and says why.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [{ qurl_link: "https://l", expires_at: "2000-01-01T00:00:00Z" }],
+        }),
+      ),
+    );
+    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+      code: "upload_mint_failed",
+    });
+    expect(log).toHaveBeenCalledWith(
+      expect.stringContaining("already-expired link (check this host's clock)"),
+    );
 
     // Overflowing expiry fails before any request, not via RangeError after it.
     const guarded = mockConnectorFetch();
@@ -601,7 +623,7 @@ describe("resource SDK boundary", () => {
     const result = await handler(undefined);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(publicKey);
-    expect(result.content[0].text).toContain("retrying uploads another copy");
+    expect(result.content[0].text).toContain("do not retry automatically");
     expect(result.content[0].text).not.toContain("private upstream error");
   });
 });

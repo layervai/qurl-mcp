@@ -152,7 +152,7 @@ export function sampleSession(overrides: Partial<SessionData> = {}): SessionData
 export const connectorMintedLink = {
   qurl_id: "q_123456789ab",
   qurl_link: "https://qurl.link/#at_upload",
-  expires_at: "2026-06-23T00:00:00.000Z",
+  expires_at: "2099-06-23T00:00:00.000Z",
 };
 
 /**

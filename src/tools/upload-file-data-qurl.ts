@@ -261,7 +261,11 @@ export function uploadFileDataQurlTool(
           contentType: input.content_type,
           sizeBytes: fileData.byteLength,
         },
-        input,
+        {
+          expires_in: input.expires_in,
+          one_time_use: input.one_time_use,
+          session_duration: input.session_duration,
+        },
       );
 
       const emailResult = await maybeDeliverToolEmail({
