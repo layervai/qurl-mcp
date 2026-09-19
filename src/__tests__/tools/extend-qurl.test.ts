@@ -11,7 +11,8 @@ const fixture = sampleQURL({
   qurl_site: "https://ext.qurl.site",
   target_url: "https://example.com/extended",
   expires_at: "2026-04-09T00:00:00Z",
-  qurl_count: 3,
+  // Unknown by default, so a short link list reads as complete (under the cap).
+  qurl_count: undefined,
 });
 
 describe("extendQurlTool", () => {
@@ -70,7 +71,7 @@ describe("extendQurlTool", () => {
   describe("handler", () => {
     const activeLink = sampleAccessToken({ qurl_id: "q_aaaaaaaaaaa", status: "active" });
     const withLinks = (...qurls: ReturnType<typeof sampleAccessToken>[]) =>
-      vi.fn().mockResolvedValue({ data: { ...fixture, qurls } });
+      vi.fn().mockResolvedValue({ data: { ...fixture, qurls, qurl_count: qurls.length } });
 
     // Regression (qurl-mcp#279): extending the resource left the link's own
     // expiry unchanged, so the link still closed on time.
@@ -263,6 +264,29 @@ describe("extendQurlTool", () => {
       });
 
       expect(JSON.stringify(result)).toContain("Nothing was extended");
+      expect(updateQurlToken).not.toHaveBeenCalled();
+    });
+
+    it("past the 100-link preview cap, updates a named link the read did not list and refuses to auto-select", async () => {
+      const capped = { ...fixture, qurl_count: 150, qurls: [activeLink] };
+      const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });
+      const getQURL = vi.fn().mockResolvedValue({ data: capped });
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      await tool.handler({
+        resource_id: extendResourceId,
+        qurl_id: "q_fffffffffff",
+        extend_by: "1h",
+      });
+      expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_fffffffffff", {
+        extend_by: "1h",
+      });
+      // Nothing to splice into, so the response is a reread.
+      expect(getQURL).toHaveBeenCalledTimes(2);
+
+      updateQurlToken.mockClear();
+      const guessed = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+      expect(JSON.stringify(guessed)).toContain("pass qurl_id to choose");
       expect(updateQurlToken).not.toHaveBeenCalled();
     });
 

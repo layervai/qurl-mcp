@@ -37,6 +37,19 @@ const INACTIVE_LINK_STATUSES = new Set(["consumed", "expired", "revoked"]);
 
 type Resource = Awaited<ReturnType<IQURLClient["getQURL"]>>["data"];
 
+// qurl-service embeds at most this many links on a resource read
+// (ResourceQurlPreviewLimit), revoked and expired ones included.
+const RESOURCE_LINK_PREVIEW_LIMIT = 100;
+
+// Whether resource.qurls lists every link. qurl_count counts all retained
+// links; when it is omitted, only a list under the cap is known to be whole.
+function linkListComplete(resource: Resource): boolean {
+  const listed = resource.qurls?.length ?? 0;
+  return resource.qurl_count === undefined
+    ? listed < RESOURCE_LINK_PREVIEW_LIMIT
+    : resource.qurl_count <= listed;
+}
+
 async function linkToExtend(
   client: IQURLClient,
   input: z.infer<typeof extendQurlSchema>,
@@ -65,9 +78,12 @@ async function linkToExtend(
     };
   }
   const named = resourceIsLink ? input.resource_id : input.qurl_id;
+  const complete = linkListComplete(resource);
   if (named) {
     const link = resource.qurls?.find((candidate) => candidate.qurl_id === named);
-    if (resource.qurls && !link) {
+    // Only a complete list proves absence; past the preview cap the token
+    // route decides, and the handler rereads since there is nothing to splice.
+    if (resource.qurls && !link && complete) {
       return { error: `Link ${named} is not on resource ${resource.resource_id}.` };
     }
     const status = link?.status;
@@ -80,7 +96,7 @@ async function linkToExtend(
     return {
       resourceId: resource.resource_id,
       qurlId: named,
-      ...(resource.qurls ? { resource } : {}),
+      ...(link ? { resource } : {}),
     };
   }
   if (!resource.qurls) {
@@ -89,6 +105,11 @@ async function linkToExtend(
   const active = resource.qurls.filter(
     (link) => link.qurl_id && !INACTIVE_LINK_STATUSES.has(link.status),
   );
+  if (!complete) {
+    return {
+      error: `This resource has more links than its read lists (${resource.qurl_count ?? "unknown"} in total), so this server cannot tell which is the only active one; pass qurl_id to choose.`,
+    };
+  }
   if (active.length === 1) {
     return { resourceId: resource.resource_id, qurlId: active[0].qurl_id, resource };
   }
@@ -121,7 +142,7 @@ export function extendQurlTool(
     title: "Extend qURL Expiration",
     description:
       "Keep a qURL link open longer by pushing out the link's expiration by a relative duration. " +
-      "Pass a link's `q_` display ID as `resource_id`, or a resource ID plus `qurl_id`; a resource with exactly one active link needs no `qurl_id`. " +
+      "Pass a link's `q_` display ID as `resource_id`, or a resource ID plus `qurl_id`; a resource with exactly one active link needs no `qurl_id` (unless it has more than the 100 links a read lists). " +
       "Use this when the only change you need is more time on the clock. " +
       "Use `update_qurl_token` instead to set an absolute `expires_at` or change the link's label, policy, or sessions. " +
       "Use `revoke_qurl_token` or `delete_qurl` when you want to cut off access. " +

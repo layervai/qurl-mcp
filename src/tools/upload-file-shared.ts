@@ -1,10 +1,10 @@
-import { markRequestCredentialValidated } from "../auth/request-context.js";
 import { Buffer } from "node:buffer";
 import { basename, extname } from "node:path";
 import {
   getRequestMaxUploadFileDataBytes,
   getRequestQurlApiKey,
   getRequestQurlConnectorUrl,
+  markRequestCredentialValidated,
 } from "../auth/request-context.js";
 import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../client.js";
 import { isLoopbackHostname, loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";

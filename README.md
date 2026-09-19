@@ -679,11 +679,14 @@ That catalog is assembled from static schemas and descriptions and does not
 include bearer tokens, SMTP credentials, or other operator configuration.
 Unvalidated-session caps, a short validation deadline, and request rate limits
 bound that pre-validation state; the supplied token is forwarded only to the
-configured qURL API.
+configured qURL API and, for upload tools, the configured qURL Connector.
 Introspection-only sessions therefore remain unvalidated and are closed at
 `unvalidatedSessionTtlMs`; clients can re-initialize if they need a longer-lived
-session. A session is promoted only after a successful qURL API call—rejected
-or rate-limited calls do not prove the credential valid. Disconnected sessions
+session. A session is promoted only after a successful qURL API call or a
+deliverable upload-link mint through the configured connector (which forwards the
+bearer to the qURL API)—rejected or rate-limited calls do not prove the credential
+valid. The connector is therefore part of this trust boundary: point
+`QURL_CONNECTOR_URL` only at a connector that authenticates the bearer. Disconnected sessions
 remain registered for a 30-second SSE reconnect grace period, while
 `maxSessions` and `maxSessionsPerCredential` bound that allowance under churn.
 
