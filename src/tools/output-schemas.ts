@@ -192,7 +192,11 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .describe(
       "Stable resource identifier (public key or legacy r_ ID) returned by the connector. Do not pass it to mint_link for another link; run the upload tool again.",
     ),
-  qurl_id: z.string().describe("Display-friendly qURL ID (q_ prefix) for the minted token"),
+  qurl_id: z
+    .string()
+    .describe(
+      "Display-friendly qURL ID (q_ prefix) for the minted token. The link is minted by the connector and may belong to a different resource than resource_id, so do not pair them in revoke_qurl_token, update_qurl_token, or extend_qurl.",
+    ),
   qurl_link: z
     .string()
     .describe("One-shot display access link for the uploaded file — share immediately"),

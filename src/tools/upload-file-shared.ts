@@ -9,7 +9,7 @@ import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../client.js";
 import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters, isControlCodePoint } from "../text.js";
-import { RESOURCE_ID_PATTERN } from "./_shared.js";
+import { RESOURCE_ID_PATTERN, isQurlDisplayId } from "./_shared.js";
 import { parseDurationMs, type UploadMintOptionsInput } from "./upload-mint-options.js";
 
 export type UploadMintOptions = Pick<
@@ -371,6 +371,14 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
   return url.toString();
 }
 
+function isHttpUrl(value: string): boolean {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
 type ConnectorMintedLink = { qurl_id?: unknown; qurl_link?: unknown; expires_at?: unknown };
 
 function firstMintedLink(parsed: unknown): ConnectorMintedLink | undefined {
@@ -451,7 +459,12 @@ export async function mintUploadedFile(
       );
     }
     link = firstMintedLink(parsed);
-    if (typeof link?.qurl_id !== "string" || typeof link.qurl_link !== "string") {
+    if (
+      typeof link?.qurl_id !== "string" ||
+      !isQurlDisplayId(link.qurl_id) ||
+      typeof link.qurl_link !== "string" ||
+      !isHttpUrl(link.qurl_link)
+    ) {
       throw new QURLAPIError(
         0,
         "unexpected_response",

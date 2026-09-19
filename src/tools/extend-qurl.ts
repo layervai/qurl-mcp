@@ -54,7 +54,7 @@ async function linkToExtend(
     return {
       error:
         `Reading the resource to pick a link failed (${error instanceof Error ? error.message : "unknown error"}; ` +
-        "the API key may lack qurl:read). Pass qurl_id with a resource ID to extend a specific link without a read.",
+        "the resource may not exist, or the API key may lack qurl:read). Pass qurl_id with a resource ID to extend a specific link without a read.",
     };
   }
   const named = resourceIsLink ? input.resource_id : undefined;
@@ -96,6 +96,7 @@ export function extendQurlTool(
       "Use `revoke_qurl_token` or `delete_qurl` when you want to cut off access. " +
       "**Not idempotent:** calling twice with the same `extend_by` extends the link twice; use `update_qurl_token` with `expires_at` when retries must not double-push. " +
       "Requires `qurl:write` and `qurl:read` (it reads the resource to pick the link and to return it). " +
+      "A link cannot outlive its resource: if the resource's own `expires_at` is sooner, raise it with `update_qurl` first. " +
       "Returns the resource (same shape as `get_qurl`); the extended link's new expiry is in `qurls[].expires_at`, not the resource's own `expires_at`.",
     inputSchema: extendQurlSchema,
     outputSchema: extendQurlOutputSchema,

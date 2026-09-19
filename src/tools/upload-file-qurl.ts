@@ -104,7 +104,6 @@ async function uploadLocalFileAndMint(
   input: UploadFileQurlInput,
   connectorConfig: ConnectorConfig,
 ) {
-  // Preflight config before reading local files so misconfigured hosts fail fast.
   const sourcePath = resolve(input.file_path);
   // O_NOFOLLOW protects the final component. Intermediate directory symlinks
   // still follow normal filesystem semantics; this tool is stdio-only and the

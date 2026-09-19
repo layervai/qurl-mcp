@@ -76,7 +76,7 @@ export const uploadMintOptionsShape = {
     .boolean()
     .optional()
     .describe("Whether the link can only be used once. Defaults to true for uploaded content."),
-  session_duration: durationSchema(1, 86_400_000, "up to 24h")
+  session_duration: durationSchema(1_000, 86_400_000, "1s to 24h")
     .optional()
     .describe('How long access lasts after clicking (e.g., "1h"; max 24h)'),
   max_sessions: unsupportedForUploads("max_sessions"),

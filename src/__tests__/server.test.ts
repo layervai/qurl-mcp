@@ -137,6 +137,18 @@ describe("createServer", () => {
       },
     );
 
+    it("advertises rejected upload options with a portable JSON Schema (no `not`)", async () => {
+      const { client } = await connectServer();
+      const { tools } = await client.listTools();
+      for (const name of ["upload_file_data_qurl", "upload_file_qurl", "upload_text_qurl"]) {
+        const properties = tools.find((tool) => tool.name === name)?.inputSchema.properties ?? {};
+        for (const field of ["access_policy", "max_sessions"]) {
+          expect(properties[field], `${name}.${field}`).toBeDefined();
+          expect(JSON.stringify(properties[field]), `${name}.${field}`).not.toContain('"not"');
+        }
+      }
+    });
+
     it("each tool has an input schema", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();
