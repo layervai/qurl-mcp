@@ -88,7 +88,7 @@ async function linkToExtend(
     // Only a complete list proves absence; past the preview cap the token
     // route decides, and the handler rereads since there is nothing to splice.
     if (resource.qurls && !link && complete) {
-      return { error: `Link ${named} is not on resource ${resource.resource_id}.` };
+      return { error: `Link ${named} is not listed on resource ${resource.resource_id}.` };
     }
     const status = link?.status;
     if (status && INACTIVE_LINK_STATUSES.has(status)) {
@@ -126,7 +126,9 @@ async function linkToExtend(
     return {
       error:
         resource.qurls.length === 0
-          ? "This resource has no link to extend. Use mint_link to issue one."
+          ? resource.qurl_count === 0
+            ? "This resource has no link to extend. Use mint_link to issue one."
+            : "The resource read lists no links; pass qurl_id if it has one, or use mint_link to issue one."
           : "No link on this resource can be extended (all are consumed, expired, or revoked). Use mint_link to issue a new one.",
     };
   }

@@ -46,7 +46,8 @@ export const durationSchema = (minMs: number, maxMs: number, range: string, allo
   z
     .string()
     .min(allowEmpty ? 0 : 1)
-    .max(32)
+    // Same message as a syntax error, and abort so it is the only one.
+    .max(32, { error: "Use a duration like '30m', '24h', or '7d'", abort: true })
     .refine((value) => (allowEmpty && value === "") || parseDurationMs(value) !== undefined, {
       message: "Use a duration like '30m', '24h', or '7d'",
       abort: true,

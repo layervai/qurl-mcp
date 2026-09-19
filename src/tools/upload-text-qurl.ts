@@ -113,7 +113,9 @@ export function uploadTextQurlTool(
             file_path: pdfFile.filePath,
             file_name: pdfFile.fileName,
             content_type: "application/pdf",
-            ...mintOptions,
+            expires_in: mintOptions.expires_in,
+            one_time_use: mintOptions.one_time_use,
+            session_duration: mintOptions.session_duration,
           },
           connectorConfig,
         );

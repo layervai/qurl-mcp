@@ -326,6 +326,17 @@ describe("extendQurlTool", () => {
       expect(JSON.stringify(result)).toContain("no link to extend");
     });
 
+    it("does not claim a resource has no links when an empty read carries no count", async () => {
+      const getQURL = vi
+        .fn()
+        .mockResolvedValue({ data: { ...fixture, qurls: [], qurl_count: undefined } });
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken: vi.fn() }));
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(JSON.stringify(result)).toContain("The resource read lists no links");
+    });
+
     it("refuses a named qurl_id that the read shows is revoked", async () => {
       const revoked = sampleAccessToken({ qurl_id: "q_ccccccccccc", status: "revoked" });
       const updateQurlToken = vi.fn();
@@ -349,7 +360,7 @@ describe("extendQurlTool", () => {
 
       const result = await tool.handler({ resource_id: "q_fffffffffff", extend_by: "1h" });
 
-      expect(JSON.stringify(result)).toContain("is not on resource");
+      expect(JSON.stringify(result)).toContain("is not listed on resource");
       expect(updateQurlToken).not.toHaveBeenCalled();
     });
 

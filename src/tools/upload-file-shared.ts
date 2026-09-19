@@ -18,7 +18,7 @@ import {
   MIN_SESSION_MS,
   parseDurationMs,
 } from "./duration.js";
-import type { UploadMintOptionsInput } from "./upload-mint-options.js";
+import { DEFAULT_UPLOAD_EXPIRES_IN, type UploadMintOptionsInput } from "./upload-mint-options.js";
 
 export type UploadMintOptions = Pick<
   UploadMintOptionsInput,
@@ -395,7 +395,6 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
 }
 
 const MAX_LINK_LENGTH = 8192;
-const DEFAULT_UPLOAD_EXPIRES_IN = "24h";
 
 // Why a minted link cannot be returned, or undefined when it can. The link
 // carries an access token and may be emailed, so never plain HTTP, except from

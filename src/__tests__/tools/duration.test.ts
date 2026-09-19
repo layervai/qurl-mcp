@@ -53,6 +53,10 @@ describe("durationSchema", () => {
     const result = expiry.safeParse("1h".repeat(100));
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.code).toBe("too_big");
+    // One issue, with the same guidance a syntax error gets.
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual([
+      "Use a duration like '30m', '24h', or '7d'",
+    ]);
   });
   it("tells a syntax error apart from an out-of-range value", () => {
     expect(expiry.safeParse("banana").error?.issues.map((issue) => issue.message)).toEqual([
