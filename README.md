@@ -80,8 +80,8 @@ the connector's `POST /api/mint_link/:resource_id` (in tunnel mode, a
 per-recipient watermarked view), not from qURL `mint_link`, so uploaded files
 cannot be re-linked with `mint_link`; run the upload tool again. Upload links
 support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
-clock, so a host clock that is off shortens or lengthens the link; a link that arrives
-already expired fails the call), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
+clock, so a host clock that is off shortens or lengthens the link; a link whose returned expiry
+is already past by this host's clock fails the call), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
 `max_sessions` are rejected before the upload. If the connector ever mints more
 links than requested, the result reports how many extra in
 `unexpected_extra_link_count` and any IDs it returned in

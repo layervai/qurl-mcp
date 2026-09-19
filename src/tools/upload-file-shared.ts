@@ -412,10 +412,11 @@ function linkProblem(entry: Record<string, unknown>, connectorIsLoopback: boolea
     url.protocol === "https:" ||
     (url.protocol === "http:" && connectorIsLoopback && isLoopbackHostname(url.hostname));
   if (!deliverable) return "a non-HTTPS link";
-  // The expiry was computed on this host's clock; a link already expired on
-  // arrival means that clock is behind, and the link is useless.
+  // A link already expired by this host's clock is useless to return. An
+  // echoed expiry cannot trip this; it fires when the connector substituted an
+  // earlier expiry or this host's clock runs ahead of the connector's.
   if (typeof entry.expires_at === "string" && Date.parse(entry.expires_at) <= Date.now()) {
-    return "an already-expired link (check this host's clock)";
+    return "an already-expired link (the connector's expiry is past by this host's clock)";
   }
   return undefined;
 }
@@ -572,11 +573,13 @@ export async function mintUploadedFile(
     const parsed = parseJsonBody(raw);
     // Any link in a failed response is live and unrevocable here; report it.
     const responseLinks = (parsed as { links?: unknown } | undefined)?.links;
-    liveQurlIds = reportedLinkIds(responseLinks).slice(0, 10);
-    // Counted apart from IDs: a live link may come back without a qurl_id.
-    liveLinkCount = (Array.isArray(responseLinks) ? responseLinks : []).filter(
+    // Counted apart from IDs (a live link may come back without a qurl_id),
+    // and both over live entries only, so the IDs never outnumber the count.
+    const liveEntries = (Array.isArray(responseLinks) ? responseLinks : []).filter(
       isPossiblyLiveLink,
-    ).length;
+    );
+    liveQurlIds = reportedLinkIds(liveEntries).slice(0, 10);
+    liveLinkCount = liveEntries.length;
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");

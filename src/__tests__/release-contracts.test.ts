@@ -350,6 +350,38 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at_unconfirmed).toBe(true);
   });
 
+  it("names only live links on a failed mint, never an expired one", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: false,
+          error: "partial failure",
+          links: [
+            { qurl_id: "q_0000000000a", qurl_link: "https://a" },
+            { qurl_id: "q_0000000000b", qurl_link: "https://b" },
+            {
+              qurl_id: "q_0000000000c",
+              qurl_link: "https://c",
+              expires_at: "2000-01-01T00:00:00Z",
+            },
+          ],
+        }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = (await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    ).catch((caught: unknown) => caught)) as Error;
+    expect(error.message).toContain(
+      "did mint 2 live link(s) this server refused to return: q_0000000000a, q_0000000000b;",
+    );
+    expect(error.message).not.toContain("q_0000000000c");
+  });
+
   it("says a refused link definitely exists even when the connector gave it no ID", async () => {
     vi.stubGlobal(
       "fetch",
@@ -590,7 +622,7 @@ describe("resource SDK boundary", () => {
     expect(expiredError.message).not.toContain("live link");
     expect(expiredError.message).toContain("may already have been minted");
     expect(log).toHaveBeenCalledWith(
-      expect.stringContaining("already-expired link (check this host's clock)"),
+      expect.stringContaining("already-expired link (the connector's expiry is past"),
     );
 
     // Overflowing expiry fails before any request, not via RangeError after it.
