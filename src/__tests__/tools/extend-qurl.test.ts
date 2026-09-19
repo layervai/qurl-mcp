@@ -315,6 +315,17 @@ describe("extendQurlTool", () => {
       expect(updateQurlToken).not.toHaveBeenCalled();
     });
 
+    it("says a resource with no links has none to extend, even when the read omits the list", async () => {
+      const getQURL = vi
+        .fn()
+        .mockResolvedValue({ data: { ...fixture, qurls: undefined, qurl_count: 0 } });
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken: vi.fn() }));
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(JSON.stringify(result)).toContain("no link to extend");
+    });
+
     it("refuses a named qurl_id that the read shows is revoked", async () => {
       const revoked = sampleAccessToken({ qurl_id: "q_ccccccccccc", status: "revoked" });
       const updateQurlToken = vi.fn();

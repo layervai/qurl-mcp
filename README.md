@@ -81,7 +81,7 @@ per-recipient watermarked view), not from qURL `mint_link`, so uploaded files
 cannot be re-linked with `mint_link`; run the upload tool again. Upload links
 support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
 clock, so a host clock that is off shortens or lengthens the link; a link whose returned expiry
-is already past by this host's clock fails the call), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
+is already past by this host's clock is returned with `expires_at_already_past`), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
 `max_sessions` are rejected before the upload. If the connector ever mints more
 links than requested, the result reports how many extra in
 `unexpected_extra_link_count` and any IDs it returned in
@@ -686,7 +686,9 @@ session. A session is promoted only after a successful qURL API call or a
 deliverable upload-link mint through the configured connector (which forwards the
 bearer to the qURL API)—rejected or rate-limited calls do not prove the credential
 valid. The connector is therefore part of this trust boundary: point
-`QURL_CONNECTOR_URL` only at a connector that authenticates the bearer. Disconnected sessions
+`QURL_CONNECTOR_URL` only at a connector that authenticates the bearer. Its
+upload error text (bounded to 1 KiB, control characters flattened) and the links
+it mints are returned to the agent, and minted links may be emailed. Disconnected sessions
 remain registered for a 30-second SSE reconnect grace period, while
 `maxSessions` and `maxSessionsPerCredential` bound that allowance under churn.
 

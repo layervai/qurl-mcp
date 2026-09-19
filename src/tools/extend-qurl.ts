@@ -104,16 +104,21 @@ async function linkToExtend(
     };
   }
   if (!resource.qurls) {
-    return { error: "The resource read did not include its links; pass qurl_id to choose one." };
+    return {
+      error:
+        resource.qurl_count === 0
+          ? "This resource has no link to extend. Use mint_link to issue one."
+          : "The resource read did not include its links; pass qurl_id to choose one.",
+    };
   }
-  const active = resource.qurls.filter(
-    (link) => link.qurl_id && !INACTIVE_LINK_STATUSES.has(link.status),
-  );
   if (!complete) {
     return {
       error: `This resource's read may not list all of its links (it lists ${resource.qurls.length}, at most ${RESOURCE_LINK_PREVIEW_LIMIT}; ${resource.qurl_count ?? "unknown"} in total), so this server cannot tell which is the only active one; pass qurl_id to choose.`,
     };
   }
+  const active = resource.qurls.filter(
+    (link) => link.qurl_id && !INACTIVE_LINK_STATUSES.has(link.status),
+  );
   if (active.length === 1) {
     return { resourceId: resource.resource_id, qurlId: active[0].qurl_id, resource };
   }

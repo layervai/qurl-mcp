@@ -652,7 +652,9 @@ describe("resource SDK boundary", () => {
     });
     expect(log).toHaveBeenCalledWith(expect.stringContaining("(links: none)"));
 
-    // A link that arrives already expired (host clock behind) is refused, and says why.
+    // A link whose expiry is already past by this clock is returned, flagged,
+    // not discarded: if this host runs ahead, the link still works, and the
+    // file could never be re-linked.
     vi.stubGlobal(
       "fetch",
       mockConnectorFetch(undefined, () =>
@@ -662,16 +664,37 @@ describe("resource SDK boundary", () => {
         }),
       ),
     );
-    const expiredError = (await mintUploadedFile(config, publicKey, file, {}).catch(
-      (caught: unknown) => caught,
-    )) as Error;
-    expect(expiredError).toMatchObject({ code: "upload_mint_failed" });
-    // An expired link is not called live; the reached-connector hedge remains.
-    expect(expiredError.message).not.toContain("live link");
-    expect(expiredError.message).toContain("may already have been minted");
-    expect(log).toHaveBeenCalledWith(
-      expect.stringContaining("already-expired link (the connector's expiry is past"),
+    const pastExpiry = await mintUploadedFile(config, publicKey, file, {});
+    expect(pastExpiry).toMatchObject({ qurl_link: "https://l", expires_at_already_past: true });
+
+    // An unexpired deliverable link is preferred over an earlier past-expiry one.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_link: "https://old", expires_at: "2000-01-01T00:00:00Z" },
+            { qurl_link: "https://new", expires_at: "2099-01-01T00:00:00Z" },
+          ],
+        }),
+      ),
     );
+    const preferred = await mintUploadedFile(config, publicKey, file, {});
+    expect(preferred.qurl_link).toBe("https://new");
+    expect(preferred).not.toHaveProperty("expires_at_already_past");
+
+    // A non-HTTP scheme names itself in the operator log.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_link: "javascript:alert(1)" }] }),
+      ),
+    );
+    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+      code: "upload_mint_failed",
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("a non-HTTP(S) link"));
 
     // Overflowing expiry fails before any request, not via RangeError after it.
     const guarded = mockConnectorFetch();

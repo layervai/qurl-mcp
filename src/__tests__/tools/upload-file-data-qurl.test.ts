@@ -597,6 +597,33 @@ describe("uploadFileDataQurlTool", () => {
       });
     });
 
+    it("carries the user-facing expiry and extra-link flags through to structuredContent", async () => {
+      globalThis.fetch = mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { ...connectorMintedLink, expires_at: "2099-01-01T00:00:00Z" },
+            { qurl_id: "q_000000000ee", qurl_link: "https://extra" },
+          ],
+        }),
+      );
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const tool = uploadFileDataQurlTool(makeMockClient());
+
+      const result = await tool.handler({
+        file_base64: fixtureBase64,
+        file_name: "sample.pdf",
+        content_type: "application/pdf",
+      });
+
+      expect(result.structuredContent).toMatchObject({
+        expires_at_later_than_requested: true,
+        unexpected_extra_link_count: 1,
+        unexpected_extra_qurl_ids: ["q_000000000ee"],
+      });
+      expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
+    });
+
     it("surfaces a structured connector upload error, bounded and flattened", async () => {
       globalThis.fetch = vi
         .fn()

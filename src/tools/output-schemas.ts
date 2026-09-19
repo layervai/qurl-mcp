@@ -230,6 +230,12 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .describe(
       "Present when the confirmed expiry is later than requested: the link lives longer than asked and cannot be revoked from this server, so tell the user when it actually expires",
     ),
+  expires_at_already_past: z
+    .boolean()
+    .optional()
+    .describe(
+      "Present when the confirmed expiry is already past by this server's clock (the connector clamped it, or this host's clock runs ahead); the link may not work, so tell the user and check the time",
+    ),
   expires_at_unconfirmed: z
     .boolean()
     .optional()

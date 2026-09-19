@@ -421,13 +421,12 @@ function linkProblem(entry: Record<string, unknown>, connectorIsLoopback: boolea
   const deliverable =
     url.protocol === "https:" ||
     (url.protocol === "http:" && connectorIsLoopback && isLoopbackHostname(url.hostname));
-  if (!deliverable) return "a non-HTTPS link";
-  // A link already expired by this host's clock is useless to return. An
-  // echoed expiry cannot trip this; it fires when the connector substituted an
-  // earlier expiry or this host's clock runs ahead of the connector's.
-  if (typeof entry.expires_at === "string" && Date.parse(entry.expires_at) <= Date.now()) {
-    return "an already-expired link (the connector's expiry is past by this host's clock)";
+  if (!deliverable) {
+    return url.protocol === "http:" ? "a non-HTTPS link" : "a non-HTTP(S) link";
   }
+  // An expiry already past by this host's clock is not refused: if this clock
+  // runs ahead, the link is still good, and refusing would discard the only
+  // handle to a file that cannot be deleted. It is returned with a flag.
   return undefined;
 }
 
@@ -468,12 +467,16 @@ function reportedLinkIds(links: unknown): string[] {
 }
 
 /** The single link the connector minted, or why its response is unusable. */
+function isPastExpiry(expiresAt: unknown): boolean {
+  return typeof expiresAt === "string" && Date.parse(expiresAt) <= Date.now();
+}
+
 // A response entry that may be a live link: link-shaped and not already expired.
 function isPossiblyLiveLink(entry: unknown): boolean {
   const link = entry as { qurl_link?: unknown; qurl_id?: unknown; expires_at?: unknown } | null;
   const parsable = (value: unknown) =>
     typeof value === "string" && value.length <= MAX_LINK_LENGTH && URL.canParse(value);
-  const expired = typeof link?.expires_at === "string" && Date.parse(link.expires_at) <= Date.now();
+  const expired = isPastExpiry(link?.expires_at);
   // Real evidence of a minted token: a non-empty ID, or a link that parses.
   const hasId = typeof link?.qurl_id === "string" && link.qurl_id.length > 0;
   return !expired && (hasId || parsable(link?.qurl_link));
@@ -497,7 +500,12 @@ function mintedLinkFrom(
   const connectorIsLoopback = isLoopbackHostname(new URL(connectorUploadUrl).hostname);
   const reasonFor = (entry: Record<string, unknown>) => linkProblem(entry, connectorIsLoopback);
   const problems = entries.map(reasonFor);
-  const index = problems.indexOf(undefined);
+  // Prefer a deliverable link that is not already past; fall back to any.
+  const firstDeliverable = problems.indexOf(undefined);
+  const unexpired = entries.findIndex(
+    (entry, i) => problems[i] === undefined && !isPastExpiry(entry.expires_at),
+  );
+  const index = unexpired === -1 ? firstDeliverable : unexpired;
   if (index === -1) {
     const reasons = [...new Set(problems)].join(", ");
     const reason = reasons || "no usable link";
@@ -694,6 +702,7 @@ export async function mintUploadedFile(
     requested_expires_at: requestedExpiresAt,
     ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
     ...(outlivesRequest ? { expires_at_later_than_requested: true } : {}),
+    ...(isPastExpiry(confirmedExpiresAt) ? { expires_at_already_past: true } : {}),
     ...(!confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),
     ...(extraCount > 0
       ? {
