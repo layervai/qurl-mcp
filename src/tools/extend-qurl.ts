@@ -184,7 +184,7 @@ export function extendQurlTool(
         Number.isFinite(ceiling) && linkExpiry >= ceiling
           ? {
               ...resource,
-              extend_warning: `Link ${qurlId} expires at ${token.data.expires_at}, but its resource closes at ${resource.expires_at}, so it stops working then; raise the resource with update_qurl for more time.`,
+              extend_warning: `Link ${qurlId} expires at ${token.data.expires_at}, but its resource closes at ${resource.expires_at}, so it stops working then; raise the resource with update_qurl (extend_by up to 30d, or expires_at for further out).`,
             }
           : resource;
       return {
