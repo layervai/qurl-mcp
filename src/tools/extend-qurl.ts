@@ -109,7 +109,7 @@ async function linkToExtend(
   );
   if (!complete) {
     return {
-      error: `This resource has more links than its read lists (${resource.qurl_count ?? "unknown"} in total), so this server cannot tell which is the only active one; pass qurl_id to choose.`,
+      error: `This resource's read may not list all of its links (it lists ${resource.qurls.length}, at most ${RESOURCE_LINK_PREVIEW_LIMIT}; ${resource.qurl_count ?? "unknown"} in total), so this server cannot tell which is the only active one; pass qurl_id to choose.`,
     };
   }
   if (active.length === 1) {

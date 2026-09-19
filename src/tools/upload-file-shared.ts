@@ -590,6 +590,10 @@ export async function mintUploadedFile(
     // A deliverable mint means qurl-service accepted the forwarded bearer via
     // the operator-configured connector: the same evidence, under the same
     // trust assumption, as a successful direct API call (see QURLClient.call).
+    // The connector checks a non-empty caller bearer against qurl-service
+    // before minting (ConfirmResourceAccess in tunnel mode, the caller's own
+    // mint in legacy mode). The upload alone does not promote: it is the mint
+    // that provably reaches qURL.
     markRequestCredentialValidated();
     if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
