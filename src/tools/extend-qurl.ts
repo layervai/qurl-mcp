@@ -149,7 +149,7 @@ export function extendQurlTool(
       "Use `update_qurl_token` instead to set an absolute `expires_at` or change the link's label, policy, or sessions. " +
       "Use `revoke_qurl_token` or `delete_qurl` when you want to cut off access. " +
       "**Not idempotent:** calling twice with the same `extend_by` extends the link twice; use `update_qurl_token` with `expires_at` when retries must not double-push. " +
-      "Requires `qurl:write` and `qurl:read`: it reads the resource before updating, to check the link and to return it. " +
+      "Requires `qurl:write` and `qurl:read`: it reads the resource before updating, to check the link and to return it, so each extend costs two API calls. " +
       "A link cannot outlive its resource: if the resource's own `expires_at` is sooner, raise it with `update_qurl` first; the result then carries `extend_warning`. " +
       "Link-selection problems return an error result; a rejected update throws with its HTTP status and error code. " +
       "Returns the resource (same shape as `get_qurl`); the extended link's new expiry is in `qurls[].expires_at`, not the resource's own `expires_at`.",

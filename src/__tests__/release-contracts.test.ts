@@ -287,7 +287,7 @@ describe("resource SDK boundary", () => {
     expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
   });
 
-  it("does not count junk entries as extra links, and flags a small expiry drift", async () => {
+  it("does not count junk or expired entries as extra links, and flags a small expiry drift", async () => {
     const requested = Date.now() + 60_000;
     vi.stubGlobal(
       "fetch",
@@ -298,6 +298,7 @@ describe("resource SDK boundary", () => {
             { qurl_link: "https://l", expires_at: new Date(requested + 60_000).toISOString() },
             42,
             {},
+            { qurl_id: "q_000000000ee", expires_at: "2000-01-01T00:00:00Z" },
           ],
         }),
       ),
@@ -571,8 +572,9 @@ describe("resource SDK boundary", () => {
       (caught: unknown) => caught,
     )) as Error;
     expect(expiredError).toMatchObject({ code: "upload_mint_failed" });
-    // An expired link is not called live.
+    // An expired link is not called live; the reached-connector hedge remains.
     expect(expiredError.message).not.toContain("live link");
+    expect(expiredError.message).toContain("may already have been minted");
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining("already-expired link (check this host's clock)"),
     );

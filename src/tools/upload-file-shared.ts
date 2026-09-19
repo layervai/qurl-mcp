@@ -444,6 +444,13 @@ function reportedLinkIds(links: unknown): string[] {
 }
 
 /** The single link the connector minted, or why its response is unusable. */
+// A response entry that may be a live link: link-shaped and not already expired.
+function isPossiblyLiveLink(entry: unknown): boolean {
+  const link = entry as { qurl_link?: unknown; qurl_id?: unknown; expires_at?: unknown } | null;
+  const expired = typeof link?.expires_at === "string" && Date.parse(link.expires_at) <= Date.now();
+  return !expired && (typeof link?.qurl_link === "string" || typeof link?.qurl_id === "string");
+}
+
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
@@ -461,20 +468,18 @@ function mintedLinkFrom(
   // resource), so an unexpected or missing ID does not make a working link unusable.
   const connectorIsLoopback = isLoopbackHostname(new URL(connectorUploadUrl).hostname);
   const reasonFor = (entry: Record<string, unknown>) => linkProblem(entry, connectorIsLoopback);
-  const index = entries.findIndex((entry) => reasonFor(entry) === undefined);
+  const problems = entries.map(reasonFor);
+  const index = problems.indexOf(undefined);
   if (index === -1) {
-    const reasons = [...new Set(entries.map(reasonFor))].join(", ");
+    const reasons = [...new Set(problems)].join(", ");
     const reason = reasons || "no usable link";
     return {
       problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
     };
   }
   const chosen = entries[index];
-  // Only entries that look like links count as extra live links; junk does not.
-  const others = entries.filter(
-    (entry, other) =>
-      other !== index && (typeof entry.qurl_link === "string" || typeof entry.qurl_id === "string"),
-  );
+  // Only entries that may be live count as extra links; junk and expired ones do not.
+  const others = entries.filter((entry, other) => other !== index && isPossiblyLiveLink(entry));
   return {
     link: {
       // Untrusted: bounded and flattened before it reaches the caller or email.
@@ -569,13 +574,9 @@ export async function mintUploadedFile(
     const responseLinks = (parsed as { links?: unknown } | undefined)?.links;
     liveQurlIds = reportedLinkIds(responseLinks).slice(0, 10);
     // Counted apart from IDs: a live link may come back without a qurl_id.
-    // An already-expired link is not live, so it is not counted.
-    liveLinkCount = (Array.isArray(responseLinks) ? responseLinks : []).filter((entry: unknown) => {
-      const link = entry as { qurl_link?: unknown; qurl_id?: unknown; expires_at?: unknown } | null;
-      const expired =
-        typeof link?.expires_at === "string" && Date.parse(link.expires_at) <= Date.now();
-      return !expired && (typeof link?.qurl_link === "string" || typeof link?.qurl_id === "string");
-    }).length;
+    liveLinkCount = (Array.isArray(responseLinks) ? responseLinks : []).filter(
+      isPossiblyLiveLink,
+    ).length;
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");
@@ -586,8 +587,6 @@ export async function mintUploadedFile(
     }
     const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
     if ("problem" in result) throw unexpected(result.problem);
-    liveQurlIds = [];
-    liveLinkCount = 0;
     // A deliverable mint means qurl-service accepted the forwarded bearer via
     // the operator-configured connector: the same evidence, under the same
     // trust assumption, as a successful direct API call (see QURLClient.call).
@@ -602,6 +601,9 @@ export async function mintUploadedFile(
     minted = result.link;
     extraCount = result.extraCount;
     extraQurlIds = result.extraQurlIds;
+    // Last, so any throw above still reports the minted link as live.
+    liveQurlIds = [];
+    liveLinkCount = 0;
   } catch (error) {
     if ((error as { neverConnected?: boolean } | null)?.neverConnected) requestSent = false;
     // The connector API exposes upload but no delete endpoint. Keep the mint
