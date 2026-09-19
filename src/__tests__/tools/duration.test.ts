@@ -23,6 +23,10 @@ describe("parseDurationMs", () => {
     expect(parseDurationMs(value)).toBe(expected);
   });
 
+  it("rejects mixed day and Go units, as qurl-service does (Atoi fails, then Go rejects d)", () => {
+    expect(parseDurationMs("1d12h")).toBeUndefined();
+  });
+
   it("accepts micro sign U+00B5 but, as a deliberate subset of qurl-service (Go also takes it), not Greek mu U+03BC", () => {
     expect(parseDurationMs("1000\u00b5s")).toBe(1);
     expect(parseDurationMs("1000\u03bcs")).toBeUndefined();

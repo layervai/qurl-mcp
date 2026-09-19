@@ -659,7 +659,10 @@ export async function mintUploadedFile(
     ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
     ...(!confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),
     ...(extraCount > 0
-      ? { unexpected_extra_link_count: extraCount, unexpected_extra_qurl_ids: extraQurlIds }
+      ? {
+          unexpected_extra_link_count: extraCount,
+          ...(extraQurlIds.length > 0 ? { unexpected_extra_qurl_ids: extraQurlIds } : {}),
+        }
       : {}),
     file_name: file.name,
     content_type: file.contentType,

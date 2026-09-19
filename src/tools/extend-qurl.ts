@@ -47,12 +47,9 @@ async function linkToExtend(
       error: `resource_id names link ${input.resource_id} but qurl_id names ${input.qurl_id}; pass one link.`,
     };
   }
-  // Fast path: the caller named the link and its resource, so skip the read.
-  // Without it there is no status check here; the token route rejects a link
-  // that is no longer active.
-  if (input.qurl_id && !resourceIsLink) {
-    return { resourceId: input.resource_id, qurlId: input.qurl_id };
-  }
+  // Always read before updating, even when the link is named: the read checks
+  // the link is on this resource and still active, and a missing qurl:read
+  // fails here, before the non-idempotent update, not after it.
   let resource: Resource;
   try {
     resource = (await client.getQURL(input.resource_id)).data;
@@ -64,10 +61,10 @@ async function linkToExtend(
     return {
       error:
         `Reading the resource to pick a link failed (HTTP ${error.statusCode}; ` +
-        "the resource may not exist, or the API key may lack qurl:read). Passing qurl_id with a resource ID skips this link-selection read, but building the response still needs qurl:read.",
+        "the resource may not exist, or the API key may lack qurl:read). Nothing was extended.",
     };
   }
-  const named = resourceIsLink ? input.resource_id : undefined;
+  const named = resourceIsLink ? input.resource_id : input.qurl_id;
   if (named) {
     const link = resource.qurls?.find((candidate) => candidate.qurl_id === named);
     if (resource.qurls && !link) {
@@ -89,7 +86,9 @@ async function linkToExtend(
   if (!resource.qurls) {
     return { error: "The resource read did not include its links; pass qurl_id to choose one." };
   }
-  const active = resource.qurls.filter((link) => !INACTIVE_LINK_STATUSES.has(link.status));
+  const active = resource.qurls.filter(
+    (link) => link.qurl_id && !INACTIVE_LINK_STATUSES.has(link.status),
+  );
   if (active.length === 1) {
     return { resourceId: resource.resource_id, qurlId: active[0].qurl_id, resource };
   }
@@ -127,7 +126,7 @@ export function extendQurlTool(
       "Use `update_qurl_token` instead to set an absolute `expires_at` or change the link's label, policy, or sessions. " +
       "Use `revoke_qurl_token` or `delete_qurl` when you want to cut off access. " +
       "**Not idempotent:** calling twice with the same `extend_by` extends the link twice; use `update_qurl_token` with `expires_at` when retries must not double-push. " +
-      "Requires `qurl:write` and `qurl:read` (it reads the resource to pick the link and to return it); passing `qurl_id` with a resource ID skips the link-selection read. " +
+      "Requires `qurl:write` and `qurl:read`: it reads the resource before updating, to check the link and to return it. " +
       "A link cannot outlive its resource: if the resource's own `expires_at` is sooner, raise it with `update_qurl` first; the result then carries `extend_warning`. " +
       "Link-selection problems return an error result; a rejected update throws with its HTTP status and error code. " +
       "Returns the resource (same shape as `get_qurl`); the extended link's new expiry is in `qurls[].expires_at`, not the resource's own `expires_at`.",
@@ -149,8 +148,8 @@ export function extendQurlTool(
       });
       // A token update leaves resource fields alone, so a resource already read
       // to pick the link only needs the updated link merged in (a merge, so a
-      // sparser update response cannot drop fields the read had). Only the
-      // qurl_id fast path, which skipped that read, reads after the update.
+      // sparser update response cannot drop fields the read had). Only a read
+      // that omitted the link list is repeated after the update.
       let resource = target.resource;
       if (resource) {
         resource = {

@@ -249,17 +249,36 @@ describe("extendQurlTool", () => {
       });
     });
 
-    it("propagates the token route's rejection on the no-read fast path", async () => {
-      const getQURL = vi.fn();
-      const updateQurlToken = vi
+    it("reads before updating even when qurl_id is named, so a missing qurl:read changes nothing", async () => {
+      const getQURL = vi
         .fn()
-        .mockRejectedValue(new QURLAPIError(409, "qurl_not_active", "qURL token is revoked"));
+        .mockRejectedValue(new QURLAPIError(403, "insufficient_scope", "missing qurl:read"));
+      const updateQurlToken = vi.fn();
       const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
 
-      await expect(
-        tool.handler({ resource_id: extendResourceId, qurl_id: "q_ccccccccccc", extend_by: "1h" }),
-      ).rejects.toMatchObject({ statusCode: 409, code: "qurl_not_active" });
-      expect(getQURL).not.toHaveBeenCalled();
+      const result = await tool.handler({
+        resource_id: extendResourceId,
+        qurl_id: "q_ccccccccccc",
+        extend_by: "1h",
+      });
+
+      expect(JSON.stringify(result)).toContain("Nothing was extended");
+      expect(updateQurlToken).not.toHaveBeenCalled();
+    });
+
+    it("refuses a named qurl_id that the read shows is revoked", async () => {
+      const revoked = sampleAccessToken({ qurl_id: "q_ccccccccccc", status: "revoked" });
+      const updateQurlToken = vi.fn();
+      const tool = extendQurlTool(makeMockClient({ getQURL: withLinks(revoked), updateQurlToken }));
+
+      const result = await tool.handler({
+        resource_id: extendResourceId,
+        qurl_id: "q_ccccccccccc",
+        extend_by: "1h",
+      });
+
+      expect(JSON.stringify(result)).toContain("is revoked");
+      expect(updateQurlToken).not.toHaveBeenCalled();
     });
 
     it("reports a q_ link that the resource read does not list", async () => {
@@ -409,7 +428,11 @@ describe("extendQurlTool", () => {
       const updateQurlToken = vi.fn().mockResolvedValue({
         data: { ...activeLink, expires_at: "2026-09-20T00:00:00Z" },
       });
-      const getQURL = vi.fn().mockRejectedValue(new Error("insufficient_scope"));
+      // Only a first read without the link list is repeated after the update.
+      const getQURL = vi
+        .fn()
+        .mockResolvedValueOnce({ data: { ...fixture, qurls: undefined } })
+        .mockRejectedValue(new Error("upstream blip"));
       vi.spyOn(console, "error").mockImplementation(() => undefined);
       const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
 
