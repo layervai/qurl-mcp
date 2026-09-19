@@ -374,6 +374,56 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at).toBe("2026-12-31T00:00:00.000Z");
   });
 
+  it.each([
+    { cause: "ECONNREFUSED", hedged: false },
+    { cause: "ECONNRESET", hedged: true },
+  ])(
+    "hedges about an existing link only when a $cause request may have arrived",
+    async ({ cause, hedged }) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          throw new TypeError("fetch failed", {
+            cause: Object.assign(new Error(cause), { code: cause }),
+          });
+        }),
+      );
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const error = await mintUploadedFile(
+        { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+        publicKey,
+        { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+        {},
+      ).catch((caught: Error) => caught);
+      expect(String((error as Error).message).includes("may already have been minted")).toBe(
+        hedged,
+      );
+    },
+  );
+
+  it("names a malformed minted qurl_id in the operator log and rejects an unparsable session_duration", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_id: "bad\nid", qurl_link: "https://l" }] }),
+      ),
+    );
+    const config = { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" };
+    const file = { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 };
+    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+      code: "upload_mint_failed",
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("malformed qurl_id (bad"));
+
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      mintUploadedFile(config, publicKey, file, { session_duration: "1 hour" }),
+    ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("returns the uploaded resource ID to the caller when mint fails", async () => {
     vi.stubGlobal(
       "fetch",
