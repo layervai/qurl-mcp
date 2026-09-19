@@ -4,7 +4,7 @@ import { z } from "zod";
 // dot, or U+03BC mu): whole days/weeks ("7d", "1w") or a
 // Go duration ("30m", "1h30m", "1.5h").
 const DURATION_PATTERN = /^(?:\d+[dw]|(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+)$/;
-const GO_DURATION_UNIT_MS: Record<string, number> = {
+const GO_DURATION_UNIT_MS = {
   ns: 1e-6,
   us: 1e-3,
   µs: 1e-3,
@@ -12,7 +12,7 @@ const GO_DURATION_UNIT_MS: Record<string, number> = {
   s: 1_000,
   m: 60_000,
   h: 3_600_000,
-};
+} as const;
 
 /**
  * Milliseconds in a duration string, or undefined when the grammar rejects it.
@@ -25,7 +25,7 @@ export function parseDurationMs(value: string): number | undefined {
   if (whole) return Number(whole[1]) * (whole[2] === "d" ? 86_400_000 : 604_800_000);
   let total = 0;
   for (const [, amount, unit] of value.matchAll(/(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g)) {
-    total += Number(amount) * GO_DURATION_UNIT_MS[unit];
+    total += Number(amount) * GO_DURATION_UNIT_MS[unit as keyof typeof GO_DURATION_UNIT_MS];
   }
   return total;
 }

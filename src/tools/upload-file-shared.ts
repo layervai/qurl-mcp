@@ -424,9 +424,7 @@ function validQurlIds(links: unknown): string[] {
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
-):
-  | { link: MintedLink; extraCount: number; extraQurlIds: string[] }
-  | { problem: string; liveQurlIds: string[] } {
+): { link: MintedLink; extraCount: number; extraQurlIds: string[] } | { problem: string } {
   const links = (parsed as { links?: unknown } | undefined)?.links;
   const entries = (Array.isArray(links) ? links : []).map(
     (entry: unknown) =>
@@ -448,7 +446,6 @@ function mintedLinkFrom(
     const reason = reasons || "no usable link";
     return {
       problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
-      liveQurlIds: validQurlIds(links).slice(0, 10),
     };
   }
   const chosen = entries[index];
@@ -528,6 +525,8 @@ export async function mintUploadedFile(
       throw unexpected("Connector mint returned a non-JSON response.");
     }
     const parsed = parseJsonBody(raw);
+    // Any link in a failed response is live and unrevocable here; report it.
+    liveQurlIds = validQurlIds((parsed as { links?: unknown } | undefined)?.links).slice(0, 10);
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");
@@ -537,10 +536,8 @@ export async function mintUploadedFile(
       throw unexpected(`Connector mint reported failure${reason}.`);
     }
     const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
-    if ("problem" in result) {
-      liveQurlIds = result.liveQurlIds;
-      throw unexpected(result.problem);
-    }
+    if ("problem" in result) throw unexpected(result.problem);
+    liveQurlIds = [];
     if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(

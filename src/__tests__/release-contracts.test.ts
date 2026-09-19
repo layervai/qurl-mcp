@@ -4,7 +4,12 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { QURLClient } from "../client.js";
 import { deleteQurlSchema } from "../tools/delete-qurl.js";
-import { mintUploadedFile, uploadToConnector } from "../tools/upload-file-shared.js";
+import { runWithRequestAuthContext } from "../auth/request-context.js";
+import {
+  getConnectorConfig,
+  mintUploadedFile,
+  uploadToConnector,
+} from "../tools/upload-file-shared.js";
 import { withMissingApiKeyHandler } from "../tools/_shared.js";
 import { createServer } from "../server.js";
 import { resourceIdSchema, resourceOnlyIdSchema } from "../tools/_shared.js";
@@ -482,6 +487,44 @@ describe("resource SDK boundary", () => {
     expect(result.unexpected_extra_link_count).toBe(29);
     expect(result.unexpected_extra_qurl_ids).toHaveLength(10);
     expect(log).toHaveBeenCalledWith(expect.stringContaining("(+20 more)"));
+  });
+
+  it("reports live links named in a failed mint response", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    for (const response of [
+      () =>
+        Response.json(
+          { success: false, error: "downstream failed", links: [{ qurl_id: "q_000000000c1" }] },
+          { status: 502 },
+        ),
+      () => Response.json({ success: false, links: [{ qurl_id: "q_000000000c2" }] }),
+    ]) {
+      vi.stubGlobal("fetch", mockConnectorFetch(undefined, response));
+      const error = await mintUploadedFile(
+        { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+        publicKey,
+        { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+        {},
+      ).catch((caught: Error) => caught);
+      expect((error as Error).message).toMatch(/q_000000000c[12]; tell the user/);
+    }
+  });
+
+  it("forwards the request-scoped bearer, not the server key, to the connector mint", async () => {
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    await runWithRequestAuthContext(
+      { qurlApiKey: "lv_live_caller", qurlConnectorUrl: "https://c.test" },
+      () =>
+        mintUploadedFile(
+          getConnectorConfig(),
+          publicKey,
+          { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+          {},
+        ),
+    );
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe("Bearer lv_live_caller");
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {

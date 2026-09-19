@@ -28,6 +28,11 @@ export const extendQurlSchema = z.object({
 // expiry is a far-future ceiling, so extending the resource never kept a link
 // open longer (qurl-mcp#279). Resolve which link the caller means. The token
 // route needs the parent resource ID, which only a read resolves from a q_ ID.
+// A missing or unrecognized status is a candidate on both the named and the
+// auto-selected path: token status is optional in the API and can drift. Only a
+// known inactive status excludes a link.
+const INACTIVE_LINK_STATUSES = new Set(["consumed", "expired", "revoked"]);
+
 async function linkToExtend(
   client: IQURLClient,
   input: z.infer<typeof extendQurlSchema>,
@@ -65,7 +70,7 @@ async function linkToExtend(
       return { error: `Link ${named} is not on resource ${resource.resource_id}.` };
     }
     const status = link?.status;
-    if (status && status !== "active") {
+    if (status && INACTIVE_LINK_STATUSES.has(status)) {
       return {
         error: `Link ${named} is ${status}, so it cannot be extended. Use mint_link to issue a new one.`,
       };
@@ -75,11 +80,7 @@ async function linkToExtend(
   if (!resource.qurls) {
     return { error: "The resource read did not include its links; pass qurl_id to choose one." };
   }
-  // A missing or unrecognized status is a candidate, like the named-link path:
-  // token status is optional in the API and can drift. Only a known inactive
-  // status excludes a link.
-  const INACTIVE = new Set(["consumed", "expired", "revoked"]);
-  const active = resource.qurls.filter((link) => !INACTIVE.has(link.status));
+  const active = resource.qurls.filter((link) => !INACTIVE_LINK_STATUSES.has(link.status));
   if (active.length === 1) return { resourceId: resource.resource_id, qurlId: active[0].qurl_id };
   if (active.length === 0) {
     return {
@@ -150,14 +151,19 @@ export function extendQurlTool(
             "Do not retry. Reading the updated resource failed (the API key may lack qurl:read).",
         );
       }
+      // A link cannot outlive its resource; say so when the ceiling wins.
+      const linkExpiry = Date.parse(token.data.expires_at ?? "");
+      const ceiling = Date.parse(result.data.expires_at);
+      const data =
+        linkExpiry > ceiling
+          ? {
+              ...result.data,
+              extend_warning: `Link ${qurlId} closes at the resource's expiry ${result.data.expires_at}, before its own expires_at; raise the resource with update_qurl.`,
+            }
+          : result.data;
       return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify(result.data),
-          },
-        ],
-        structuredContent: toStructuredContent(result.data),
+        content: [{ type: "text" as const, text: JSON.stringify(data) }],
+        structuredContent: toStructuredContent(data),
       };
     }),
   };

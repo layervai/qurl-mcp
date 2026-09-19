@@ -10,6 +10,8 @@ import {
 // The file connector mints uploaded-file links, and its mint contract carries
 // no access policy or session cap. Reject them before the upload instead of
 // silently minting a link without the restriction the caller asked for.
+// This guards the two named options only; the schema is not strict, so other
+// unknown keys are still stripped, as for every tool.
 // z.unknown() emits a plain `{}` JSON Schema, which every host accepts; `not`
 // (from z.never) is dropped or rejected by some non-TypeScript hosts.
 const unsupportedForUploads = (field: string) =>

@@ -83,8 +83,8 @@ support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
 clock), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
 `max_sessions` are rejected before the upload. If the connector ever mints more
 links than requested, the result reports them in `unexpected_extra_link_count`
-and `unexpected_extra_qurl_ids`; they are live, so tell the user. If minting fails after upload,
-the connector currently has no delete endpoint; the server logs the orphaned
+and `unexpected_extra_qurl_ids`; they are live, so tell the user. If minting
+fails after upload, the connector currently has no delete endpoint; the server logs the orphaned
 `resource_id` for operator cleanup and returns the mint failure. Upload links
 cannot yet be revoked from this server: `delete_qurl` on the upload's
 `resource_id` does not stop a connector-minted link (revocation needs the
