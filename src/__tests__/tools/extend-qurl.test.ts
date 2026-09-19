@@ -203,6 +203,23 @@ describe("extendQurlTool", () => {
       ).rejects.toThrow("fetch failed");
     });
 
+    it("takes the read path when a q_ resource_id and the same qurl_id are both given", async () => {
+      const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });
+      const getQURL = withLinks(sampleAccessToken({ qurl_id: "q_ccccccccccc", status: "active" }));
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      await tool.handler({
+        resource_id: "q_ccccccccccc",
+        qurl_id: "q_ccccccccccc",
+        extend_by: "1h",
+      });
+
+      expect(getQURL).toHaveBeenCalledWith("q_ccccccccccc");
+      expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_ccccccccccc", {
+        extend_by: "1h",
+      });
+    });
+
     it("propagates the token route's rejection on the no-read fast path", async () => {
       const getQURL = vi.fn();
       const updateQurlToken = vi

@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { durationSchema, MAX_EXPIRY_MS, MIN_EXPIRY_MS } from "./duration.js";
+import {
+  durationSchema,
+  MAX_EXPIRY_MS,
+  MAX_SESSION_MS,
+  MIN_EXPIRY_MS,
+  MIN_SESSION_MS,
+} from "./duration.js";
 
 // The file connector mints uploaded-file links, and its mint contract carries
 // no access policy or session cap. Reject them before the upload instead of
@@ -35,7 +41,7 @@ export const uploadMintOptionsShape = {
     .boolean()
     .optional()
     .describe("Whether the link can only be used once. Defaults to true for uploaded content."),
-  session_duration: durationSchema(1_000, 86_400_000, "1s to 24h")
+  session_duration: durationSchema(MIN_SESSION_MS, MAX_SESSION_MS, "1s to 24h")
     .optional()
     .describe('How long access lasts after clicking (e.g., "1h"; max 24h)'),
   max_sessions: unsupportedForUploads("max_sessions"),

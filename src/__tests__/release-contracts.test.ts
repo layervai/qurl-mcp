@@ -278,7 +278,7 @@ describe("resource SDK boundary", () => {
         }),
       ),
     );
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     await expect(
       mintUploadedFile(
         { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
@@ -287,6 +287,8 @@ describe("resource SDK boundary", () => {
         {},
       ),
     ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    // The refused link is live, so the operator log names it.
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("q_123456789ab"));
   });
 
   it("sends session_duration, logs extra links and expiry drift, and keeps an unconfirmed expiry separate", async () => {
@@ -297,6 +299,7 @@ describe("resource SDK boundary", () => {
           { qurl_id: "q_123456789ab", qurl_link: "https://l", expires_at: "2000-01-01T00:00:00Z" },
           { qurl_id: "q_0000000000a", qurl_link: "https://m" },
           { qurl_link: "https://n" },
+          { qurl_id: "not-a-qurl", qurl_link: "https://o" },
         ],
       }),
     );
@@ -310,12 +313,12 @@ describe("resource SDK boundary", () => {
     );
     const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
     expect(sent).toMatchObject({ n: 1, one_time_use: true, session_duration: "15m" });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 3 links"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 4 links"));
     expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     expect(result.expires_at).toBe("2000-01-01T00:00:00.000Z");
     expect(result).not.toHaveProperty("requested_expires_at");
     // The extra live link reaches the caller, not only stderr.
-    expect(result.unexpected_extra_link_count).toBe(2);
+    expect(result.unexpected_extra_link_count).toBe(3);
     expect(result.unexpected_extra_qurl_ids).toEqual(["q_0000000000a"]);
     expect(sent).toBeDefined();
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;

@@ -73,10 +73,9 @@ export function getConnectorConfig(allowServerApiKeyFallback = false): Connector
   }
 
   // Validate operator configuration during preflight, before callers decode
-  // or read a potentially large upload payload, including the mint route the
-  // stored file will need.
+  // or read a potentially large upload payload. getConnectorUploadUrl already
+  // guarantees the /api/upload suffix the mint route derives from.
   const uploadUrl = getConnectorUploadUrl(connectorURL);
-  assertConnectorMintable(uploadUrl);
 
   return { apiKey, uploadUrl };
 }
@@ -418,7 +417,8 @@ function mintedLinkFrom(
   if (!isQurlDisplayId(link.qurl_id))
     return { problem: "Connector mint returned a malformed qurl_id." };
   if (!isDeliverableLink(link.qurl_link, connectorUploadUrl)) {
-    return { problem: "Connector mint returned a non-HTTPS link." };
+    // The connector did mint a live link; name it so an operator can act on it.
+    return { problem: `Connector mint returned a non-HTTPS link (${link.qurl_id}).` };
   }
   return {
     link: { qurl_id: link.qurl_id, qurl_link: link.qurl_link, expires_at: link.expires_at },

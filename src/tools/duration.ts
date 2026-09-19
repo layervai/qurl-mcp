@@ -35,16 +35,23 @@ export function parseDurationMs(value: string): number | undefined {
 // internal/api/validation/constants.go (MinExpirationDuration,
 // MaxSessionDuration) and internal/domain/qurl.go (MaxCustomerExpiryDuration);
 // the grammar mirrors internal/domain/duration.go (ParseDuration).
+// Grammar and range fail with different messages so a caller retrying knows
+// whether to fix the syntax or the size. create_qurl and mint_link still defer
+// their durations to the API; tracked with the drift guard in #282.
 export const durationSchema = (minMs: number, maxMs: number, range: string) =>
   z
     .string()
     .min(1)
+    .refine((value) => parseDurationMs(value) !== undefined, {
+      message: "Use a duration like '30m', '24h', or '7d'",
+      abort: true,
+    })
     .refine(
       (value) => {
-        const ms = parseDurationMs(value);
-        return ms !== undefined && ms >= minMs && ms <= maxMs;
+        const ms = parseDurationMs(value) ?? 0;
+        return ms >= minMs && ms <= maxMs;
       },
-      { message: `Use a duration like '30m', '24h', or '7d' (${range})` },
+      { message: `Duration must be ${range}` },
     );
 
 // validation.MinExpirationDuration and domain.MaxCustomerExpiryDuration; qurl-service
@@ -53,3 +60,7 @@ export const durationSchema = (minMs: number, maxMs: number, range: string) =>
 // qurl-service's mint, which enforces the same ceiling.
 export const MIN_EXPIRY_MS = 60_000;
 export const MAX_EXPIRY_MS = 30 * 86_400_000;
+
+// validation.MaxSessionDuration (24h); a sub-second session expires on arrival.
+export const MIN_SESSION_MS = 1_000;
+export const MAX_SESSION_MS = 86_400_000;

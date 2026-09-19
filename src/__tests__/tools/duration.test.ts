@@ -14,6 +14,10 @@ describe("parseDurationMs", () => {
     ["1.5h", 5_400_000],
     ["7d", 604_800_000],
     ["1w", 604_800_000],
+    ["1500ms", 1_500],
+    ["2000000us", 2_000],
+    ["3000000µs", 3_000],
+    ["4000000000ns", 4_000],
   ])("parses %s like qurl-service", (value, expected) => {
     expect(parseDurationMs(value)).toBe(expected);
   });
@@ -34,5 +38,13 @@ describe("durationSchema", () => {
   });
   it.each(["59s", "31d", "0s"])("rejects %s outside 1m-30d", (value) => {
     expect(expiry.safeParse(value).success).toBe(false);
+  });
+  it("tells a syntax error apart from an out-of-range value", () => {
+    expect(expiry.safeParse("banana").error?.issues.map((issue) => issue.message)).toEqual([
+      "Use a duration like '30m', '24h', or '7d'",
+    ]);
+    expect(expiry.safeParse("31d").error?.issues.map((issue) => issue.message)).toEqual([
+      "Duration must be 1m to 30d",
+    ]);
   });
 });
