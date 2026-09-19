@@ -403,7 +403,7 @@ type MintedLink = { qurl_id: string; qurl_link: string; expires_at?: unknown };
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
-): { link: MintedLink; extraQurlIds: string[] } | { problem: string } {
+): { link: MintedLink; extraCount: number; extraQurlIds: string[] } | { problem: string } {
   const links = (parsed as { links?: unknown } | undefined)?.links;
   const first: unknown = Array.isArray(links) ? links[0] : undefined;
   const link = (typeof first === "object" && first !== null ? first : {}) as Record<
@@ -420,10 +420,10 @@ function mintedLinkFrom(
   }
   return {
     link: { qurl_id: link.qurl_id, qurl_link: link.qurl_link, expires_at: link.expires_at },
-    extraQurlIds: (Array.isArray(links) ? links.slice(1) : []).map((extra: unknown) => {
-      const id = (extra as { qurl_id?: unknown } | null)?.qurl_id;
-      return typeof id === "string" ? id : "unknown";
-    }),
+    extraCount: Array.isArray(links) ? links.length - 1 : 0,
+    extraQurlIds: (Array.isArray(links) ? links.slice(1) : [])
+      .map((extra: unknown) => (extra as { qurl_id?: unknown } | null)?.qurl_id)
+      .filter((id): id is string => typeof id === "string" && isQurlDisplayId(id)),
   };
 }
 
@@ -443,6 +443,7 @@ export async function mintUploadedFile(
   let requestedExpiresAt: string | undefined;
   let requestSent = false;
   let minted: MintedLink;
+  let extraCount = 0;
   let extraQurlIds: string[] = [];
   try {
     const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
@@ -483,17 +484,26 @@ export async function mintUploadedFile(
     const parsed = parseJsonBody(raw);
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
-      throw unexpected("Connector mint reported failure.");
+      // The connector's gin handlers answer {"error": "<text>"}.
+      const bodyError = (parsed as { error?: unknown }).error;
+      const detail =
+        extractConnectorError(parsed, "connector_mint_failed").detail ??
+        (typeof bodyError === "string" ? bodyError : undefined);
+      const reason = detail
+        ? `: ${flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024)}`
+        : "";
+      throw unexpected(`Connector mint reported failure${reason}.`);
     }
     const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
     if ("problem" in result) throw unexpected(result.problem);
-    if (result.extraQurlIds.length > 0) {
+    if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(
-        `Connector minted ${result.extraQurlIds.length + 1} links for ${resourceId}; returning the first`,
+        `Connector minted ${result.extraCount + 1} links for ${resourceId}; returning the first`,
       );
     }
     minted = result.link;
+    extraCount = result.extraCount;
     extraQurlIds = result.extraQurlIds;
   } catch (error) {
     // The connector API exposes upload but no delete endpoint. Keep the mint
@@ -539,7 +549,9 @@ export async function mintUploadedFile(
     ...(requestedExpiresAt && !confirmedExpiresAt
       ? { requested_expires_at: requestedExpiresAt }
       : {}),
-    ...(extraQurlIds.length > 0 ? { unexpected_extra_qurl_ids: extraQurlIds } : {}),
+    ...(extraCount > 0
+      ? { unexpected_extra_link_count: extraCount, unexpected_extra_qurl_ids: extraQurlIds }
+      : {}),
     file_name: file.name,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,

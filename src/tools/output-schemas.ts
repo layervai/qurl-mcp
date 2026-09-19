@@ -207,12 +207,16 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .describe(
       "The expiry this server requested, present only when the connector did not confirm one; not guaranteed",
     ),
-  unexpected_extra_qurl_ids: z
-    .array(z.string())
+  unexpected_extra_link_count: z
+    .number()
     .optional()
     .describe(
       "Present only if the connector minted more links than the one requested; those links are live and should be reported to the user",
     ),
+  unexpected_extra_qurl_ids: z
+    .array(z.string())
+    .optional()
+    .describe("Valid q_ IDs of those extra links; may be fewer than unexpected_extra_link_count"),
   file_name: z.string().describe("Filename registered with the connector"),
   content_type: z.string().describe("MIME type used for the uploaded file"),
   size_bytes: z.number().describe("Uploaded file size in bytes"),

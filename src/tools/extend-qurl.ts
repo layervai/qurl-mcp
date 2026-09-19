@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { QURLAPIError, type IQURLClient } from "../client.js";
 import { formatErrorForLog } from "../logging.js";
+import { flattenControlCharacters } from "../text.js";
 import { durationSchema, MAX_EXPIRY_MS, MIN_EXPIRY_MS } from "./duration.js";
 import {
   isQurlDisplayId,
@@ -54,7 +55,7 @@ async function linkToExtend(
     if (!(error instanceof QURLAPIError && [403, 404].includes(error.statusCode))) throw error;
     return {
       error:
-        `Reading the resource to pick a link failed (${error instanceof Error ? error.message : "unknown error"}; ` +
+        `Reading the resource to pick a link failed (${flattenControlCharacters(error.message).slice(0, 200)}; ` +
         "the resource may not exist, or the API key may lack qurl:read). Passing qurl_id with a resource ID skips this link-selection read, but building the response still needs qurl:read.",
     };
   }

@@ -203,6 +203,19 @@ describe("extendQurlTool", () => {
       ).rejects.toThrow("fetch failed");
     });
 
+    it("propagates the token route's rejection on the no-read fast path", async () => {
+      const getQURL = vi.fn();
+      const updateQurlToken = vi
+        .fn()
+        .mockRejectedValue(new QURLAPIError(409, "qurl_not_active", "qURL token is revoked"));
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      await expect(
+        tool.handler({ resource_id: extendResourceId, qurl_id: "q_ccccccccccc", extend_by: "1h" }),
+      ).rejects.toMatchObject({ statusCode: 409, code: "qurl_not_active" });
+      expect(getQURL).not.toHaveBeenCalled();
+    });
+
     it("refuses a q_ link that is no longer active", async () => {
       const updateQurlToken = vi.fn();
       const getQURL = withLinks(sampleAccessToken({ qurl_id: "q_eeeeeeeeeee", status: "revoked" }));

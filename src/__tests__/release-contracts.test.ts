@@ -296,6 +296,7 @@ describe("resource SDK boundary", () => {
         links: [
           { qurl_id: "q_123456789ab", qurl_link: "https://l", expires_at: "2000-01-01T00:00:00Z" },
           { qurl_id: "q_0000000000a", qurl_link: "https://m" },
+          { qurl_link: "https://n" },
         ],
       }),
     );
@@ -309,12 +310,42 @@ describe("resource SDK boundary", () => {
     );
     const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
     expect(sent).toMatchObject({ n: 1, one_time_use: true, session_duration: "15m" });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 2 links"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 3 links"));
     expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     expect(result.expires_at).toBe("2000-01-01T00:00:00Z");
     expect(result).not.toHaveProperty("requested_expires_at");
     // The extra live link reaches the caller, not only stderr.
+    expect(result.unexpected_extra_link_count).toBe(2);
     expect(result.unexpected_extra_qurl_ids).toEqual(["q_0000000000a"]);
+    expect(sent).toBeDefined();
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers).toMatchObject({
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    });
+  });
+
+  it("keeps a 2xx failure reason for operators and bounds an oversized mint response", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    for (const response of [
+      () => Response.json({ success: false, error: "quota exceeded" }),
+      () =>
+        new Response("x".repeat(64 * 1024 + 1), {
+          headers: { "content-type": "application/json" },
+        }),
+    ]) {
+      vi.stubGlobal("fetch", mockConnectorFetch(undefined, response));
+      await expect(
+        mintUploadedFile(
+          { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+          publicKey,
+          { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+          {},
+        ),
+      ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    }
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("quota exceeded"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("64 KiB"));
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {
