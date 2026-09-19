@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.4.1...qurl-mcp-v0.5.0) (2026-09-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* **http:** Hosted operators must set MCP_SERVE_LAYERV_LEGAL_PAGES=true to retain LayerV legal routes. HTTP SMTP delivery now requires the caller to use the configured QURL_API_KEY operator credential. Apply hosted configuration with the current image digest before upgrading the application.
+
+### Features
+
+* add remote MCP transport and sharing workflows ([#182](https://github.com/layervai/qurl-mcp/issues/182)) ([4049006](https://github.com/layervai/qurl-mcp/commit/40490061dffd63fcf09ec9374eb8cc8b182fc142))
+* **http:** add autoscaling-safe stateless runtime ([#198](https://github.com/layervai/qurl-mcp/issues/198)) ([8388183](https://github.com/layervai/qurl-mcp/commit/8388183e67bd7614a702d0c22c6c2810eae81ede))
+
+
+### Bug Fixes
+
+* **client:** clarify resource status and verify SDK retries ([#273](https://github.com/layervai/qurl-mcp/issues/273)) ([607c69d](https://github.com/layervai/qurl-mcp/commit/607c69db20ae6b8b36d108990f625e591f0bb874))
+* **http:** prevent pending-slot starvation and restrict hosted SMTP ([#275](https://github.com/layervai/qurl-mcp/issues/275)) ([c73e780](https://github.com/layervai/qurl-mcp/commit/c73e780951c8b0ea55fb5d0d1f66e976fb398319))
+* prepare installed binaries and packaging for 0.5.0 ([#274](https://github.com/layervai/qurl-mcp/issues/274)) ([784472d](https://github.com/layervai/qurl-mcp/commit/784472d5812fca27915b1f6b03e11ddf9d0e57f6))
+* **tools:** restore API compatibility and safe sharing for release ([#276](https://github.com/layervai/qurl-mcp/issues/276)) ([7582430](https://github.com/layervai/qurl-mcp/commit/758243030f0929da3bb94d64fc2925e4f7bc8a6f))
+
 ## [0.4.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.4.0...qurl-mcp-v0.4.1) (2026-06-13)
 
 
