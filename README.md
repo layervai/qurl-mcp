@@ -46,6 +46,18 @@ It currently supports:
 | `list_qurl_sessions`      | List active access sessions                         |
 | `terminate_qurl_sessions` | Terminate one or all active sessions                |
 
+Resource status filters accept `active`, `revoked`, or `active,revoked`.
+A resource remains active or revoked even when its `expires_at` is in the past;
+individual access tokens can expire. `expired` is not accepted by `list_qurls`,
+even though response parsing tolerates legacy values. The snapshot retains
+upstream's stale expiration prose; its active/revoked status enum is authoritative.
+
+The qURL SDK reuses the same `Idempotency-Key` and request body when retrying
+POST/PATCH requests after a network failure or HTTP 429. Mutating HTTP 5xx
+responses are not automatically retried. Each new MCP tool invocation is a new
+operation with a new key, so repeating `create_qurl`, `batch_create_qurls`, or
+`mint_link` can mint additional tokens. MCP does not expose a caller-supplied key.
+
 ### Upload Tools
 
 | Tool                    | Mode         | Description                                |

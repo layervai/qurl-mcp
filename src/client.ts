@@ -66,14 +66,9 @@ export interface QURL {
   tags?: string[];
   expires_at: string;
   created_at: string;
-  // "expired" is documented in api-spec/qurls.yaml's
-  // `QurlData.properties.status` description (resources past their
-  // expires_at are reported as "expired" without being explicitly
-  // revoked) even though the same enum line is narrower. "unknown" is
-  // the drift sentinel emitted by qurlSchema.parse via .catch when the
-  // API returns a value the spec snapshot doesn't enumerate; see
-  // output-schemas.ts for the rationale and the hypothetical-collision
-  // note.
+  // Resources are active or revoked in the API. Keep "expired" as a
+  // compatibility tolerance for older responses; it is not a valid resource
+  // list filter. "unknown" is the output schema's fallback for other drift.
   status: "active" | "revoked" | "expired" | "unknown";
   custom_domain?: string | null;
   slug?: string;
