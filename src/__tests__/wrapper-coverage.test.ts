@@ -12,6 +12,7 @@ import { listQurlsTool } from "../tools/list-qurls.js";
 import { listQurlSessionsTool } from "../tools/list-qurl-sessions.js";
 import { mintLinkTool } from "../tools/mint-link.js";
 import { resolveQurlTool } from "../tools/resolve-qurl.js";
+import { shareByCRIDTool } from "../tools/share-by-crid.js";
 import { revokeQurlTokenTool } from "../tools/revoke-qurl-token.js";
 import { terminateQurlSessionsTool } from "../tools/terminate-qurl-sessions.js";
 import { updateQurlTool } from "../tools/update-qurl.js";
@@ -103,6 +104,12 @@ const toolCases: ToolCase[] = [
     build: mintLinkTool,
     stubs: ["mintLink"],
     input: { resource_id: "r_test1234567" },
+  },
+  {
+    name: "share_by_crid",
+    build: shareByCRIDTool,
+    stubs: ["shareByCRID"],
+    input: { crid: "crid_test" },
   },
   {
     name: "batch_create_qurls",

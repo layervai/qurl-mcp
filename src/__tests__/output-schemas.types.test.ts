@@ -10,6 +10,7 @@ import type {
   QURL,
   ResolveOutput,
   SessionListOutput,
+  ShareCRIDOutput,
 } from "../client.js";
 import {
   accessTokenOutputSchema,
@@ -18,6 +19,7 @@ import {
   listQurlSessionsOutputSchema,
   listQurlsOutputSchema,
   mintLinkOutputSchema,
+  shareByCRIDOutputSchema,
   qurlSchema,
   resolveQurlOutputSchema,
   updateQurlTokenOutputSchema,
@@ -41,6 +43,11 @@ type KnownFields<T> = T extends (infer Item)[]
     : T;
 
 describe("output schema <-> client type alignment", () => {
+  it("shareByCRIDOutputSchema matches ShareCRIDOutput", () => {
+    expectTypeOf<
+      KnownFields<z.infer<typeof shareByCRIDOutputSchema>>
+    >().toEqualTypeOf<ShareCRIDOutput>();
+  });
   it("qurlSchema matches QURL", () => {
     expectTypeOf<KnownFields<z.infer<typeof qurlSchema>>>().toEqualTypeOf<QURL>();
   });

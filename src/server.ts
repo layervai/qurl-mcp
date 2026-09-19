@@ -9,6 +9,7 @@ import { deleteQurlTool } from "./tools/delete-qurl.js";
 import { extendQurlTool } from "./tools/extend-qurl.js";
 import { updateQurlTool } from "./tools/update-qurl.js";
 import { mintLinkTool } from "./tools/mint-link.js";
+import { shareByCRIDTool } from "./tools/share-by-crid.js";
 import { batchCreateTool } from "./tools/batch-create.js";
 import { revokeQurlTokenTool } from "./tools/revoke-qurl-token.js";
 import { updateQurlTokenTool } from "./tools/update-qurl-token.js";
@@ -61,6 +62,7 @@ const sharedToolFactories = [
   extendQurlTool,
   updateQurlTool,
   mintLinkTool,
+  shareByCRIDTool,
   batchCreateTool,
   revokeQurlTokenTool,
   updateQurlTokenTool,
