@@ -403,7 +403,7 @@ type MintedLink = { qurl_id: string; qurl_link: string; expires_at?: unknown };
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
-): { link: MintedLink; extra: number } | { problem: string } {
+): { link: MintedLink; extraQurlIds: string[] } | { problem: string } {
   const links = (parsed as { links?: unknown } | undefined)?.links;
   const first: unknown = Array.isArray(links) ? links[0] : undefined;
   const link = (typeof first === "object" && first !== null ? first : {}) as Record<
@@ -420,7 +420,10 @@ function mintedLinkFrom(
   }
   return {
     link: { qurl_id: link.qurl_id, qurl_link: link.qurl_link, expires_at: link.expires_at },
-    extra: Array.isArray(links) ? links.length - 1 : 0,
+    extraQurlIds: (Array.isArray(links) ? links.slice(1) : []).map((extra: unknown) => {
+      const id = (extra as { qurl_id?: unknown } | null)?.qurl_id;
+      return typeof id === "string" ? id : "unknown";
+    }),
   };
 }
 
@@ -440,6 +443,7 @@ export async function mintUploadedFile(
   let requestedExpiresAt: string | undefined;
   let requestSent = false;
   let minted: MintedLink;
+  let extraQurlIds: string[] = [];
   try {
     const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
     if (input.expires_in && expiresInMs === undefined) {
@@ -483,13 +487,14 @@ export async function mintUploadedFile(
     }
     const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
     if ("problem" in result) throw unexpected(result.problem);
-    if (result.extra > 0) {
-      // n: 1 was requested; extra links would be live and unreported.
+    if (result.extraQurlIds.length > 0) {
+      // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(
-        `Connector minted ${result.extra + 1} links for ${resourceId}; returning the first`,
+        `Connector minted ${result.extraQurlIds.length + 1} links for ${resourceId}; returning the first`,
       );
     }
     minted = result.link;
+    extraQurlIds = result.extraQurlIds;
   } catch (error) {
     // The connector API exposes upload but no delete endpoint. Keep the mint
     // error primary and log the orphan resource for operator cleanup.
@@ -534,6 +539,7 @@ export async function mintUploadedFile(
     ...(requestedExpiresAt && !confirmedExpiresAt
       ? { requested_expires_at: requestedExpiresAt }
       : {}),
+    ...(extraQurlIds.length > 0 ? { unexpected_extra_qurl_ids: extraQurlIds } : {}),
     file_name: file.name,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,

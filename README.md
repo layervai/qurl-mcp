@@ -37,7 +37,7 @@ It currently supports:
 | `list_qurls`              | List qURL resources                                 |
 | `get_qurl`                | Fetch details for a single qURL                     |
 | `delete_qurl`             | Delete a qURL                                       |
-| `extend_qurl`             | Extend a qURL link's expiration                     |
+| `extend_qurl`             | Extend a link's expiration (needs `qurl:read` too)  |
 | `update_qurl`             | Update qURL metadata or expiration                  |
 | `mint_link`               | Mint a new access link for an existing resource     |
 | `batch_create_qurls`      | Create multiple qURLs in one request                |

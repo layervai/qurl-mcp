@@ -313,6 +313,8 @@ describe("resource SDK boundary", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     expect(result.expires_at).toBe("2000-01-01T00:00:00Z");
     expect(result).not.toHaveProperty("requested_expires_at");
+    // The extra live link reaches the caller, not only stderr.
+    expect(result.unexpected_extra_qurl_ids).toEqual(["q_0000000000a"]);
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {
