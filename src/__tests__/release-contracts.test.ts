@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { QURLClient, QURLAPIError } from "../client.js";
+import { QURLClient } from "../client.js";
 import { deleteQurlSchema } from "../tools/delete-qurl.js";
 import { mintUploadedFile, uploadToConnector } from "../tools/upload-file-shared.js";
 import { withMissingApiKeyHandler } from "../tools/_shared.js";
@@ -11,6 +11,8 @@ import { accessPolicySchema } from "../tools/create-qurl.js";
 import { batchCreateSchema } from "../tools/batch-create.js";
 import {
   makeMockClient,
+  mockConnectorFetch,
+  sampleAccessToken,
   sampleCreateQURLData,
   sampleQURL,
   sampleMintLinkOutput,
@@ -34,7 +36,7 @@ async function connect() {
       .fn()
       .mockResolvedValue({ data: [resource], meta: { has_more: false, future_cursor: "x" } }),
     updateQURL: vi.fn().mockResolvedValue({ data: resource }),
-    extendQURL: vi.fn().mockResolvedValue({ data: resource }),
+    updateQurlToken: vi.fn().mockResolvedValue({ data: sampleAccessToken() }),
     mintLink: vi.fn().mockResolvedValue({ data: { ...sampleMintLinkOutput(), ...extra } }),
   });
   const server = createServer(api, "test");
@@ -56,7 +58,7 @@ describe("release contract regressions", () => {
     ["get_qurl", { resource_id: "r_abcdefghijk" }],
     ["list_qurls", {}],
     ["update_qurl", { resource_id: "r_abcdefghijk", extend_by: "1h" }],
-    ["extend_qurl", { resource_id: "r_abcdefghijk", extend_by: "1h" }],
+    ["extend_qurl", { resource_id: "r_abcdefghijk", extend_by: "1h", qurl_id: "q_aaaaaaaaaaa" }],
     ["mint_link", { resource_id: "r_abcdefghijk" }],
   ])("preserves new API fields through official MCP client: %s", async (name, args) => {
     const { client } = await connect();
@@ -165,14 +167,18 @@ describe("resource SDK boundary", () => {
   );
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {
-    const api = makeMockClient({
-      mintLink: vi
-        .fn()
-        .mockRejectedValue(new QURLAPIError(503, "unavailable", "private upstream error")),
-    });
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json(
+          { success: false, error: "private upstream error", links: [] },
+          { status: 503 },
+        ),
+      ),
+    );
     const handler = withMissingApiKeyHandler(async () => {
       const data = await mintUploadedFile(
-        api,
+        { apiKey: "lv_live_test", uploadUrl: "https://connector.test/api/upload" },
         publicKey,
         { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
         {},
@@ -182,7 +188,7 @@ describe("resource SDK boundary", () => {
     const result = await handler(undefined);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(publicKey);
-    expect(result.content[0].text).toContain("mint_link");
+    expect(result.content[0].text).toContain("Retry the upload");
     expect(result.content[0].text).not.toContain("private upstream error");
   });
 });

@@ -28,7 +28,6 @@ export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClien
     deleteQURL: vi.fn(),
     updateQURL: vi.fn(),
     updateResource: vi.fn(),
-    extendQURL: vi.fn(),
     resolveQURL: vi.fn(),
     getQuota: vi.fn(),
     mintLink: vi.fn(),
@@ -148,4 +147,33 @@ export function sampleSession(overrides: Partial<SessionData> = {}): SessionData
     last_seen_at: "2026-06-01T00:05:00Z",
     ...overrides,
   };
+}
+
+export const connectorMintedLink = {
+  qurl_id: "q_123456789ab",
+  qurl_link: "https://qurl.link/#at_upload",
+  expires_at: "2026-06-23T00:00:00Z",
+};
+
+/**
+ * A fetch double for the file connector: `/api/upload` answers with the
+ * upload resource, `/api/mint_link/:id` with one minted link.
+ */
+export function mockConnectorFetch(
+  uploadBody: unknown = { resource_id: "r_upload12345" },
+  mintResponse: () => Response = () =>
+    Response.json({ success: true, links: [connectorMintedLink] }),
+) {
+  return vi.fn(async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
+    const url = String(input);
+    if (url.includes("/api/mint_link/")) return mintResponse();
+    return Response.json(uploadBody);
+  });
+}
+
+/** The JSON body the connector mint call received. */
+export function connectorMintBody(fetchMock: ReturnType<typeof mockConnectorFetch>) {
+  const call = fetchMock.mock.calls.find(([url]) => String(url).includes("/api/mint_link/"));
+  const init = call?.[1];
+  return { url: String(call?.[0]), body: JSON.parse(String(init?.body)), init };
 }

@@ -5,16 +5,18 @@ import {
   getRequestQurlApiKey,
   getRequestQurlConnectorUrl,
 } from "../auth/request-context.js";
-import {
-  MISSING_API_KEY_MESSAGE,
-  QURLAPIError,
-  type IQURLClient,
-  type MintLinkInput,
-} from "../client.js";
+import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../client.js";
 import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters, isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN } from "./_shared.js";
+import { parseDurationMs } from "./upload-mint-options.js";
+
+export type UploadMintOptions = {
+  expires_in?: string;
+  one_time_use?: boolean;
+  session_duration?: string;
+};
 
 export const supportedMimeTypes = [
   "application/pdf",
@@ -349,25 +351,69 @@ async function processConnectorResponse(response: Response): Promise<ConnectorUp
   return { resource_id: resourceId };
 }
 
+function connectorMintUrl(uploadUrl: string, resourceId: string): string {
+  const url = new URL(uploadUrl);
+  url.pathname = url.pathname.replace(
+    /\/api\/upload$/,
+    `/api/mint_link/${encodeURIComponent(resourceId)}`,
+  );
+  return url.toString();
+}
+
+type ConnectorMintedLink = { qurl_id?: unknown; qurl_link?: unknown; expires_at?: unknown };
+
+function firstMintedLink(parsed: unknown): ConnectorMintedLink | undefined {
+  if (typeof parsed !== "object" || parsed === null || !("links" in parsed)) return undefined;
+  const links = (parsed as { links?: unknown }).links;
+  return Array.isArray(links) && typeof links[0] === "object" && links[0] !== null
+    ? (links[0] as ConnectorMintedLink)
+    : undefined;
+}
+
+/**
+ * Mint the recipient link through the connector's `/api/mint_link`, the only
+ * link the connector serves for an upload. The upload resource's own target is
+ * not a viewable page in the connector's tunnel mode (its per-upload qURL is
+ * never shared there), so minting on it with qurl-service yields a link that
+ * opens to a 404.
+ */
 export async function mintUploadedFile(
-  client: IQURLClient,
+  connectorConfig: ConnectorConfig,
   resourceId: string,
   file: { name: string; contentType: string; sizeBytes: number },
-  input: MintLinkInput,
+  input: UploadMintOptions,
 ) {
-  let minted: Awaited<ReturnType<IQURLClient["mintLink"]>>;
+  const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
+  const body = {
+    n: 1,
+    one_time_use: input.one_time_use ?? true,
+    ...(expiresInMs !== undefined
+      ? { expires_at: new Date(Date.now() + expiresInMs).toISOString() }
+      : {}),
+    ...(input.session_duration ? { session_duration: input.session_duration } : {}),
+  };
+
+  let link: ConnectorMintedLink | undefined;
   try {
-    minted = await client.mintLink(resourceId, {
-      label: input.label,
-      expires_in: input.expires_in,
-      one_time_use: input.one_time_use ?? true,
-      max_sessions: input.max_sessions,
-      session_duration: input.session_duration,
-      access_policy: input.access_policy,
+    const response = await fetchConnector(connectorMintUrl(connectorConfig.uploadUrl, resourceId), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${connectorConfig.apiKey}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     });
+    const requestId = response.headers.get("x-request-id") ?? undefined;
+    const parsed = parseJsonBody(await readConnectorResponseBody(response));
+    if (!response.ok) throwConnectorError(response, parsed, requestId);
+    link = firstMintedLink(parsed);
+    if (typeof link?.qurl_id !== "string" || typeof link.qurl_link !== "string") {
+      throw new QURLAPIError(0, "unexpected_response", "Connector mint returned no link.");
+    }
   } catch (error) {
-    // The connector API currently exposes upload but no delete endpoint. Keep
-    // the mint error primary and log the orphan resource for operator cleanup.
+    // The connector API exposes upload but no delete endpoint. Keep the mint
+    // error primary and log the orphan resource for operator cleanup.
     console.error(
       `Connector resource ${resourceId} remains after link minting failed (${formatErrorForLog(error)})`,
     );
@@ -375,32 +421,18 @@ export async function mintUploadedFile(
       error instanceof QURLAPIError ? error.statusCode : 0,
       "upload_mint_failed",
       `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
-        "Use mint_link with this resource_id to retry; do not upload the file again. " +
-        "A failed request may already have minted a token; inspect get_qurl before retrying.",
-    );
-  }
-
-  let qurlSite: string | undefined;
-  try {
-    qurlSite = (await client.getQURL(resourceId)).data.qurl_site;
-  } catch (error) {
-    // Non-fatal: qurl_site is optional metadata. Log for debugging but don't fail the upload.
-    console.error(
-      `Failed to fetch qurl_site for resource ${resourceId} (${formatErrorForLog(error)})`,
+        "Retry the upload; the stored file cannot be re-linked from this tool.",
     );
   }
 
   return {
     resource_id: resourceId,
-    qurl_id: minted.data.qurl_id,
-    qurl_link: minted.data.qurl_link,
-    qurl_site: qurlSite,
-    expires_at: minted.data.expires_at,
+    qurl_id: link.qurl_id,
+    qurl_link: link.qurl_link,
+    expires_at: typeof link.expires_at === "string" ? link.expires_at : undefined,
     file_name: file.name,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,
-    branded_domain: minted.data.branded_domain,
-    type: minted.data.type,
   };
 }
 

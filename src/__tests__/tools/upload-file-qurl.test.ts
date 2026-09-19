@@ -4,7 +4,12 @@ import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { clearRuntimeConfigCache } from "../../config.js";
-import { makeMockClient } from "../helpers.js";
+import {
+  connectorMintBody,
+  connectorMintedLink,
+  makeMockClient,
+  mockConnectorFetch,
+} from "../helpers.js";
 import {
   readFileWithinLimit,
   uploadGeneratedFileAndMint,
@@ -79,7 +84,6 @@ describe("uploadFileQurlTool", () => {
     it("rejects generated-file helper paths outside the server temporary directory", async () => {
       await expect(
         uploadGeneratedFileAndMint(
-          makeMockClient(),
           { file_path: fixturePath },
           { uploadUrl: "https://connector.test/api/upload", apiKey: "lv_live_test" },
         ),
@@ -102,93 +106,50 @@ describe("uploadFileQurlTool", () => {
       }
     });
 
-    it("uploads the file, mints a qURL, and returns a structured result", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+    it("uploads the file, mints the link through the connector, and returns a structured result", async () => {
+      const fetchMock = mockConnectorFetch();
+      globalThis.fetch = fetchMock;
+      const mintLink = vi.fn();
+      const tool = uploadFileQurlTool(makeMockClient({ mintLink }));
 
-      const mintLink = vi.fn().mockResolvedValue({
-        data: {
-          qurl_id: "q_123456789ab",
-          qurl_link: "https://qurl.link/#at_upload",
-          expires_at: "2026-06-23T00:00:00Z",
-          type: "transit",
-        },
+      const result = await tool.handler({
+        file_path: fixturePath,
+        label: "Share PDF",
+        expires_in: "2h",
+        session_duration: "15m",
       });
-      const getQURL = vi.fn().mockResolvedValue({
-        data: {
-          resource_id: "r_upload12345",
-          status: "active",
-          created_at: "2026-06-22T00:00:00Z",
-          expires_at: "2026-06-23T00:00:00Z",
-          qurl_site: "https://r_upload12345.qurl.site",
-        },
-      });
-      const client = makeMockClient({ mintLink, getQURL });
-      const tool = uploadFileQurlTool(client);
 
-      const result = await tool.handler({ file_path: fixturePath, label: "Share PDF" });
-
-      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-      expect(mintLink).toHaveBeenCalledWith(
-        "r_upload12345",
-        expect.objectContaining({
-          label: "Share PDF",
-          one_time_use: true,
-        }),
+      // Regression (qurl-mcp#278): the upload resource's own qURL is not a
+      // viewable page, so the link must come from the connector's mint route.
+      expect(mintLink).not.toHaveBeenCalled();
+      const mint = connectorMintBody(fetchMock);
+      expect(mint.url).toBe("https://connector.test/api/mint_link/r_upload12345");
+      expect(mint.init?.headers).toEqual(
+        expect.objectContaining({ Authorization: "Bearer lv_live_test" }),
       );
-      expect(getQURL).toHaveBeenCalledWith("r_upload12345");
+      expect(mint.body).toEqual({
+        n: 1,
+        one_time_use: true,
+        expires_at: expect.any(String),
+        session_duration: "15m",
+      });
+      const lifetimeMs = Date.parse(mint.body.expires_at) - Date.now();
+      expect(lifetimeMs).toBeGreaterThan(2 * 3_600_000 - 60_000);
+      expect(lifetimeMs).toBeLessThanOrEqual(2 * 3_600_000);
 
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toEqual(
-        expect.objectContaining({
-          resource_id: "r_upload12345",
-          qurl_id: "q_123456789ab",
-          qurl_link: "https://qurl.link/#at_upload",
-          qurl_site: "https://r_upload12345.qurl.site",
-          content_type: "application/pdf",
-          file_name: "sample.pdf",
-        }),
-      );
+      expect(parsed).toEqual({
+        resource_id: "r_upload12345",
+        ...connectorMintedLink,
+        content_type: "application/pdf",
+        file_name: "sample.pdf",
+        size_bytes: expect.any(Number),
+      });
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
     });
 
-    it("continues when qurl_site enrichment is unavailable", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ data: { resource_id: "r_upload12345" } }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-
-      const client = makeMockClient({
-        mintLink: vi.fn().mockResolvedValue({
-          data: {
-            qurl_id: "q_123456789ab",
-            qurl_link: "https://qurl.link/#at_upload",
-            expires_at: "2026-06-23T00:00:00Z",
-          },
-        }),
-        getQURL: vi.fn().mockRejectedValue(new Error("insufficient_scope")),
-      });
-      const tool = uploadFileQurlTool(client);
-
-      const result = await tool.handler({ file_path: fixturePath });
-      const parsed = JSON.parse(result.content[0].text);
-
-      expect(parsed.qurl_site).toBeUndefined();
-    });
-
     it("emails the generated local-file link when requested", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+      globalThis.fetch = mockConnectorFetch();
       vi.mocked(sendEmailMessage).mockResolvedValue({
         attempted: true,
         enabled: true,
@@ -199,18 +160,7 @@ describe("uploadFileQurlTool", () => {
           { email: "alice@example.com", success: true, skipped: false, message_id: "msg-1" },
         ],
       });
-      const tool = uploadFileQurlTool(
-        makeMockClient({
-          mintLink: vi.fn().mockResolvedValue({
-            data: {
-              qurl_id: "q_123456789ab",
-              qurl_link: "https://qurl.link/#at_upload",
-              expires_at: "2026-06-23T00:00:00Z",
-            },
-          }),
-          getQURL: vi.fn().mockRejectedValue(new Error("insufficient_scope")),
-        }),
-      );
+      const tool = uploadFileQurlTool(makeMockClient());
 
       const result = await tool.handler({
         file_path: fixturePath,

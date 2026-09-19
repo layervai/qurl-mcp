@@ -94,6 +94,24 @@ describe("createServer", () => {
       }
     });
 
+    it.each(["upload_file_data_qurl", "upload_file_qurl", "upload_text_qurl"])(
+      "%s rejects access restrictions it cannot enforce before uploading",
+      async (name) => {
+        const { client, mockClient } = await connectServer();
+
+        const result = await client.callTool({
+          name,
+          arguments: { access_policy: { geo_allowlist: ["US"] } },
+        });
+
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(
+          "access_policy is not supported for uploaded files",
+        );
+        expect(mockClient.mintLink).not.toHaveBeenCalled();
+      },
+    );
+
     it("each tool has an input schema", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();

@@ -152,10 +152,6 @@ export interface UpdateResourceInput {
   preserve_host?: boolean;
 }
 
-export interface ExtendQURLInput {
-  extend_by: string;
-}
-
 export interface ResolveInput {
   access_token: string;
 }
@@ -304,7 +300,6 @@ export interface IQURLClient {
   deleteQURL(id: string): Promise<void>;
   updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }>;
   updateResource(id: string, input: UpdateResourceInput): Promise<{ data: QURL }>;
-  extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }>;
   resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }>;
   getQuota(): Promise<{ data: QuotaOutput }>;
   mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }>;
@@ -512,10 +507,6 @@ export class QURLClient implements IQURLClient {
 
   async updateResource(id: string, input: UpdateResourceInput): Promise<{ data: QURL }> {
     return this.call(async (sdk) => ({ data: mapResource(await sdk.updateResource(id, input)) }));
-  }
-
-  async extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }> {
-    return this.call(async (sdk) => ({ data: mapResource(await sdk.extend(id, input)) }));
   }
 
   async resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }> {

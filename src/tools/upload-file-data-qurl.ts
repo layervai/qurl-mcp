@@ -199,7 +199,7 @@ function decodeBase64File(input: string, maxBytes: number, contentType: string):
   return fileData;
 }
 
-export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
+export function uploadFileDataQurlTool(_client: IQURLClient, runtime: ToolRuntimeOptions) {
   const inputSchema = createUploadFileDataQurlSchema(
     runtime.maxUploadFileDataBytes === undefined
       ? MAX_UPLOAD_FILE_BASE64_CHARACTERS
@@ -212,14 +212,14 @@ export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntime
       "Upload base64-encoded PDF or raster image content to a qURL connector, then mint an access link for it. " +
       "This is the correct tool for a single in-chat image, PDF, or file attachment in either MCP transport, especially when the user wants 'the qURL of this image/file' or wants the generated link emailed. " +
       "Use this when you have the file data available but cannot provide a server-local file path. " +
-      "Use `upload_file_qurl` when the file already exists on the MCP server host, use `create_qurl` when you already have a URL, and use `mint_link` when the file has already been uploaded and you only need another token. " +
+      "Use `upload_file_qurl` when the file already exists on the MCP server host, use `create_qurl` when you already have a URL. Each call uploads the file again and returns one new link; `mint_link` cannot re-link an uploaded file. " +
       "For compressible images, compress them before converting to base64 so the request is smaller and more reliable. " +
       "When the server upload limit is configured above 10 MB, a fresh HTTP session must complete a smaller qURL API call before its first larger upload. " +
-      "The tool decodes `file_base64`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints a qURL from the returned `resource_id`. " +
+      "The tool decodes `file_base64`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. Uploaded-file links support `expires_in`, `one_time_use`, and `session_duration`; `access_policy` and `max_sessions` are rejected. " +
       "Supported MIME types are application/pdf, image/png, image/jpeg, image/webp, and image/gif. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +
       "Requires `QURL_CONNECTOR_URL`; stdio reads `QURL_API_KEY` from server config, while HTTP uses the caller's bearer credential. " +
-      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
+      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, email_delivery?: object }`.",
     inputSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {
@@ -250,7 +250,7 @@ export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntime
       );
 
       const result = await mintUploadedFile(
-        client,
+        connectorConfig,
         upload.resource_id,
         {
           name: fileName,
@@ -270,7 +270,6 @@ export function uploadFileDataQurlTool(client: IQURLClient, runtime: ToolRuntime
           contentType: input.content_type,
           qurlLink: result.qurl_link,
           expiresAt: result.expires_at,
-          qurlSite: result.qurl_site,
           label: input.label,
         }),
       });

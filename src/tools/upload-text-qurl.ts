@@ -58,7 +58,7 @@ export const uploadTextQurlSchema = z
   })
   .extend(uploadMintOptionsShape);
 
-export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
+export function uploadTextQurlTool(_client: IQURLClient, runtime: ToolRuntimeOptions) {
   return {
     name: "upload_text_qurl",
     title: "Upload Text qURL",
@@ -66,10 +66,10 @@ export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       "Render text content into a temporary PDF, upload that PDF to a qURL connector, then mint an access link for it. " +
       "Use this when the user gives you text content and wants a qURL without first creating a local file or hosting a URL somewhere else. " +
       "Use `upload_file_data_qurl` for binary/image/PDF attachments, use `upload_file_qurl` when a file already exists on disk, and use `create_qurl` when you already have a target URL. " +
-      "In v1 the tool does not apply markdown rich-text rendering; it writes the provided content into a plain-text PDF, uploads it to `${QURL_CONNECTOR_URL}/api/upload`, then mints a qURL from the returned `resource_id`. " +
+      "In v1 the tool does not apply markdown rich-text rendering; it writes the provided content into a plain-text PDF, uploads it to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. Uploaded-file links support `expires_in`, `one_time_use`, and `session_duration`; `access_policy` and `max_sessions` are rejected. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` to match the uploaded-content sharing flow. " +
       "Requires `QURL_CONNECTOR_URL`; stdio reads `QURL_API_KEY` from server config, while HTTP uses the caller's bearer credential. " +
-      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
+      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, email_delivery?: object }`.",
     inputSchema: uploadTextQurlSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {
@@ -100,7 +100,6 @@ export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
 
       try {
         const result = await uploadGeneratedFileAndMint(
-          client,
           {
             file_path: pdfFile.filePath,
             file_name: pdfFile.fileName,
@@ -120,7 +119,6 @@ export function uploadTextQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
             contentType: result.content_type,
             qurlLink: result.qurl_link,
             expiresAt: result.expires_at,
-            qurlSite: result.qurl_site,
             label: mintOptions.label,
             extraLines: [`Payload Type: ${type}`],
           }),

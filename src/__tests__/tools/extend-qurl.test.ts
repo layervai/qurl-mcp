@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { extendQurlTool, extendQurlSchema } from "../../tools/extend-qurl.js";
-import { makeMockClient, sampleQURL } from "../helpers.js";
+import { makeMockClient, sampleAccessToken, sampleQURL } from "../helpers.js";
 
 const validResourceId = "r_abc123def45";
 const extendResourceId = "r_extend12345";
@@ -67,44 +67,76 @@ describe("extendQurlTool", () => {
   });
 
   describe("handler", () => {
-    it("calls client.extendQURL with resource_id and extend_by", async () => {
-      const mockExtend = vi.fn().mockResolvedValue({ data: fixture });
-      const client = makeMockClient({ extendQURL: mockExtend });
-      const tool = extendQurlTool(client);
+    const activeLink = sampleAccessToken({ qurl_id: "q_aaaaaaaaaaa", status: "active" });
+    const withLinks = (...qurls: ReturnType<typeof sampleAccessToken>[]) =>
+      vi.fn().mockResolvedValue({ data: { ...fixture, qurls } });
 
-      await tool.handler({ resource_id: extendResourceId, extend_by: "48h" });
-
-      expect(mockExtend).toHaveBeenCalledWith(extendResourceId, { extend_by: "48h" });
-    });
-
-    it("returns updated qURL data as formatted JSON", async () => {
-      const mockExtend = vi.fn().mockResolvedValue({ data: fixture });
-      const client = makeMockClient({ extendQURL: mockExtend });
-      const tool = extendQurlTool(client);
+    // Regression (qurl-mcp#279): extending the resource left the link's own
+    // expiry unchanged, so the link still closed on time.
+    it("extends the resource's only active link, not the resource", async () => {
+      const getQURL = withLinks(
+        activeLink,
+        sampleAccessToken({ qurl_id: "q_bbbbbbbbbbb", status: "revoked" }),
+      );
+      const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });
+      const updateQURL = vi.fn();
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken, updateQURL }));
 
       const result = await tool.handler({ resource_id: extendResourceId, extend_by: "48h" });
 
-      expect(result.content).toHaveLength(1);
-      expect(result.content[0].type).toBe("text");
-
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.resource_id).toBe(extendResourceId);
-      expect(parsed.expires_at).toBe("2026-04-09T00:00:00Z");
+      expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_aaaaaaaaaaa", {
+        extend_by: "48h",
+      });
+      expect(updateQURL).not.toHaveBeenCalled();
+      expect(JSON.parse(result.content[0].text).qurls[0].qurl_id).toBe("q_aaaaaaaaaaa");
     });
 
-    it("returns only the data object, not the wrapper", async () => {
-      const mockExtend = vi.fn().mockResolvedValue({ data: fixture });
-      const client = makeMockClient({ extendQURL: mockExtend });
-      const tool = extendQurlTool(client);
+    it.each([
+      { description: "an explicit qurl_id", input: { qurl_id: "q_ccccccccccc" } },
+      { description: "a q_ display ID as resource_id", input: { resource_id: "q_ccccccccccc" } },
+    ])("extends the link named by $description", async ({ input }) => {
+      const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });
+      const getQURL = withLinks(activeLink);
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+      const request = { resource_id: extendResourceId, extend_by: "1h", ...input };
 
-      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "24h" });
-      expect(result.content[0].text).toBe(JSON.stringify(fixture));
+      await tool.handler(request);
+
+      // The token route takes the parent resource, never the q_ display ID.
+      expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_ccccccccccc", {
+        extend_by: "1h",
+      });
     });
+
+    it.each([
+      { description: "no active link", links: [], message: "no active link" },
+      {
+        description: "several active links",
+        links: [activeLink, sampleAccessToken({ qurl_id: "q_ddddddddddd", status: "active" })],
+        message: "pass qurl_id",
+      },
+    ])(
+      "asks the caller to choose when the resource has $description",
+      async ({ links, message }) => {
+        const updateQurlToken = vi.fn();
+        const tool = extendQurlTool(
+          makeMockClient({ getQURL: withLinks(...links), updateQurlToken }),
+        );
+
+        await expect(
+          tool.handler({ resource_id: extendResourceId, extend_by: "1h" }),
+        ).rejects.toThrow(message);
+        expect(updateQurlToken).not.toHaveBeenCalled();
+      },
+    );
 
     it("propagates client errors", async () => {
-      const mockExtend = vi.fn().mockRejectedValue(new Error("QURL expired"));
-      const client = makeMockClient({ extendQURL: mockExtend });
-      const tool = extendQurlTool(client);
+      const tool = extendQurlTool(
+        makeMockClient({
+          getQURL: withLinks(activeLink),
+          updateQurlToken: vi.fn().mockRejectedValue(new Error("QURL expired")),
+        }),
+      );
 
       await expect(
         tool.handler({ resource_id: "r_expired1234", extend_by: "24h" }),

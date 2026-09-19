@@ -4,7 +4,12 @@ import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearRuntimeConfigCache } from "../../config.js";
-import { makeMockClient } from "../helpers.js";
+import {
+  connectorMintBody,
+  connectorMintedLink,
+  makeMockClient,
+  mockConnectorFetch,
+} from "../helpers.js";
 import {
   createUploadFileDataQurlSchema,
   maxBase64CharactersForBytes,
@@ -146,32 +151,11 @@ describe("uploadFileDataQurlTool", () => {
       );
     });
 
-    it("uploads base64 file data, mints a qURL, and returns a structured result", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-
-      const mintLink = vi.fn().mockResolvedValue({
-        data: {
-          qurl_id: "q_123456789ab",
-          qurl_link: "https://qurl.link/#at_upload_data",
-          expires_at: "2026-06-23T00:00:00Z",
-          type: "transit",
-        },
-      });
-      const getQURL = vi.fn().mockResolvedValue({
-        data: {
-          resource_id: "r_upload12345",
-          status: "active",
-          created_at: "2026-06-22T00:00:00Z",
-          expires_at: "2026-06-23T00:00:00Z",
-          qurl_site: "https://r_upload12345.qurl.site",
-        },
-      });
-      const tool = uploadFileDataQurlTool(makeMockClient({ mintLink, getQURL }));
+    it("uploads base64 file data, mints the link through the connector, and returns a structured result", async () => {
+      const fetchMock = mockConnectorFetch();
+      globalThis.fetch = fetchMock;
+      const mintLink = vi.fn();
+      const tool = uploadFileDataQurlTool(makeMockClient({ mintLink }));
 
       const result = await tool.handler({
         file_base64: fixtureBase64,
@@ -180,81 +164,62 @@ describe("uploadFileDataQurlTool", () => {
         label: "Share PDF",
       });
 
-      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-      expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         "https://connector.test/api/upload",
         expect.objectContaining({ redirect: "error" }),
       );
-      expect(mintLink).toHaveBeenCalledWith(
-        "r_upload12345",
-        expect.objectContaining({
-          label: "Share PDF",
-          one_time_use: true,
-        }),
-      );
-      expect(getQURL).toHaveBeenCalledWith("r_upload12345");
+      expect(mintLink).not.toHaveBeenCalled();
+      const mint = connectorMintBody(fetchMock);
+      expect(mint.url).toBe("https://connector.test/api/mint_link/r_upload12345");
+      expect(mint.init).toEqual(expect.objectContaining({ method: "POST", redirect: "error" }));
+      expect(mint.body).toEqual({ n: 1, one_time_use: true });
 
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toEqual(
-        expect.objectContaining({
-          resource_id: "r_upload12345",
-          qurl_id: "q_123456789ab",
-          qurl_link: "https://qurl.link/#at_upload_data",
-          qurl_site: "https://r_upload12345.qurl.site",
-          content_type: "application/pdf",
-          file_name: "sample.pdf",
-        }),
-      );
+      expect(parsed).toEqual({
+        resource_id: "r_upload12345",
+        ...connectorMintedLink,
+        content_type: "application/pdf",
+        file_name: "sample.pdf",
+        size_bytes: expect.any(Number),
+      });
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
     });
 
-    it("logs the connector resource for cleanup when link minting fails", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_orphan12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
-      const tool = uploadFileDataQurlTool(
-        makeMockClient({ mintLink: vi.fn().mockRejectedValue(new Error("mint unavailable")) }),
-      );
+    it.each([
+      {
+        description: "an upstream error",
+        response: () =>
+          Response.json({ success: false, error: "upstream error", links: [] }, { status: 502 }),
+      },
+      {
+        description: "a success without a link",
+        response: () => Response.json({ success: true, links: [] }),
+      },
+    ])(
+      "reports the orphaned upload when the connector mint returns $description",
+      async ({ response }) => {
+        globalThis.fetch = mockConnectorFetch({ resource_id: "r_orphan12345" }, response);
+        const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+        const tool = uploadFileDataQurlTool(makeMockClient());
 
-      await expect(
-        tool.handler({
-          file_base64: fixtureBase64,
-          file_name: "sample.pdf",
-          content_type: "application/pdf",
-        }),
-      ).resolves.toMatchObject({
-        isError: true,
-        content: [{ type: "text", text: expect.stringContaining("r_orphan12345") }],
-      });
-      expect(log).toHaveBeenCalledWith(expect.stringContaining("r_orphan12345"));
-    });
+        await expect(
+          tool.handler({
+            file_base64: fixtureBase64,
+            file_name: "sample.pdf",
+            content_type: "application/pdf",
+          }),
+        ).resolves.toMatchObject({
+          isError: true,
+          content: [{ type: "text", text: expect.stringContaining("r_orphan12345") }],
+        });
+        expect(log).toHaveBeenCalledWith(expect.stringContaining("r_orphan12345"));
+      },
+    );
 
     it("accepts data URLs in file_base64", async () => {
-      globalThis.fetch = vi.fn().mockImplementation(() =>
-        Promise.resolve(
-          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        ),
-      );
+      globalThis.fetch = mockConnectorFetch();
 
-      const tool = uploadFileDataQurlTool(
-        makeMockClient({
-          mintLink: vi.fn().mockResolvedValue({
-            data: {
-              qurl_id: "q_123456789ab",
-              qurl_link: "https://qurl.link/#at_upload_data",
-              expires_at: "2026-06-23T00:00:00Z",
-            },
-          }),
-          getQURL: vi.fn().mockRejectedValue(new Error("insufficient_scope")),
-        }),
-      );
+      const tool = uploadFileDataQurlTool(makeMockClient());
 
       const result = await tool.handler({
         file_base64: `data:application/pdf;base64,${fixtureBase64}`,
@@ -264,7 +229,6 @@ describe("uploadFileDataQurlTool", () => {
 
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.file_name).toBe("sample.pdf");
-      expect(parsed.qurl_site).toBeUndefined();
 
       const bareDataUrlResult = await tool.handler({
         file_base64: `data:;base64,${fixtureBase64}`,
@@ -317,25 +281,9 @@ describe("uploadFileDataQurlTool", () => {
     });
 
     it("accepts URL-safe base64 without padding", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+      globalThis.fetch = mockConnectorFetch();
 
-      const tool = uploadFileDataQurlTool(
-        makeMockClient({
-          mintLink: vi.fn().mockResolvedValue({
-            data: {
-              qurl_id: "q_123456789ab",
-              qurl_link: "https://qurl.link/#at_upload_data",
-              expires_at: "2026-06-23T00:00:00Z",
-            },
-          }),
-          getQURL: vi.fn().mockRejectedValue(new Error("insufficient_scope")),
-        }),
-      );
+      const tool = uploadFileDataQurlTool(makeMockClient());
 
       const urlSafeBase64 = fixtureBase64
         .replace(/\+/g, "-")
@@ -409,12 +357,7 @@ describe("uploadFileDataQurlTool", () => {
     });
 
     it("emails the generated file link when email_delivery is provided", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+      globalThis.fetch = mockConnectorFetch();
       vi.mocked(sendEmailMessage).mockResolvedValue({
         attempted: true,
         enabled: true,
@@ -427,24 +370,7 @@ describe("uploadFileDataQurlTool", () => {
         ],
       });
 
-      const mintLink = vi.fn().mockResolvedValue({
-        data: {
-          qurl_id: "q_123456789ab",
-          qurl_link: "https://qurl.link/#at_upload_data",
-          expires_at: "2026-06-23T00:00:00Z",
-          type: "transit",
-        },
-      });
-      const getQURL = vi.fn().mockResolvedValue({
-        data: {
-          resource_id: "r_upload12345",
-          status: "active",
-          created_at: "2026-06-22T00:00:00Z",
-          expires_at: "2026-06-23T00:00:00Z",
-          qurl_site: "https://r_upload12345.qurl.site",
-        },
-      });
-      const tool = uploadFileDataQurlTool(makeMockClient({ mintLink, getQURL }));
+      const tool = uploadFileDataQurlTool(makeMockClient());
 
       const result = await tool.handler({
         file_base64: fixtureBase64,

@@ -194,19 +194,10 @@ export const uploadFileQurlOutputSchema = z.looseObject({
   qurl_link: z
     .string()
     .describe("One-shot display access link for the uploaded file — share immediately"),
-  qurl_site: z
-    .string()
-    .optional()
-    .describe("Resource site URL when it could be read back from get_qurl"),
   expires_at: z.string().optional(),
   file_name: z.string().describe("Filename registered with the connector"),
   content_type: z.string().describe("MIME type used for the uploaded file"),
   size_bytes: z.number().describe("Uploaded file size in bytes"),
-  branded_domain: z
-    .string()
-    .optional()
-    .describe("Bare branded hostname for anchor text when the resource has a usable custom domain"),
-  type: z.string().optional().describe("Resource type echoed from the minted token"),
   email_delivery: emailDeliveryResultSchema.optional(),
 });
 
