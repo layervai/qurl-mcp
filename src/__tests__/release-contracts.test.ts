@@ -313,7 +313,7 @@ describe("resource SDK boundary", () => {
     expect(result).not.toHaveProperty("expires_at_later_than_requested");
   });
 
-  it("does not count junk or expired entries as extra links, and flags a small expiry drift", async () => {
+  it("ignores junk but reports past-expiry extras despite possible clock skew", async () => {
     const requested = Date.now() + 60_000;
     vi.stubGlobal(
       "fetch",
@@ -337,7 +337,8 @@ describe("resource SDK boundary", () => {
       { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
       { expires_in: "1m" },
     );
-    expect(result.unexpected_extra_link_count).toBeUndefined();
+    expect(result.unexpected_extra_link_count).toBe(1);
+    expect(result.unexpected_extra_qurl_ids).toEqual(["q_000000000ee"]);
     // A 1m link that lives 2m is flagged, not hidden inside a 60s tolerance.
     expect(result.expires_at_differs_from_request).toBe(true);
     // ...and as the dangerous direction: it outlives the request.
@@ -394,7 +395,7 @@ describe("resource SDK boundary", () => {
     expect(error.message).toContain("(connector responded HTTP 502)");
   });
 
-  it("names only live links on a failed mint, never an expired one", async () => {
+  it("reports all link-shaped entries on a failed mint despite possible clock skew", async () => {
     vi.stubGlobal(
       "fetch",
       mockConnectorFetch(undefined, () =>
@@ -421,9 +422,8 @@ describe("resource SDK boundary", () => {
       {},
     ).catch((caught: unknown) => caught)) as Error;
     expect(error.message).toContain(
-      "did mint 2 live link(s) this server refused to return: q_0000000000a, q_0000000000b;",
+      "reported 3 possibly live link(s) this server refused to return: q_0000000000a, q_0000000000b, q_0000000000c;",
     );
-    expect(error.message).not.toContain("q_0000000000c");
   });
 
   it("says a refused link definitely exists even when the connector gave it no ID", async () => {
@@ -441,7 +441,7 @@ describe("resource SDK boundary", () => {
       {},
     ).catch((error: unknown) => error)) as Error;
     expect(refused.message).toContain(
-      "did mint 1 live link(s) this server refused to return (the connector reported no IDs for them); tell the user",
+      "reported 1 possibly live link(s) this server refused to return (the connector reported no IDs for them); tell the user",
     );
     expect(refused.message).not.toContain("may already have been minted");
   });

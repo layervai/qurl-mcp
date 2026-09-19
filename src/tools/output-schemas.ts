@@ -257,7 +257,7 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .number()
     .optional()
     .describe(
-      "Present only if the connector minted more links than the one requested; those links are live and should be reported to the user",
+      "Present only if the connector minted more links than the one requested; those links may be live and should be reported to the user",
     ),
   unexpected_extra_qurl_ids: z
     .array(z.string())

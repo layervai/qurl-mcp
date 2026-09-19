@@ -470,15 +470,14 @@ function isPastExpiry(expiresAt: unknown): boolean {
   return typeof expiresAt === "string" && Date.parse(expiresAt) <= Date.now();
 }
 
-// A response entry that may be a live link: link-shaped and not already expired.
+// Clock skew can make a live link look expired. Count every link-shaped entry.
 function isPossiblyLiveLink(entry: unknown): boolean {
-  const link = entry as { qurl_link?: unknown; qurl_id?: unknown; expires_at?: unknown } | null;
+  const link = entry as { qurl_link?: unknown; qurl_id?: unknown } | null;
   const parsable = (value: unknown) =>
     typeof value === "string" && value.length <= MAX_LINK_LENGTH && URL.canParse(value);
-  const expired = isPastExpiry(link?.expires_at);
   // Real evidence of a minted token: a non-empty ID, or a link that parses.
   const hasId = typeof link?.qurl_id === "string" && link.qurl_id.length > 0;
-  return !expired && (hasId || parsable(link?.qurl_link));
+  return hasId || parsable(link?.qurl_link);
 }
 
 function mintedLinkFrom(
@@ -513,7 +512,7 @@ function mintedLinkFrom(
     };
   }
   const chosen = entries[index];
-  // Only entries that may be live count as extra links; junk and expired ones do not.
+  // Count all possibly live extras; the local clock cannot prove expiry.
   const others = entries.filter((entry, other) => other !== index && isPossiblyLiveLink(entry));
   return {
     link: {
@@ -663,7 +662,7 @@ export async function mintUploadedFile(
         "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
         "do not retry automatically, since each retry stores another copy; tell the user and ask." +
         (liveLinkCount > 0
-          ? ` The connector did mint ${liveLinkCount} live link(s) this server refused to return` +
+          ? ` The connector reported ${liveLinkCount} possibly live link(s) this server refused to return` +
             (liveQurlIds.length > 0
               ? `: ${liveQurlIds.join(", ")}` +
                 (liveLinkCount > liveQurlIds.length ? " (IDs listed may be incomplete)" : "")

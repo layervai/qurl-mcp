@@ -91,15 +91,18 @@ cannot be re-linked with `mint_link`; run the upload tool again. Upload links
 support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
 clock, so a host clock that is off shortens or lengthens the link; a link whose returned expiry
 is already past by this host's clock is returned with `expires_at_already_past`), `one_time_use`, and `session_duration` (whole seconds, up to 24h); `access_policy` and
-`max_sessions` are rejected before the upload. If the connector ever mints more
+`max_sessions` must be omitted or null; non-null values are rejected before the upload. If the connector ever mints more
 links than requested, the result reports how many extra in
 `unexpected_extra_link_count` and any IDs it returned in
-`unexpected_extra_qurl_ids` (at most 10); they are live, so tell the user. If minting
+`unexpected_extra_qurl_ids` (at most 10); they may be live even when this host's clock suggests expiry, so tell the user. If minting
 fails after upload, the connector currently has no delete endpoint; the server logs the orphaned
 `resource_id` for operator cleanup and returns the mint failure. Upload links
 cannot yet be revoked from this server: `delete_qurl` on the upload's
 `resource_id` does not stop a connector-minted link (revocation needs the
 connector's `/api/revoke_links`), so prefer short expiries for sensitive files.
+Duration inputs accept whole days or weeks (`7d`, `1w`), or unsigned Go-unit
+sequences (`1h30m`, `1.5h`). Mixed day/week sequences (`1d12h`), leading signs,
+leading-dot fractions, and Greek mu (`μs`) are rejected; micro sign (`µs`) is accepted.
 HTTP upload attempts remain bounded by the per-IP and per-credential MCP rate
 limits; stdio operators should separately constrain autonomous retry loops.
 Upload validation binds the declared media type to the filename plus format

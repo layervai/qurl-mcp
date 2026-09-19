@@ -57,7 +57,7 @@ export const durationSchema = (minMs: number, maxMs: number, range: string, allo
         const ms = parseDurationMs(value) ?? 0;
         return ms >= minMs && ms <= maxMs;
       },
-      { message: `Duration must be ${range}` },
+      { message: `Duration must be ${range}`, abort: true },
     );
 
 // validation.MinExpirationDuration and domain.MaxCustomerExpiryDuration; qurl-service
