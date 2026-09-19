@@ -82,8 +82,9 @@ cannot be re-linked with `mint_link`; run the upload tool again. Upload links
 support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
 clock), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
 `max_sessions` are rejected before the upload. If the connector ever mints more
-links than requested, the result reports them in `unexpected_extra_link_count`
-and `unexpected_extra_qurl_ids`; they are live, so tell the user. If minting
+links than requested, the result reports how many in
+`unexpected_extra_link_count` and any IDs it returned in
+`unexpected_extra_qurl_ids` (at most 10); they are live, so tell the user. If minting
 fails after upload, the connector currently has no delete endpoint; the server logs the orphaned
 `resource_id` for operator cleanup and returns the mint failure. Upload links
 cannot yet be revoked from this server: `delete_qurl` on the upload's
@@ -405,30 +406,30 @@ shows every store and metric field required by a deployed stateless service.
 
 HTTP fields have matching environment overrides:
 
-| Environment variable                    | Config field                      |
-| --------------------------------------- | --------------------------------- |
-| `MCP_PORT`                              | `port`                            |
-| `MCP_HOST`                              | `host`                            |
-| `MCP_BASE_URL`                          | `baseUrl`                         |
-| `MCP_ALLOWED_HOSTS`                     | `allowedHosts`                    |
-| `MCP_TRUST_PROXY_HOPS`                  | `trustProxyHops`                  |
-| `MCP_HTTP_STATELESS`                    | `stateless`                       |
-| `MCP_MAX_CONCURRENT_REQUESTS`           | `maxConcurrentRequests`           |
-| `MCP_CREDENTIAL_RATE_LIMIT_STORE`       | `credentialRateLimitStore`        |
-| `MCP_SERVE_LAYERV_LEGAL_PAGES` | `serveLayerVLegalPages` (default `false`) |
-| `MCP_RATE_LIMIT_DYNAMODB_TABLE`         | `rateLimitDynamoDbTable`          |
-| `MCP_METRICS_NAMESPACE`                 | `metricsNamespace`                |
-| `MCP_METRICS_SERVICE`                   | `metricsService`                  |
-| `MCP_METRICS_ENVIRONMENT`               | `metricsEnvironment`              |
-| `MCP_MAX_SESSIONS`                      | `maxSessions`                     |
-| `MCP_MAX_SESSIONS_PER_CREDENTIAL`       | `maxSessionsPerCredential`        |
-| `MCP_MAX_UNVALIDATED_SESSIONS`          | `maxUnvalidatedSessions`          |
-| `MCP_SESSION_IDLE_TTL_MS`               | `sessionIdleTtlMs`                |
-| `MCP_SESSION_ABSOLUTE_TTL_MS`           | `sessionAbsoluteTtlMs`            |
-| `MCP_UNVALIDATED_SESSION_TTL_MS`        | `unvalidatedSessionTtlMs`         |
-| `MCP_RATE_LIMIT_PER_MINUTE`             | `mcpRateLimitPerMinute`           |
-| `MCP_PUBLIC_FILE_RATE_LIMIT_PER_MINUTE` | `publicFileRateLimitPerMinute`    |
-| `MCP_MAX_UPLOAD_FILE_DATA_BYTES`        | `maxUploadFileDataBytes` (shared) |
+| Environment variable                    | Config field                              |
+| --------------------------------------- | ----------------------------------------- |
+| `MCP_PORT`                              | `port`                                    |
+| `MCP_HOST`                              | `host`                                    |
+| `MCP_BASE_URL`                          | `baseUrl`                                 |
+| `MCP_ALLOWED_HOSTS`                     | `allowedHosts`                            |
+| `MCP_TRUST_PROXY_HOPS`                  | `trustProxyHops`                          |
+| `MCP_HTTP_STATELESS`                    | `stateless`                               |
+| `MCP_MAX_CONCURRENT_REQUESTS`           | `maxConcurrentRequests`                   |
+| `MCP_CREDENTIAL_RATE_LIMIT_STORE`       | `credentialRateLimitStore`                |
+| `MCP_SERVE_LAYERV_LEGAL_PAGES`          | `serveLayerVLegalPages` (default `false`) |
+| `MCP_RATE_LIMIT_DYNAMODB_TABLE`         | `rateLimitDynamoDbTable`                  |
+| `MCP_METRICS_NAMESPACE`                 | `metricsNamespace`                        |
+| `MCP_METRICS_SERVICE`                   | `metricsService`                          |
+| `MCP_METRICS_ENVIRONMENT`               | `metricsEnvironment`                      |
+| `MCP_MAX_SESSIONS`                      | `maxSessions`                             |
+| `MCP_MAX_SESSIONS_PER_CREDENTIAL`       | `maxSessionsPerCredential`                |
+| `MCP_MAX_UNVALIDATED_SESSIONS`          | `maxUnvalidatedSessions`                  |
+| `MCP_SESSION_IDLE_TTL_MS`               | `sessionIdleTtlMs`                        |
+| `MCP_SESSION_ABSOLUTE_TTL_MS`           | `sessionAbsoluteTtlMs`                    |
+| `MCP_UNVALIDATED_SESSION_TTL_MS`        | `unvalidatedSessionTtlMs`                 |
+| `MCP_RATE_LIMIT_PER_MINUTE`             | `mcpRateLimitPerMinute`                   |
+| `MCP_PUBLIC_FILE_RATE_LIMIT_PER_MINUTE` | `publicFileRateLimitPerMinute`            |
+| `MCP_MAX_UPLOAD_FILE_DATA_BYTES`        | `maxUploadFileDataBytes` (shared)         |
 
 The listener defaults to `127.0.0.1`. A non-loopback `host` is rejected unless
 `allowedHosts` is explicitly configured. Set `trustProxyHops` (or

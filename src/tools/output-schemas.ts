@@ -223,7 +223,7 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .boolean()
     .optional()
     .describe(
-      "Present when expires_in was requested but the connector confirmed no expiry; tell the user the lifetime is unconfirmed",
+      "Present when the connector confirmed no expiry, whether or not expires_in was given; tell the user the link's lifetime is unknown",
     ),
   unexpected_extra_link_count: z
     .number()

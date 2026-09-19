@@ -9,8 +9,14 @@ import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../client.js";
 import { isLoopbackHostname, loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters, isControlCodePoint } from "../text.js";
-import { RESOURCE_ID_PATTERN, isQurlDisplayId } from "./_shared.js";
-import { MAX_EXPIRY_MS, MIN_EXPIRY_MS, parseDurationMs } from "./duration.js";
+import { RESOURCE_ID_PATTERN } from "./_shared.js";
+import {
+  MAX_EXPIRY_MS,
+  MAX_SESSION_MS,
+  MIN_EXPIRY_MS,
+  MIN_SESSION_MS,
+  parseDurationMs,
+} from "./duration.js";
 import type { UploadMintOptionsInput } from "./upload-mint-options.js";
 
 export type UploadMintOptions = Pick<
@@ -418,7 +424,8 @@ function describeLinks(links: unknown): string {
 function validQurlIds(links: unknown): string[] {
   return (Array.isArray(links) ? links : [])
     .map((entry: unknown) => (entry as { qurl_id?: unknown } | null)?.qurl_id)
-    .filter((id): id is string => typeof id === "string" && isQurlDisplayId(id));
+    .filter((id): id is string => typeof id === "string" && id.length > 0)
+    .map((id) => flattenControlCharacters(id).slice(0, 64));
 }
 
 function mintedLinkFrom(
@@ -498,7 +505,11 @@ export async function mintUploadedFile(
       throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${input.expires_in}`);
     }
     // session_duration is forwarded verbatim; check it too for direct callers.
-    if (input.session_duration && parseDurationMs(input.session_duration) === undefined) {
+    const sessionMs = input.session_duration ? parseDurationMs(input.session_duration) : undefined;
+    if (
+      input.session_duration &&
+      (sessionMs === undefined || sessionMs < MIN_SESSION_MS || sessionMs > MAX_SESSION_MS)
+    ) {
       throw new QURLAPIError(
         0,
         "invalid_session_duration",
@@ -537,15 +548,7 @@ export async function mintUploadedFile(
     }
     const parsed = parseJsonBody(raw);
     // Any link in a failed response is live and unrevocable here; report it.
-    liveQurlIds = (
-      (parsed as { links?: unknown } | undefined)?.links instanceof Array
-        ? ((parsed as { links: unknown[] }).links as unknown[])
-        : []
-    )
-      .map((entry) => (entry as { qurl_id?: unknown } | null)?.qurl_id)
-      .filter((id): id is string => typeof id === "string" && id.length > 0)
-      .map((id) => flattenControlCharacters(id).slice(0, 64))
-      .slice(0, 10);
+    liveQurlIds = validQurlIds((parsed as { links?: unknown } | undefined)?.links).slice(0, 10);
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");
@@ -615,7 +618,7 @@ export async function mintUploadedFile(
     expires_at: confirmedExpiresAt,
     ...(requestedExpiresAt ? { requested_expires_at: requestedExpiresAt } : {}),
     ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
-    ...(requestedExpiresAt && !confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),
+    ...(!confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),
     ...(extraCount > 0
       ? { unexpected_extra_link_count: extraCount, unexpected_extra_qurl_ids: extraQurlIds }
       : {}),

@@ -255,6 +255,24 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at_unconfirmed).toBe(true);
   });
 
+  it("flags an unconfirmed lifetime even when no expires_in was requested", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_link: "https://l" }] }),
+      ),
+    );
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.expires_at).toBeUndefined();
+    expect(result.requested_expires_at).toBeUndefined();
+    expect(result.expires_at_unconfirmed).toBe(true);
+  });
+
   it("accepts a plain-HTTP link only from a loopback development connector", async () => {
     vi.stubGlobal(
       "fetch",
@@ -326,7 +344,8 @@ describe("resource SDK boundary", () => {
     // The extra live link reaches the caller, not only stderr.
     expect(result.unexpected_extra_link_count).toBe(3);
     expect(result.expires_at_differs_from_request).toBe(true);
-    expect(result.unexpected_extra_qurl_ids).toEqual(["q_0000000000a"]);
+    // Any non-empty ID is reported, so the IDs never undercount the count.
+    expect(result.unexpected_extra_qurl_ids).toEqual(["q_0000000000a", "not-a-qurl"]);
     expect(sent).toBeDefined();
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
     expect(headers).toMatchObject({
@@ -480,9 +499,11 @@ describe("resource SDK boundary", () => {
 
     const fetchMock = mockConnectorFetch();
     vi.stubGlobal("fetch", fetchMock);
-    await expect(
-      mintUploadedFile(config, publicKey, file, { session_duration: "1 hour" }),
-    ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    for (const session_duration of ["1 hour", "25h", "500ms"]) {
+      await expect(
+        mintUploadedFile(config, publicKey, file, { session_duration }),
+      ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    }
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
