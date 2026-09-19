@@ -435,7 +435,8 @@ type MintedLink = { qurl_id?: string; qurl_link: string; expires_at?: unknown };
 const LOGGED_LINK_LIMIT = 100;
 
 function sanitizeConnectorDetail(detail: string): string {
-  return flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024);
+  // Slice first: flattening the whole (up to 64 KiB) body only to keep 1 KiB is waste.
+  return flattenControlCharacters(detail.slice(0, 4096)).replace(/\s+/g, " ").trim().slice(0, 1024);
 }
 
 function describeLinks(links: unknown): string {
@@ -444,7 +445,9 @@ function describeLinks(links: unknown): string {
     .slice(0, LOGGED_LINK_LIMIT)
     .map((entry: unknown) => {
       const id = (entry as { qurl_id?: unknown } | null)?.qurl_id;
-      return typeof id === "string" ? flattenControlCharacters(id).slice(0, 64) : "(no qurl_id)";
+      return typeof id === "string"
+        ? flattenControlCharacters(id.slice(0, 256)).slice(0, 64)
+        : "(no qurl_id)";
     })
     .join(", ");
   return links.length > LOGGED_LINK_LIMIT
@@ -456,7 +459,7 @@ function reportedLinkIds(links: unknown): string[] {
   return (Array.isArray(links) ? links : [])
     .map((entry: unknown) => (entry as { qurl_id?: unknown } | null)?.qurl_id)
     .filter((id): id is string => typeof id === "string" && id.length > 0)
-    .map((id) => flattenControlCharacters(id).slice(0, 64));
+    .map((id) => flattenControlCharacters(id.slice(0, 256)).slice(0, 64));
 }
 
 /** The single link the connector minted, or why its response is unusable. */
@@ -661,12 +664,14 @@ export async function mintUploadedFile(
     typeof minted.expires_at === "string" && !Number.isNaN(Date.parse(minted.expires_at))
       ? new Date(minted.expires_at).toISOString()
       : undefined;
-  const driftsFromRequest = Boolean(
-    confirmedExpiresAt &&
-    // Small fixed tolerance for the connector's whole-second rounding and the
-    // round trip; any real clamp, even of a 1m link, is flagged.
-    Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > 5_000,
-  );
+  // Small fixed tolerance for the connector's whole-second rounding and the
+  // round trip; any real clamp, even of a 1m link, is flagged.
+  const driftMs = confirmedExpiresAt
+    ? Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)
+    : 0;
+  const driftsFromRequest = Math.abs(driftMs) > 5_000;
+  // The dangerous direction for a link that cannot be revoked here: it lives longer.
+  const outlivesRequest = driftMs > 5_000;
   if (driftsFromRequest) {
     // A clamp or host clock skew changed the link's lifetime; make it visible.
     console.error(
@@ -683,6 +688,7 @@ export async function mintUploadedFile(
     ...(confirmedExpiresAt ? { expires_at: confirmedExpiresAt } : {}),
     requested_expires_at: requestedExpiresAt,
     ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
+    ...(outlivesRequest ? { expires_at_later_than_requested: true } : {}),
     ...(!confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),
     ...(extraCount > 0
       ? {

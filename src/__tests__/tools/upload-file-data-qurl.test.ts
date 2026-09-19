@@ -187,6 +187,7 @@ describe("uploadFileDataQurlTool", () => {
         // The 24h default is requested; the fixture's fixed expiry differs from it.
         requested_expires_at: mint.body.expires_at,
         expires_at_differs_from_request: true,
+        expires_at_later_than_requested: true,
       });
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
     });

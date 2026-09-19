@@ -286,7 +286,31 @@ describe("resource SDK boundary", () => {
     expect(result.requested_expires_at).toBe(echoed);
     expect(result).not.toHaveProperty("expires_at_differs_from_request");
     expect(result).not.toHaveProperty("expires_at_unconfirmed");
+    expect(result).not.toHaveProperty("expires_at_later_than_requested");
     expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
+  });
+
+  it("flags a clamped (shorter) expiry as differing but not as outliving the request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_link: "https://l", expires_at: new Date(Date.now() + 3_600_000).toISOString() },
+          ],
+        }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "24h" },
+    );
+    expect(result.expires_at_differs_from_request).toBe(true);
+    expect(result).not.toHaveProperty("expires_at_later_than_requested");
   });
 
   it("does not count junk or expired entries as extra links, and flags a small expiry drift", async () => {
@@ -316,6 +340,8 @@ describe("resource SDK boundary", () => {
     expect(result.unexpected_extra_link_count).toBeUndefined();
     // A 1m link that lives 2m is flagged, not hidden inside a 60s tolerance.
     expect(result.expires_at_differs_from_request).toBe(true);
+    // ...and as the dangerous direction: it outlives the request.
+    expect(result.expires_at_later_than_requested).toBe(true);
   });
 
   it("accepts a 2xx mint body without a success field (only success: false fails)", async () => {
