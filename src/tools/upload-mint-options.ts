@@ -30,7 +30,7 @@ export const uploadMintOptionsShape = {
     .max(500)
     .optional()
     .describe(
-      "Human-readable label (max 500 chars) shown in email delivery and used as the PDF title by upload_text_qurl. It is not attached to the minted link, so the link cannot be found by label afterward.",
+      "Used only in email delivery and as upload_text_qurl's PDF title (max 500 chars); without email_delivery it has no effect on file uploads. It is not attached to the minted link, so the link cannot be found by label afterward.",
     ),
   expires_in: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d")
     .optional()

@@ -2,7 +2,8 @@ import { z } from "zod";
 
 // Accepts a safe subset of qurl-service's duration grammar (no sign, leading
 // dot, or U+03BC mu): whole days/weeks ("7d", "1w") or a
-// Go duration ("30m", "1h30m", "1.5h").
+// Go duration ("30m", "1h30m", "1.5h"). Each repetition must end in a unit,
+// so matching is linear; durationSchema's .max(32) bounds the input as well.
 const DURATION_PATTERN = /^(?:\d+[dw]|(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+)$/;
 // Nanoseconds per unit, so sub-millisecond units sum exactly before one division.
 const GO_DURATION_UNIT_NS = {

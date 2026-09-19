@@ -240,7 +240,10 @@ function extractConnectorError(
       stringField(nestedError, "message") ??
       stringField(body, "detail") ??
       stringField(body, "message") ??
-      // The connector's gin handlers answer {"error": "<text>"}.
+      // The connector's gin handlers answer {"error": "<text>"}. On the upload
+      // path this bounded, flattened text reaches the caller on purpose (the
+      // operator-run connector's reason, e.g. a size limit); the mint path keeps
+      // it in the operator log because its caller message is rebuilt.
       stringField(body, "error"),
     type: stringField(nestedError, "type"),
     instance: stringField(nestedError, "instance"),

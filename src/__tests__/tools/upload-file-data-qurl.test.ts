@@ -597,6 +597,24 @@ describe("uploadFileDataQurlTool", () => {
       });
     });
 
+    it("surfaces a structured connector upload error, bounded and flattened", async () => {
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValue(Response.json({ error: "file too\nlarge" }, { status: 413 }));
+      const tool = uploadFileDataQurlTool(makeMockClient());
+
+      const error = (await tool
+        .handler({
+          file_base64: fixtureBase64,
+          file_name: "sample.pdf",
+          content_type: "application/pdf",
+        })
+        .catch((caught: unknown) => caught)) as Error;
+      // Intentional on the upload path: the operator-run connector's reason.
+      expect(error).toMatchObject({ statusCode: 413 });
+      expect(error.message).toContain("file too large");
+    });
+
     it("does not echo an unstructured connector error body", async () => {
       globalThis.fetch = vi
         .fn()

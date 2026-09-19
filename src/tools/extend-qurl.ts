@@ -42,7 +42,9 @@ type Resource = Awaited<ReturnType<IQURLClient["getQURL"]>>["data"];
 const RESOURCE_LINK_PREVIEW_LIMIT = 100;
 
 // Whether resource.qurls lists every link. qurl_count counts all retained
-// links; when it is omitted, only a list under the cap is known to be whole.
+// links, revoked and expired included (OpenAPI Resource.qurl_count), and the
+// preview lists those too, so a revoked link does not make the list look
+// short; when qurl_count is omitted, only a list under the cap is known whole.
 function linkListComplete(resource: Resource): boolean {
   // A list at the cap is never trusted as whole, whatever qurl_count says.
   const listed = resource.qurls?.length ?? 0;
@@ -179,7 +181,14 @@ export function extendQurlTool(
         resource = {
           ...resource,
           qurls: resource.qurls?.map((link) =>
-            link.qurl_id === qurlId ? { ...link, ...token.data } : link,
+            link.qurl_id === qurlId
+              ? // Without a new expiry in the response, do not keep showing the old one.
+                {
+                  ...link,
+                  ...token.data,
+                  ...(token.data.expires_at ? {} : { expires_at: undefined }),
+                }
+              : link,
           ),
         };
       } else {
