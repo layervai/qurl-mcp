@@ -70,7 +70,7 @@ describe("release contract regressions", () => {
     expect(data).toMatchObject(extra);
   });
 
-  it.each([publicKey, crid, "a".repeat(47), "r_abcdefghijk"])(
+  it.each([publicKey, crid, "a".repeat(47), "a".repeat(107), "a".repeat(214), "r_abcdefghijk"])(
     "accepts API resource identifier %s",
     (id) => {
       expect(resourceOnlyIdSchema("delete").safeParse(id).success).toBe(true);
@@ -84,6 +84,8 @@ describe("release contract regressions", () => {
     "x/y",
     "x?admin",
     "x#fragment",
+    "a".repeat(106),
+    "a".repeat(113),
     "a".repeat(215),
     "A".repeat(109),
     "q_123456789ab",

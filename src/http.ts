@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isHttpEmailAuthorized } from "./services/email.js";
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
@@ -535,17 +536,21 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   }
 
   function getToolCapabilities(bearerToken: string) {
-    const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
-    const operatorKey = Buffer.from(runtimeConfig.qurlApiKey ?? "", "utf8");
-    const callerKey = Buffer.from(bearerToken, "utf8");
-    return {
-      uploads: Boolean(defaultQurlConnectorUrl),
-      email:
-        Boolean(runtimeConfig.smtp) &&
-        operatorKey.length > 0 &&
-        operatorKey.length === callerKey.length &&
-        timingSafeEqual(operatorKey, callerKey),
-    };
+    // Upload routing is fixed for this runtime; SMTP configuration can refresh.
+    const uploads = Boolean(defaultQurlConnectorUrl);
+    try {
+      const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
+      return {
+        uploads,
+        email:
+          Boolean(runtimeConfig.smtp) &&
+          isHttpEmailAuthorized(bearerToken, runtimeConfig.qurlApiKey),
+      };
+    } catch (error) {
+      // A malformed SMTP edit must not take unrelated MCP tools offline.
+      console.error(`Email discovery disabled (${formatErrorForLog(error)})`);
+      return { uploads, email: false };
+    }
   }
 
   function getJsonRpcMethod(body: unknown): string | undefined {
@@ -1267,6 +1272,13 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
           ? "SMTP is configured."
           : `SMTP is not configured. Missing fields: ${smtpInspection.missingFields.join(", ") || "(unknown)"}`,
       );
+      if (smtpInspection.enabled) {
+        logInfo(
+          loadRuntimeConfig(runtimeConfigPath).qurlApiKey
+            ? "HTTP email delivery is restricted to the operator credential."
+            : "HTTP email delivery is disabled: QURL_API_KEY is not configured.",
+        );
+      }
       for (const warning of smtpInspection.securityWarnings) console.warn(`Warning: ${warning}`);
       if (config.allowedHosts?.length) {
         logInfo(`Host allowlist enabled with ${config.allowedHosts.length} entries.`);

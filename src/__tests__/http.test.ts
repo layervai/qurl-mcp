@@ -301,10 +301,13 @@ describe("HTTP MCP server", () => {
   });
 
   it("requires explicit initialization for an injected credential store", async () => {
-    const injectedRuntime = createHttpRuntime({ ...testConfig, port: 0 }, {
-      version: "0.0.0-test",
-      credentialRateLimitStore: new MemoryCredentialRateLimitStore(),
-    });
+    const injectedRuntime = createHttpRuntime(
+      { ...testConfig, port: 0 },
+      {
+        version: "0.0.0-test",
+        credentialRateLimitStore: new MemoryCredentialRateLimitStore(),
+      },
+    );
     expect(() => injectedRuntime.startHttpServer()).toThrow("must be initialized");
     await expect(injectedRuntime.initialize()).resolves.toBeUndefined();
     const server = injectedRuntime.startHttpServer();
@@ -836,7 +839,8 @@ describe("HTTP MCP server", () => {
           QURL_SMTP_FROM_EMAIL: "sender@example.com",
         }))
           vi.stubEnv(name, value);
-        for (const token of ["lv_live_operator", "lv_live_other"]) {
+        for (const token of ["lv_live_operator", "lv_live_other", "invalid-config"]) {
+          if (token === "invalid-config") vi.stubEnv("QURL_SMTP_PORT", "invalid");
           const sessionId = stateless ? undefined : await initialize(baseUrl, token);
           const response = await fetch(`${baseUrl}/mcp`, {
             method: "POST",
