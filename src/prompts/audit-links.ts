@@ -22,7 +22,7 @@ export function auditLinksPrompt() {
                 "   - Is it missing tags for organization? (flag as untagged)",
                 "   - Note any custom_domain it has configured — this is informational, not an issue.",
                 "3. Summarize findings in a table with columns: resource_id, target_url, status, tags, expires_at, qurl_count, custom_domain, and any flags.",
-                "4. Recommend actions for any issues found (use update_qurl to extend, add tags, or update description; use delete_qurl to revoke).",
+                "4. Recommend actions for any issues found (use extend_qurl or update_qurl_token to extend a link, update_qurl to add tags or update the description, revoke_qurl_token or delete_qurl to revoke).",
               ].join("\n"),
             },
           },

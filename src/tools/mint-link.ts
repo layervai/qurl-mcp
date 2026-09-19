@@ -28,7 +28,7 @@ export const mintLinkBaseSchema = z.object({
     .min(1)
     .optional()
     .describe(
-      'Relative duration until expiration (e.g., "5m", "24h", "7d"). Mutually exclusive with expires_at',
+      'Relative duration until expiration (e.g., "5m", "24h", "7d"; the API enforces 1m to 30d). Mutually exclusive with expires_at',
     ),
   expires_at: z
     .string()
@@ -71,6 +71,7 @@ export function mintLinkTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
     description:
       "Mint a fresh access link for an existing qURL resource — same one-shot display semantics as `create_qurl.qurl_link`. " +
       "Use this to issue additional access links to a resource without creating a brand-new qURL (e.g. a second recipient, a replacement after the original was lost). " +
+      "Not for files from the upload tools: their links come from the file connector, so a link minted here on an upload's `resource_id` does not open the file; run the upload tool again instead. " +
       "Use `create_qurl` instead when you want a brand-new resource with its own target_url and policy. " +
       "Use `update_qurl` when you only want to change expiration/tags/description on the existing resource. " +
       "Accepts resource public keys, CRIDs, legacy `r_` IDs, and `q_` display IDs. " +

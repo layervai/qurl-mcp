@@ -28,7 +28,6 @@ export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClien
     deleteQURL: vi.fn(),
     updateQURL: vi.fn(),
     updateResource: vi.fn(),
-    extendQURL: vi.fn(),
     resolveQURL: vi.fn(),
     getQuota: vi.fn(),
     mintLink: vi.fn(),
@@ -148,4 +147,43 @@ export function sampleSession(overrides: Partial<SessionData> = {}): SessionData
     last_seen_at: "2026-06-01T00:05:00Z",
     ...overrides,
   };
+}
+
+export const connectorMintedLink = {
+  qurl_id: "q_123456789ab",
+  qurl_link: "https://qurl.link/#at_upload",
+  expires_at: "2099-06-23T00:00:00.000Z",
+};
+
+/**
+ * A fetch double for the file connector: `/api/upload` answers with the
+ * upload resource, `/api/mint_link/:id` with one minted link.
+ */
+// By default the mint echoes the requested expires_at, as the real connector
+// does, so a plain happy path carries no drift flags; tests opt into drift.
+export function mockConnectorFetch(
+  uploadBody: unknown = { resource_id: "r_upload12345" },
+  mintResponse: (body: { expires_at?: string }) => Response = (body) =>
+    Response.json({
+      success: true,
+      links: [
+        { ...connectorMintedLink, expires_at: body.expires_at ?? connectorMintedLink.expires_at },
+      ],
+    }),
+) {
+  return vi.fn(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const url = String(input);
+    if (url.includes("/api/mint_link/")) {
+      return mintResponse(init?.body ? JSON.parse(String(init.body)) : {});
+    }
+    if (url.endsWith("/api/upload")) return Response.json(uploadBody);
+    throw new Error(`Unexpected connector request: ${url}`);
+  });
+}
+
+/** The JSON body the connector mint call received. */
+export function connectorMintBody(fetchMock: ReturnType<typeof mockConnectorFetch>) {
+  const call = fetchMock.mock.calls.find(([url]) => String(url).includes("/api/mint_link/"));
+  const init = call?.[1];
+  return { url: String(call?.[0]), body: JSON.parse(String(init?.body)), init };
 }

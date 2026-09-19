@@ -2,6 +2,13 @@ import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { accessPolicySchema } from "./create-qurl.js";
 import {
+  durationSchema,
+  MAX_EXPIRY_MS,
+  MAX_SESSION_MS,
+  MIN_EXPIRY_MS,
+  MIN_SESSION_MS,
+} from "./duration.js";
+import {
   qurlDisplayIdSchema,
   resourceOnlyIdSchema,
   toStructuredContent,
@@ -14,12 +21,10 @@ import { updateQurlTokenOutputSchema } from "./output-schemas.js";
 export const updateQurlTokenBaseSchema = z.object({
   resource_id: resourceOnlyIdSchema("update a specific qURL token under"),
   qurl_id: qurlDisplayIdSchema("update"),
-  extend_by: z
-    .string()
-    .min(1)
+  extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d")
     .optional()
     .describe(
-      'Duration to extend this token by (e.g., "24h", "7d"). Mutually exclusive with expires_at.',
+      'Duration to extend this token by (e.g., "24h", "7d"; 1m to 30d per call). Mutually exclusive with expires_at.',
     ),
   expires_at: z
     .string()
@@ -35,11 +40,11 @@ export const updateQurlTokenBaseSchema = z.object({
     .max(1000)
     .optional()
     .describe("Maximum concurrent sessions for this token (0 = unlimited, max 1000)"),
-  session_duration: z
-    .string()
+  // "" keeps its meaning (apply the parent resource cap); anything else is a bounded duration.
+  session_duration: durationSchema(MIN_SESSION_MS, MAX_SESSION_MS, "1s to 24h", true)
     .optional()
     .describe(
-      'How long access lasts after clicking (e.g., "1h"). Empty string applies the parent resource cap when one is set.',
+      'How long access lasts after clicking (e.g., "1h"; 1s to 24h). Empty string applies the parent resource cap when one is set.',
     ),
 });
 

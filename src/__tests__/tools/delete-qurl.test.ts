@@ -68,7 +68,9 @@ describe("deleteQurlTool", () => {
 
       expect(result.content).toHaveLength(1);
       expect(result.content[0].type).toBe("text");
-      expect(result.content[0].text).toBe(`qURL ${validResourceId} is revoked.`);
+      expect(result.content[0].text).toBe(
+        `qURL ${validResourceId} is revoked. Links minted by the upload tools are served by the file connector and are not affected.`,
+      );
     });
 
     it("propagates client errors", async () => {
@@ -88,12 +90,14 @@ describe("deleteQurlTool", () => {
 
       const result = await tool.handler({ resource_id: validResourceId });
 
-      expect(result.content[0].text).toBe(`qURL ${validResourceId} is revoked.`);
+      expect(result.content[0].text).toBe(
+        `qURL ${validResourceId} is revoked. Links minted by the upload tools are served by the file connector and are not affected.`,
+      );
       expect(result.structuredContent).toEqual({
         resource_id: validResourceId,
         revoked: true,
         was_already_revoked: true,
-        message: `qURL ${validResourceId} is revoked.`,
+        message: `qURL ${validResourceId} is revoked. Links minted by the upload tools are served by the file connector and are not affected.`,
       });
     });
 

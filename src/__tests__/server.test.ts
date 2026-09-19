@@ -1,15 +1,19 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer } from "../server.js";
-import { makeMockClient } from "./helpers.js";
+import { makeMockClient, mockConnectorFetch } from "./helpers.js";
 
 describe("createServer", () => {
   let client: Client;
   let server: McpServer;
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     await client?.close();
     await server?.close();
   });
@@ -91,6 +95,64 @@ describe("createServer", () => {
 
       for (const tool of tools) {
         expect(tool.description, `${tool.name} missing description`).toBeTruthy();
+      }
+    });
+
+    const samplePdf = resolve("src/__tests__/fixtures/sample.pdf");
+    it.each([
+      {
+        name: "upload_file_data_qurl",
+        args: {
+          file_base64: readFileSync(samplePdf).toString("base64"),
+          file_name: "sample.pdf",
+          content_type: "application/pdf",
+        },
+      },
+      { name: "upload_file_qurl", args: { file_path: samplePdf } },
+      { name: "upload_text_qurl", args: { type: "text", content: "hello" } },
+    ])(
+      "$name rejects access restrictions it cannot enforce before uploading",
+      async ({ name, args }) => {
+        vi.stubEnv("QURL_API_KEY", "lv_live_test");
+        vi.stubEnv("QURL_CONNECTOR_URL", "https://connector.test");
+        const fetchMock = mockConnectorFetch();
+        vi.stubGlobal("fetch", fetchMock);
+        const { client } = await connectServer();
+
+        for (const [field, value] of [
+          ["access_policy", { geo_allowlist: ["US"] }],
+          ["max_sessions", 3],
+        ] as const) {
+          const rejected = await client.callTool({ name, arguments: { ...args, [field]: value } });
+
+          expect(rejected.isError).toBe(true);
+          expect(JSON.stringify(rejected.content)).toContain(
+            `${field} is not supported for uploaded files`,
+          );
+        }
+        // Invalid durations are refused before the upload too, so a typo cannot orphan a file.
+        for (const invalid of [{ expires_in: "60d" }, { session_duration: "1 hour" }]) {
+          const rejected = await client.callTool({ name, arguments: { ...args, ...invalid } });
+          expect(rejected.isError).toBe(true);
+        }
+        expect(fetchMock).not.toHaveBeenCalled();
+
+        // Control: the same arguments without the restriction do upload.
+        const accepted = await client.callTool({ name, arguments: args });
+        expect(accepted.isError).not.toBe(true);
+        expect(fetchMock).toHaveBeenCalled();
+      },
+    );
+
+    it("advertises rejected upload options with a portable JSON Schema (no `not`)", async () => {
+      const { client } = await connectServer();
+      const { tools } = await client.listTools();
+      for (const name of ["upload_file_data_qurl", "upload_file_qurl", "upload_text_qurl"]) {
+        const properties = tools.find((tool) => tool.name === name)?.inputSchema.properties ?? {};
+        for (const field of ["access_policy", "max_sessions"]) {
+          expect(properties[field], `${name}.${field}`).toBeDefined();
+          expect(JSON.stringify(properties[field]), `${name}.${field}`).not.toContain('"not"');
+        }
       }
     });
 

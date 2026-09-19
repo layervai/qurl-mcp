@@ -9,6 +9,10 @@ export const RESOURCE_ID_PATTERN =
   /^(r_[a-z0-9_-]{11}|(?:[A-Za-z0-9_-]{4}){27,53}|(?:[A-Za-z0-9_-]{4}){27,53}[A-Za-z0-9_-]{2}|(?:[A-Za-z0-9_-]{4}){26,52}[A-Za-z0-9_-]{3}|[a-z2-7]{47}|[a-z2-7]{60})$/;
 const QURL_DISPLAY_ID_PATTERN = /^q_[0-9a-f]{11}$/;
 
+export function isQurlDisplayId(value: string): boolean {
+  return QURL_DISPLAY_ID_PATTERN.test(value);
+}
+
 export type ToolRuntimeOptions = {
   mode: "stdio" | "http";
   /** Decoded attachment limit used to build transport-visible upload schemas. */

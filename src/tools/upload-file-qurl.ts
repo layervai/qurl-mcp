@@ -16,7 +16,11 @@ import {
   toEmailAugmentedResult,
   uploadEmailDetailLines,
 } from "./email-delivery.js";
-import { uploadMintOptionsShape } from "./upload-mint-options.js";
+import {
+  uploadMintOptionsShape,
+  UPLOAD_LINK_DESCRIPTION,
+  UPLOAD_RETURNS_DESCRIPTION,
+} from "./upload-mint-options.js";
 import {
   getConnectorConfig,
   getMaxUploadFileBytes,
@@ -101,11 +105,9 @@ export async function readFileWithinLimit(
 }
 
 async function uploadLocalFileAndMint(
-  client: IQURLClient,
   input: UploadFileQurlInput,
   connectorConfig: ConnectorConfig,
 ) {
-  // Preflight config before reading local files so misconfigured hosts fail fast.
   const sourcePath = resolve(input.file_path);
   // O_NOFOLLOW protects the final component. Intermediate directory symlinks
   // still follow normal filesystem semantics; this tool is stdio-only and the
@@ -146,15 +148,18 @@ async function uploadLocalFileAndMint(
   validateFileSignature(fileData, contentType);
   const upload = await uploadToConnector(fileData, fileName, contentType, connectorConfig);
   return mintUploadedFile(
-    client,
+    connectorConfig,
     upload.resource_id,
     { name: fileName, contentType, sizeBytes: fileData.byteLength },
-    input,
+    {
+      expires_in: input.expires_in,
+      one_time_use: input.one_time_use,
+      session_duration: input.session_duration,
+    },
   );
 }
 
 export async function uploadGeneratedFileAndMint(
-  client: IQURLClient,
   input: UploadFileQurlInput,
   connectorConfig: ConnectorConfig,
 ) {
@@ -171,14 +176,14 @@ export async function uploadGeneratedFileAndMint(
   ) {
     throw new Error("Generated upload files must remain inside the server temporary directory.");
   }
-  return uploadLocalFileAndMint(
-    client,
-    { ...input, file_path: canonicalSourcePath },
-    connectorConfig,
-  );
+  return uploadLocalFileAndMint({ ...input, file_path: canonicalSourcePath }, connectorConfig);
 }
 
-export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
+export function uploadFileQurlTool(
+  // Unused since links are minted by the connector; kept for the shared tool factory signature.
+  _client: IQURLClient,
+  runtime: ToolRuntimeOptions,
+) {
   return {
     name: "upload_file_qurl",
     title: "Upload File qURL",
@@ -187,11 +192,12 @@ export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       "Use this when the content already exists on the MCP server host and you need a shareable file qURL rather than a proxy to an existing website URL. " +
       "This stdio-only tool can read any supported file that the local MCP process user can access; invoke it only for a path the user explicitly chose to share. " +
       "Deploy stdio under a restricted OS account or container whose readable files are limited to intended shareable content. " +
-      "Use `create_qurl` when you already have a URL, and use `mint_link` when the file has already been uploaded and you only need another token. " +
-      "The tool reads `file_path`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints a qURL from the returned `resource_id`. " +
+      "Use `create_qurl` when you already have a URL. Each call uploads the file again and returns one new link; `mint_link` cannot re-link an uploaded file. " +
+      "The tool reads `file_path`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. " +
+      UPLOAD_LINK_DESCRIPTION +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +
       "Requires both `QURL_API_KEY` and `QURL_CONNECTOR_URL` in the server environment or runtime config. " +
-      "**Returns:** `{ resource_id: string, qurl_id: string, qurl_link: string, qurl_site?: string, expires_at?: string, file_name: string, content_type: string, size_bytes: number, branded_domain?: string, type?: string, email_delivery?: object }`.",
+      UPLOAD_RETURNS_DESCRIPTION,
     inputSchema: uploadFileQurlSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {
@@ -209,7 +215,7 @@ export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
       }
       const allowServerApiKeyFallback = allowsServerApiKeyFallback(runtime);
       const connectorConfig = getConnectorConfig(allowServerApiKeyFallback);
-      const result = await uploadLocalFileAndMint(client, input, connectorConfig);
+      const result = await uploadLocalFileAndMint(input, connectorConfig);
       const emailResult = await maybeDeliverToolEmail({
         allowServerApiKeyFallback,
         delivery: input.email_delivery,
@@ -220,7 +226,6 @@ export function uploadFileQurlTool(client: IQURLClient, runtime: ToolRuntimeOpti
           contentType: result.content_type,
           qurlLink: result.qurl_link,
           expiresAt: result.expires_at,
-          qurlSite: result.qurl_site,
           label: input.label,
         }),
       });

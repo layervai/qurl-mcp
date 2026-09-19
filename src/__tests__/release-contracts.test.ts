@@ -1,16 +1,26 @@
+import { Buffer } from "node:buffer";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { QURLClient, QURLAPIError } from "../client.js";
+import { QURLClient } from "../client.js";
 import { deleteQurlSchema } from "../tools/delete-qurl.js";
-import { mintUploadedFile, uploadToConnector } from "../tools/upload-file-shared.js";
+import { runWithRequestAuthContext } from "../auth/request-context.js";
+import {
+  getConnectorConfig,
+  mintUploadedFile,
+  uploadToConnector,
+} from "../tools/upload-file-shared.js";
 import { withMissingApiKeyHandler } from "../tools/_shared.js";
 import { createServer } from "../server.js";
+import { UPLOAD_RETURNS_DESCRIPTION } from "../tools/upload-mint-options.js";
+import { uploadFileQurlOutputSchema } from "../tools/output-schemas.js";
 import { resourceIdSchema, resourceOnlyIdSchema } from "../tools/_shared.js";
 import { accessPolicySchema } from "../tools/create-qurl.js";
 import { batchCreateSchema } from "../tools/batch-create.js";
 import {
   makeMockClient,
+  mockConnectorFetch,
+  sampleAccessToken,
   sampleCreateQURLData,
   sampleQURL,
   sampleMintLinkOutput,
@@ -24,6 +34,9 @@ const resource = { ...sampleQURL(), ...extra };
 const close: Array<() => Promise<void>> = [];
 afterEach(async () => {
   for (const fn of close.splice(0)) await fn();
+  // Spies (console.error especially) must not carry calls into later tests.
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 async function connect() {
@@ -34,7 +47,7 @@ async function connect() {
       .fn()
       .mockResolvedValue({ data: [resource], meta: { has_more: false, future_cursor: "x" } }),
     updateQURL: vi.fn().mockResolvedValue({ data: resource }),
-    extendQURL: vi.fn().mockResolvedValue({ data: resource }),
+    updateQurlToken: vi.fn().mockResolvedValue({ data: sampleAccessToken() }),
     mintLink: vi.fn().mockResolvedValue({ data: { ...sampleMintLinkOutput(), ...extra } }),
   });
   const server = createServer(api, "test");
@@ -56,7 +69,7 @@ describe("release contract regressions", () => {
     ["get_qurl", { resource_id: "r_abcdefghijk" }],
     ["list_qurls", {}],
     ["update_qurl", { resource_id: "r_abcdefghijk", extend_by: "1h" }],
-    ["extend_qurl", { resource_id: "r_abcdefghijk", extend_by: "1h" }],
+    ["extend_qurl", { resource_id: "r_abcdefghijk", extend_by: "1h", qurl_id: "q_aaaaaaaaaaa" }],
     ["mint_link", { resource_id: "r_abcdefghijk" }],
   ])("preserves new API fields through official MCP client: %s", async (name, args) => {
     const { client } = await connect();
@@ -164,15 +177,691 @@ describe("resource SDK boundary", () => {
     },
   );
 
-  it("returns the uploaded resource ID to the caller when mint fails", async () => {
-    const api = makeMockClient({
-      mintLink: vi
-        .fn()
-        .mockRejectedValue(new QURLAPIError(503, "unavailable", "private upstream error")),
+  it.each([
+    ["https://connector.test/api/upload", "https://connector.test/api/mint_link/"],
+    ["https://host.test/connector/api/upload", "https://host.test/connector/api/mint_link/"],
+  ])("mints beside the upload route of %s", async (uploadUrl, mintPrefix) => {
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${mintPrefix}${publicKey}`);
+  });
+
+  it.each([
+    {
+      description: "an upload URL without the /api/upload route",
+      uploadUrl: "https://c.test/x",
+      options: {},
+    },
+    {
+      description: "an expires_in the duration grammar rejects",
+      uploadUrl: "https://c.test/api/upload",
+      options: { expires_in: "banana" },
+    },
+  ])("fails before minting given $description", async ({ uploadUrl, options }) => {
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(
+      mintUploadedFile(
+        { apiKey: "lv_live_test", uploadUrl },
+        publicKey,
+        { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+        options,
+      ),
+    ).rejects.toSatisfy(
+      (error: { code?: string; message?: string }) =>
+        error.code === "upload_mint_failed" &&
+        // Nothing reached the connector, so no link can exist.
+        !error.message?.includes("may already have been minted"),
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts a JSON mint body without Content-Type and reports only a confirmed expiry", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(
+        undefined,
+        // A byte body carries no Content-Type, unlike a string body.
+        () =>
+          new Response(
+            Buffer.from(
+              JSON.stringify({
+                success: true,
+                links: [{ qurl_id: "q_123456789ab", qurl_link: "https://l" }],
+              }),
+            ),
+          ),
+      ),
+    );
+    const fetchMock = vi.mocked(globalThis.fetch);
+    const before = Date.now();
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "2h" },
+    );
+    // The requested expiry is exact on the wire...
+    const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { expires_at: string };
+    const lifetime = Date.parse(sent.expires_at) - before;
+    expect(lifetime).toBeGreaterThanOrEqual(7_200_000);
+    expect(lifetime).toBeLessThan(7_200_000 + 60_000);
+    // ...but an unconfirmed expiry is never reported as fact.
+    expect(result.qurl_link).toBe("https://l");
+    expect(result.expires_at).toBeUndefined();
+    expect(result.requested_expires_at).toBe(sent.expires_at);
+    expect(result.expires_at_unconfirmed).toBe(true);
+  });
+
+  it("reports a connector-echoed expiry as confirmed, with no drift or unconfirmed flag", async () => {
+    // The production path: the connector mints with the exact expires_at sent.
+    let echoed = "";
+    const fetchMock = vi.fn(
+      async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+        if (String(input).endsWith("/api/upload"))
+          return Response.json({ resource_id: "r_x1234567890" });
+        echoed = (JSON.parse(String(init?.body)) as { expires_at: string }).expires_at;
+        return Response.json({
+          success: true,
+          links: [{ qurl_link: "https://l", expires_at: echoed }],
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "1h" },
+    );
+    expect(result.expires_at).toBe(echoed);
+    expect(result.requested_expires_at).toBe(echoed);
+    expect(result).not.toHaveProperty("expires_at_differs_from_request");
+    expect(result).not.toHaveProperty("expires_at_unconfirmed");
+    expect(result).not.toHaveProperty("expires_at_later_than_requested");
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
+  });
+
+  it("flags a clamped (shorter) expiry as differing but not as outliving the request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_link: "https://l", expires_at: new Date(Date.now() + 3_600_000).toISOString() },
+          ],
+        }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "24h" },
+    );
+    expect(result.expires_at_differs_from_request).toBe(true);
+    expect(result).not.toHaveProperty("expires_at_later_than_requested");
+  });
+
+  it("does not count junk or expired entries as extra links, and flags a small expiry drift", async () => {
+    const requested = Date.now() + 60_000;
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_link: "https://l", expires_at: new Date(requested + 60_000).toISOString() },
+            42,
+            {},
+            { qurl_id: "q_000000000ee", expires_at: "2000-01-01T00:00:00Z" },
+            { qurl_link: "" },
+          ],
+        }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "1m" },
+    );
+    expect(result.unexpected_extra_link_count).toBeUndefined();
+    // A 1m link that lives 2m is flagged, not hidden inside a 60s tolerance.
+    expect(result.expires_at_differs_from_request).toBe(true);
+    // ...and as the dangerous direction: it outlives the request.
+    expect(result.expires_at_later_than_requested).toBe(true);
+  });
+
+  it("accepts a 2xx mint body without a success field (only success: false fails)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () => Response.json({ links: [{ qurl_link: "https://l" }] })),
+    );
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.qurl_link).toBe("https://l");
+  });
+
+  it("defaults the lifetime to 24h and flags it unconfirmed when the connector does not echo it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_link: "https://l" }] }),
+      ),
+    );
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.expires_at).toBeUndefined();
+    // Omitted expires_in defaults to 24h rather than the connector's default.
+    const lifetime = Date.parse(result.requested_expires_at ?? "") - Date.now();
+    expect(lifetime).toBeGreaterThan(86_400_000 - 60_000);
+    expect(lifetime).toBeLessThanOrEqual(86_400_000);
+    expect(result.expires_at_unconfirmed).toBe(true);
+  });
+
+  it("keeps the connector's error status when an error body is oversized", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () => new Response("x".repeat(64 * 1024 + 1), { status: 502 })),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = (await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    ).catch((caught: unknown) => caught)) as Error;
+    expect(error.message).toContain("(connector responded HTTP 502)");
+  });
+
+  it("names only live links on a failed mint, never an expired one", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: false,
+          error: "partial failure",
+          links: [
+            { qurl_id: "q_0000000000a", qurl_link: "https://a" },
+            { qurl_id: "q_0000000000b", qurl_link: "https://b" },
+            {
+              qurl_id: "q_0000000000c",
+              qurl_link: "https://c",
+              expires_at: "2000-01-01T00:00:00Z",
+            },
+          ],
+        }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = (await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    ).catch((caught: unknown) => caught)) as Error;
+    expect(error.message).toContain(
+      "did mint 2 live link(s) this server refused to return: q_0000000000a, q_0000000000b;",
+    );
+    expect(error.message).not.toContain("q_0000000000c");
+  });
+
+  it("says a refused link definitely exists even when the connector gave it no ID", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_link: "http://qurl.link/#x" }] }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const refused = (await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    ).catch((error: unknown) => error)) as Error;
+    expect(refused.message).toContain(
+      "did mint 1 live link(s) this server refused to return (the connector reported no IDs for them); tell the user",
+    );
+    expect(refused.message).not.toContain("may already have been minted");
+  });
+
+  it("keeps the shared upload Returns text in step with the output schema", () => {
+    const schemaKeys = Object.keys(uploadFileQurlOutputSchema.shape);
+    for (const key of schemaKeys) expect(UPLOAD_RETURNS_DESCRIPTION).toContain(key);
+    // And the reverse: no field lingers in the text after leaving the schema.
+    const described = UPLOAD_RETURNS_DESCRIPTION.slice(
+      UPLOAD_RETURNS_DESCRIPTION.indexOf("{"),
+      UPLOAD_RETURNS_DESCRIPTION.indexOf("}") + 1,
+    ).match(/\w+(?=\??:)/g);
+    expect(described?.sort()).toEqual([...schemaKeys].sort());
+  });
+
+  it("accepts a plain-HTTP link only from a loopback development connector", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [{ qurl_id: "q_123456789ab", qurl_link: "http://127.0.0.1:8080/views/x" }],
+        }),
+      ),
+    );
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "http://127.0.0.1:8080/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.qurl_link).toBe("http://127.0.0.1:8080/views/x");
+  });
+
+  it("rejects a plain-HTTP loopback link from a non-loopback connector", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [{ qurl_id: "q_123456789ab", qurl_link: "http://127.0.0.1:8080/views/x" }],
+        }),
+      ),
+    );
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(
+      mintUploadedFile(
+        { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+        publicKey,
+        { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+        {},
+      ),
+    ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    // The refused link is live, so the operator log names it.
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("q_123456789ab"));
+  });
+
+  it("sends session_duration, logs extra links and expiry drift, and keeps an unconfirmed expiry separate", async () => {
+    const fetchMock = mockConnectorFetch(undefined, () =>
+      Response.json({
+        success: true,
+        links: [
+          { qurl_id: "q_123456789ab", qurl_link: "https://l", expires_at: "2099-01-01T00:00:00Z" },
+          { qurl_id: "q_0000000000a", qurl_link: "https://m" },
+          { qurl_link: "https://n" },
+          { qurl_id: "not-a-qurl", qurl_link: "https://o" },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      { expires_in: "2h", session_duration: "15m" },
+    );
+    const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as Record<string, unknown>;
+    expect(sent).toMatchObject({ n: 1, one_time_use: true, session_duration: "15m" });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("minted 4 links"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
+    expect(result.expires_at).toBe("2099-01-01T00:00:00.000Z");
+    expect(result.requested_expires_at).toBe(sent.expires_at);
+    // The extra live link reaches the caller, not only stderr.
+    expect(result.unexpected_extra_link_count).toBe(3);
+    expect(result.expires_at_differs_from_request).toBe(true);
+    // Any non-empty ID is reported, so the IDs never undercount the count.
+    expect(result.unexpected_extra_qurl_ids).toEqual(["q_0000000000a", "not-a-qurl"]);
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
+    expect(headers).toMatchObject({
+      "Content-Type": "application/json",
+      Accept: "application/json",
     });
+  });
+
+  it("keeps a 2xx failure reason for operators and bounds an oversized mint response", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    for (const response of [
+      () => Response.json({ success: false, error: "quota exceeded" }),
+      () => Response.json({ success: false, error: "tunnel unavailable" }, { status: 502 }),
+      () =>
+        new Response("x".repeat(64 * 1024 + 1), {
+          headers: { "content-type": "application/json" },
+        }),
+    ]) {
+      vi.stubGlobal("fetch", mockConnectorFetch(undefined, response));
+      await expect(
+        mintUploadedFile(
+          { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+          publicKey,
+          { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+          {},
+        ),
+      ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    }
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("quota exceeded"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("tunnel unavailable"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("64 KiB"));
+  });
+
+  it("normalizes a loosely formatted connector expiry to ISO 8601", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_id: "q_123456789ab", qurl_link: "https://l", expires_at: "Dec 31 2026 UTC" },
+          ],
+        }),
+      ),
+    );
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.expires_at).toBe("2026-12-31T00:00:00.000Z");
+  });
+
+  it.each([
+    { cause: "ECONNREFUSED", hedged: false },
+    { cause: "ECONNRESET", hedged: true },
+  ])(
+    "hedges about an existing link only when a $cause request may have arrived",
+    async ({ cause, hedged }) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          throw new TypeError("fetch failed", {
+            cause: Object.assign(new Error(cause), { code: cause }),
+          });
+        }),
+      );
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const error = await mintUploadedFile(
+        { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+        publicKey,
+        { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+        {},
+      ).catch((caught: Error) => caught);
+      expect(String((error as Error).message).includes("may already have been minted")).toBe(
+        hedged,
+      );
+    },
+  );
+
+  it("returns a deliverable link with an unexpected qurl_id, sanitized, and rejects an unparsable session_duration", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_id: "bad\nid", qurl_link: "https://l" }] }),
+      ),
+    );
+    const config = { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" };
+    const file = { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 };
+    // The qurl_id is informational: a working link is not thrown away over it.
+    const odd = await mintUploadedFile(config, publicKey, file, {});
+    expect(odd).toMatchObject({ qurl_id: "bad id", qurl_link: "https://l" });
+
+    // A link with control characters or an oversized link is not deliverable.
+    for (const [qurl_link, reason] of [
+      ["https://exa\nmple.com/x", "a link with control characters"],
+      [`https://l/${"a".repeat(8192)}`, "an oversized link"],
+    ]) {
+      vi.stubGlobal(
+        "fetch",
+        mockConnectorFetch(undefined, () =>
+          Response.json({ success: true, links: [{ qurl_link }] }),
+        ),
+      );
+      await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+        code: "upload_mint_failed",
+      });
+      // The operator log names the actual reason, not a generic scheme error.
+      expect(log).toHaveBeenCalledWith(expect.stringContaining(reason));
+    }
+
+    // An empty link list reads as "none" in the operator log, not "(links: )".
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () => Response.json({ success: true, links: [] })),
+    );
+    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+      code: "upload_mint_failed",
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("(links: none)"));
+
+    // A link whose expiry is already past by this clock is returned, flagged,
+    // not discarded: if this host runs ahead, the link still works, and the
+    // file could never be re-linked.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [{ qurl_link: "https://l", expires_at: "2000-01-01T00:00:00Z" }],
+        }),
+      ),
+    );
+    const pastExpiry = await mintUploadedFile(config, publicKey, file, {});
+    expect(pastExpiry).toMatchObject({ qurl_link: "https://l", expires_at_already_past: true });
+
+    // An unexpired deliverable link is preferred over an earlier past-expiry one.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_link: "https://old", expires_at: "2000-01-01T00:00:00Z" },
+            { qurl_link: "https://new", expires_at: "2099-01-01T00:00:00Z" },
+          ],
+        }),
+      ),
+    );
+    const preferred = await mintUploadedFile(config, publicKey, file, {});
+    expect(preferred.qurl_link).toBe("https://new");
+    expect(preferred).not.toHaveProperty("expires_at_already_past");
+
+    // A non-HTTP scheme names itself in the operator log.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_link: "javascript:alert(1)" }] }),
+      ),
+    );
+    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
+      code: "upload_mint_failed",
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("a non-HTTP(S) link"));
+
+    // Overflowing expiry fails before any request, not via RangeError after it.
+    const guarded = mockConnectorFetch();
+    vi.stubGlobal("fetch", guarded);
+    await expect(
+      mintUploadedFile(config, publicKey, file, { expires_in: "999999999d" }),
+    ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    expect(guarded).not.toHaveBeenCalled();
+
+    // A usable link after an unusable first one is returned, not discarded.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [
+            { qurl_id: "q_0000000000z", qurl_link: "not a url" },
+            { qurl_id: "q_0000000000a", qurl_link: "https://real" },
+          ],
+        }),
+      ),
+    );
+    const recovered = await mintUploadedFile(config, publicKey, file, {});
+    expect(recovered).toMatchObject({
+      qurl_id: "q_0000000000a",
+      qurl_link: "https://real",
+      unexpected_extra_link_count: 1,
+    });
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("q_0000000000a, q_0000000000z"));
+
+    // A deliverable link without any qurl_id is still returned, not discarded.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_link: "https://no-id" }] }),
+      ),
+    );
+    const idless = await mintUploadedFile(config, publicKey, file, {});
+    expect(idless.qurl_link).toBe("https://no-id");
+    expect(idless).not.toHaveProperty("qurl_id");
+
+    // When no entry is deliverable, the caller still learns which live links exist.
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [{ qurl_id: "q_0000000000b", qurl_link: "http://example.test/x" }],
+        }),
+      ),
+    );
+    const refused = await mintUploadedFile(config, publicKey, file, {}).catch(
+      (error: Error) => error,
+    );
+    expect(refused).toMatchObject({ code: "upload_mint_failed" });
+    expect((refused as Error).message).toContain("q_0000000000b; tell the user");
+
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    for (const session_duration of ["1 hour", "25h", "500ms"]) {
+      await expect(
+        mintUploadedFile(config, publicKey, file, { session_duration }),
+      ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("bounds the returned extra link IDs while counting all of them", async () => {
+    const links = Array.from({ length: 130 }, (_, index) => ({
+      qurl_id: `q_${index.toString(16).padStart(11, "0")}`,
+      qurl_link: "https://l",
+    }));
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () => Response.json({ success: true, links })),
+    );
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.unexpected_extra_link_count).toBe(129);
+    // The caller gets 10 IDs; the operator log names up to 100 for cleanup.
+    expect(result.unexpected_extra_qurl_ids).toHaveLength(10);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("q_00000000063 (+30 more)"));
+  });
+
+  it("reports live links named in a failed mint response", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    for (const response of [
+      () =>
+        Response.json(
+          { success: false, error: "downstream failed", links: [{ qurl_id: "q_000000000c1" }] },
+          { status: 502 },
+        ),
+      () => Response.json({ success: false, links: [{ qurl_id: "q_000000000c2" }] }),
+    ]) {
+      vi.stubGlobal("fetch", mockConnectorFetch(undefined, response));
+      const error = await mintUploadedFile(
+        { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+        publicKey,
+        { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+        {},
+      ).catch((caught: Error) => caught);
+      expect((error as Error).message).toMatch(/q_000000000c[12]; tell the user/);
+    }
+  });
+
+  it("forwards the request-scoped bearer, not the server key, to the connector mint", async () => {
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    await runWithRequestAuthContext(
+      { qurlApiKey: "lv_live_caller", qurlConnectorUrl: "https://c.test" },
+      () =>
+        mintUploadedFile(
+          getConnectorConfig(),
+          publicKey,
+          { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+          {},
+        ),
+    );
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string> | undefined;
+    expect(headers?.Authorization).toBe("Bearer lv_live_caller");
+  });
+
+  it("validates the session only on a deliverable mint, and names the connector status on failure", async () => {
+    const file = { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 };
+    const mint = (response: () => Response) => {
+      vi.stubGlobal("fetch", mockConnectorFetch(undefined, response));
+      const markCredentialValidated = vi.fn();
+      const run = runWithRequestAuthContext(
+        {
+          qurlApiKey: "lv_live_caller",
+          qurlConnectorUrl: "https://c.test",
+          markCredentialValidated,
+        },
+        () => mintUploadedFile(getConnectorConfig(), publicKey, file, {}),
+      );
+      return { run, markCredentialValidated };
+    };
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const ok = mint(() => Response.json({ success: true, links: [{ qurl_link: "https://l" }] }));
+    await ok.run;
+    expect(ok.markCredentialValidated).toHaveBeenCalledOnce();
+
+    const missing = mint(() => Response.json({ error: "not found" }, { status: 404 }));
+    const error = (await missing.run.catch((caught: unknown) => caught)) as Error;
+    expect(error.message).toContain("link creation failed (connector responded HTTP 404)");
+    expect(missing.markCredentialValidated).not.toHaveBeenCalled();
+  });
+
+  it("returns the uploaded resource ID to the caller when mint fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json(
+          { success: false, error: "private upstream error", links: [] },
+          { status: 503 },
+        ),
+      ),
+    );
     const handler = withMissingApiKeyHandler(async () => {
       const data = await mintUploadedFile(
-        api,
+        { apiKey: "lv_live_test", uploadUrl: "https://connector.test/api/upload" },
         publicKey,
         { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
         {},
@@ -182,7 +871,7 @@ describe("resource SDK boundary", () => {
     const result = await handler(undefined);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(publicKey);
-    expect(result.content[0].text).toContain("mint_link");
+    expect(result.content[0].text).toContain("do not retry automatically");
     expect(result.content[0].text).not.toContain("private upstream error");
   });
 });
