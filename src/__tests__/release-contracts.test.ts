@@ -229,7 +229,7 @@ describe("resource SDK boundary", () => {
     const result = await handler(undefined);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(publicKey);
-    expect(result.content[0].text).toContain("Retry the upload");
+    expect(result.content[0].text).toContain("retrying uploads another copy");
     expect(result.content[0].text).not.toContain("private upstream error");
   });
 });

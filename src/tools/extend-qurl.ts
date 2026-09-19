@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { formatErrorForLog } from "../logging.js";
 import {
+  isQurlDisplayId,
   qurlDisplayIdSchema,
   resourceIdSchema,
   toStructuredContent,
@@ -28,12 +29,17 @@ async function linkToExtend(
   client: IQURLClient,
   input: z.infer<typeof extendQurlSchema>,
 ): Promise<{ resourceId: string; qurlId: string } | { error: string }> {
-  if (input.qurl_id && !input.resource_id.startsWith("q_")) {
+  const resourceIsLink = isQurlDisplayId(input.resource_id);
+  if (resourceIsLink && input.qurl_id && input.qurl_id !== input.resource_id) {
+    return {
+      error: `resource_id names link ${input.resource_id} but qurl_id names ${input.qurl_id}; pass one link.`,
+    };
+  }
+  if (input.qurl_id && !resourceIsLink) {
     return { resourceId: input.resource_id, qurlId: input.qurl_id };
   }
   const { data: resource } = await client.getQURL(input.resource_id);
-  const named =
-    input.qurl_id ?? (input.resource_id.startsWith("q_") ? input.resource_id : undefined);
+  const named = input.qurl_id ?? (resourceIsLink ? input.resource_id : undefined);
   if (named) return { resourceId: resource.resource_id, qurlId: named };
   if (!resource.qurls) {
     return { error: "The resource read did not include its links; pass qurl_id to choose one." };
@@ -71,6 +77,7 @@ export function extendQurlTool(
       "Use `update_qurl_token` instead to set an absolute `expires_at` or change the link's label, policy, or sessions. " +
       "Use `revoke_qurl_token` or `delete_qurl` when you want to cut off access. " +
       "**Not idempotent:** calling twice with the same `extend_by` extends the link twice; use `update_qurl_token` with `expires_at` when retries must not double-push. " +
+      "Requires `qurl:write` and `qurl:read` (it reads the resource to pick the link and to return it). " +
       "Returns the resource (same shape as `get_qurl`); the extended link's new expiry is in `qurls[].expires_at`, not the resource's own `expires_at`.",
     inputSchema: extendQurlSchema,
     outputSchema: extendQurlOutputSchema,

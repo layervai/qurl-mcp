@@ -195,6 +195,16 @@ describe("uploadFileDataQurlTool", () => {
         description: "a success without a link",
         response: () => Response.json({ success: true, links: [] }),
       },
+      {
+        description: "a 2xx that reports failure",
+        response: () =>
+          Response.json({ success: false, links: [{ qurl_id: "q_123456789ab", qurl_link: "x" }] }),
+      },
+      {
+        description: "a 2xx non-JSON body",
+        response: () =>
+          new Response("<html>gateway</html>", { headers: { "content-type": "text/html" } }),
+      },
     ])(
       "reports the orphaned upload when the connector mint returns $description",
       async ({ response }) => {

@@ -10,13 +10,12 @@ import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters, isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN } from "./_shared.js";
-import { parseDurationMs } from "./upload-mint-options.js";
+import { parseDurationMs, type UploadMintOptionsInput } from "./upload-mint-options.js";
 
-export type UploadMintOptions = {
-  expires_in?: string;
-  one_time_use?: boolean;
-  session_duration?: string;
-};
+export type UploadMintOptions = Pick<
+  UploadMintOptionsInput,
+  "expires_in" | "one_time_use" | "session_duration"
+>;
 
 export const supportedMimeTypes = [
   "application/pdf",
@@ -73,8 +72,10 @@ export function getConnectorConfig(allowServerApiKeyFallback = false): Connector
   }
 
   // Validate operator configuration during preflight, before callers decode
-  // or read a potentially large upload payload.
+  // or read a potentially large upload payload, including the mint route the
+  // stored file will need.
   const uploadUrl = getConnectorUploadUrl(connectorURL);
+  connectorMintUrl(uploadUrl, "preflight");
 
   return { apiKey, uploadUrl };
 }
@@ -386,20 +387,21 @@ export async function mintUploadedFile(
   input: UploadMintOptions,
 ) {
   let link: ConnectorMintedLink | undefined;
+  let requestedExpiresAt: string | undefined;
   try {
     const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
     if (input.expires_in && expiresInMs === undefined) {
       // Omitting expires_at would silently give the link the connector default.
       throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${input.expires_in}`);
     }
+    requestedExpiresAt =
+      expiresInMs !== undefined ? new Date(Date.now() + expiresInMs).toISOString() : undefined;
     const body = {
       n: 1,
       one_time_use: input.one_time_use ?? true,
       // The connector's mint contract takes an absolute expires_at, so the
       // relative expires_in is anchored to this host's clock.
-      ...(expiresInMs !== undefined
-        ? { expires_at: new Date(Date.now() + expiresInMs).toISOString() }
-        : {}),
+      ...(requestedExpiresAt ? { expires_at: requestedExpiresAt } : {}),
       ...(input.session_duration ? { session_duration: input.session_duration } : {}),
     };
     const response = await fetchConnector(connectorMintUrl(connectorConfig.uploadUrl, resourceId), {
@@ -412,8 +414,20 @@ export async function mintUploadedFile(
       body: JSON.stringify(body),
     });
     const requestId = response.headers.get("x-request-id") ?? undefined;
-    const parsed = parseJsonBody(await readConnectorResponseBody(response));
+    const raw = await readConnectorResponseBody(response);
+    const contentType = response.headers.get("content-type")?.toLowerCase();
+    if (response.ok && !contentType?.includes("json")) {
+      throw new QURLAPIError(
+        0,
+        "unexpected_response",
+        "Connector mint returned a non-JSON response.",
+      );
+    }
+    const parsed = parseJsonBody(raw);
     if (!response.ok) throwConnectorError(response, parsed, requestId);
+    if ((parsed as { success?: unknown } | undefined)?.success === false) {
+      throw new QURLAPIError(0, "unexpected_response", "Connector mint reported failure.");
+    }
     link = firstMintedLink(parsed);
     if (typeof link?.qurl_id !== "string" || typeof link.qurl_link !== "string") {
       throw new QURLAPIError(0, "unexpected_response", "Connector mint returned no link.");
@@ -422,13 +436,15 @@ export async function mintUploadedFile(
     // The connector API exposes upload but no delete endpoint. Keep the mint
     // error primary and log the orphan resource for operator cleanup.
     console.error(
-      `Connector resource ${resourceId} remains after link minting failed (${formatErrorForLog(error)})`,
+      `Connector resource ${resourceId} remains after link minting failed ` +
+        `(requested expires_at=${requestedExpiresAt ?? "connector default"}; ${formatErrorForLog(error)})`,
     );
     throw new QURLAPIError(
       error instanceof QURLAPIError ? error.statusCode : 0,
       "upload_mint_failed",
       `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
-        "Retry the upload; the stored file cannot be re-linked from this tool. " +
+        "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
+        "retrying uploads another copy. " +
         "If the request failed after reaching the connector, a link may already have been minted; check the connector before sharing a replacement.",
     );
   }

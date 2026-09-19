@@ -80,3 +80,5 @@ export const uploadMintOptionsShape = {
   max_sessions: unsupportedForUploads("max_sessions"),
   access_policy: unsupportedForUploads("access_policy"),
 };
+
+export type UploadMintOptionsInput = z.infer<z.ZodObject<typeof uploadMintOptionsShape>>;

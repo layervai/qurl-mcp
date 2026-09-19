@@ -167,7 +167,8 @@ export function mockConnectorFetch(
   return vi.fn(async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
     const url = String(input);
     if (url.includes("/api/mint_link/")) return mintResponse();
-    return Response.json(uploadBody);
+    if (url.endsWith("/api/upload")) return Response.json(uploadBody);
+    throw new Error(`Unexpected connector request: ${url}`);
   });
 }
 

@@ -75,9 +75,15 @@ whose filesystem access is limited to intended shareable content. HTTP mode
 never registers this host-file tool.
 The byte/text tools are also available in stdio so local clients can share
 in-chat attachments without first materializing them at a known host path.
-Connector upload and qURL minting are separate operations. If minting fails
-after upload, the connector currently has no delete endpoint; the server logs
-the orphaned `resource_id` for operator cleanup and returns the mint failure.
+Connector upload and link minting are separate operations. The link comes from
+the connector's `POST /api/mint_link/:resource_id` (in tunnel mode, a
+per-recipient watermarked view), not from qURL `mint_link`, so uploaded files
+cannot be re-linked with `mint_link`; run the upload tool again. Upload links
+support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
+clock), `one_time_use`, and `session_duration` (up to 24h); `access_policy` and
+`max_sessions` are rejected before the upload. If minting fails after upload,
+the connector currently has no delete endpoint; the server logs the orphaned
+`resource_id` for operator cleanup and returns the mint failure.
 HTTP upload attempts remain bounded by the per-IP and per-credential MCP rate
 limits; stdio operators should separately constrain autonomous retry loops.
 Upload validation binds the declared media type to the filename plus format

@@ -147,6 +147,25 @@ describe("extendQurlTool", () => {
       expect(updateQurlToken).not.toHaveBeenCalled();
     });
 
+    it("rejects a q_ resource_id and a different qurl_id instead of guessing", async () => {
+      const updateQurlToken = vi.fn();
+      const tool = extendQurlTool(
+        makeMockClient({ getQURL: withLinks(activeLink), updateQurlToken }),
+      );
+
+      const result = await tool.handler({
+        resource_id: "q_ccccccccccc",
+        qurl_id: "q_ddddddddddd",
+        extend_by: "1h",
+      });
+
+      expect(result).toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining("pass one link") }],
+      });
+      expect(updateQurlToken).not.toHaveBeenCalled();
+    });
+
     it("caps the link list in the ambiguity message", async () => {
       const links = Array.from({ length: 12 }, (_, index) =>
         sampleAccessToken({

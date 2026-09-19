@@ -189,7 +189,9 @@ export const mintLinkOutputSchema = z.looseObject({
 export const uploadFileQurlOutputSchema = z.looseObject({
   resource_id: z
     .string()
-    .describe("Stable resource identifier (public key or legacy r_ ID) returned by the connector"),
+    .describe(
+      "Stable resource identifier (public key or legacy r_ ID) returned by the connector. Do not pass it to mint_link for another link; run the upload tool again.",
+    ),
   qurl_id: z.string().describe("Display-friendly qURL ID (q_ prefix) for the minted token"),
   qurl_link: z
     .string()
