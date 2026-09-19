@@ -154,16 +154,16 @@ describe("uploadTextQurlTool", () => {
       expect(parsed).toEqual({
         resource_id: "r_upload12345",
         ...connectorMintedLink,
-        expires_at_differs_from_request: true,
-        expires_at_later_than_requested: true,
-        requested_expires_at: expect.any(String),
+        // The connector echoes the requested expiry: the normal, flag-free shape.
+        expires_at: mint.body.expires_at,
+        requested_expires_at: mint.body.expires_at,
         content_type: "application/pdf",
         file_name: "hello.pdf",
         size_bytes: fixtureSize,
       });
       expect(cleanupSpy).toHaveBeenCalledOnce();
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
-      expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
+      expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     });
 
     it("defaults file_name to content.pdf", async () => {
@@ -278,7 +278,7 @@ describe("uploadTextQurlTool", () => {
       ).rejects.toMatchObject({
         statusCode: 400,
         code: "connector_upload_failed",
-        message: "upload rejected",
+        message: 'Connector reported (HTTP 400): "upload rejected"',
       });
       expect(cleanupSpy).toHaveBeenCalledOnce();
     });

@@ -159,14 +159,23 @@ export const connectorMintedLink = {
  * A fetch double for the file connector: `/api/upload` answers with the
  * upload resource, `/api/mint_link/:id` with one minted link.
  */
+// By default the mint echoes the requested expires_at, as the real connector
+// does, so a plain happy path carries no drift flags; tests opt into drift.
 export function mockConnectorFetch(
   uploadBody: unknown = { resource_id: "r_upload12345" },
-  mintResponse: () => Response = () =>
-    Response.json({ success: true, links: [connectorMintedLink] }),
+  mintResponse: (body: { expires_at?: string }) => Response = (body) =>
+    Response.json({
+      success: true,
+      links: [
+        { ...connectorMintedLink, expires_at: body.expires_at ?? connectorMintedLink.expires_at },
+      ],
+    }),
 ) {
-  return vi.fn(async (input: Parameters<typeof fetch>[0], _init?: Parameters<typeof fetch>[1]) => {
+  return vi.fn(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = String(input);
-    if (url.includes("/api/mint_link/")) return mintResponse();
+    if (url.includes("/api/mint_link/")) {
+      return mintResponse(init?.body ? JSON.parse(String(init.body)) : {});
+    }
     if (url.endsWith("/api/upload")) return Response.json(uploadBody);
     throw new Error(`Unexpected connector request: ${url}`);
   });

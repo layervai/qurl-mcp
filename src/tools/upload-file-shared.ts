@@ -263,8 +263,13 @@ function throwConnectorError(
   const safeDetail = detail ? sanitizeConnectorDetail(detail) : undefined;
   throw new QURLAPIError(
     response.status,
-    code,
-    safeDetail || `Connector request failed with HTTP ${response.status}`,
+    // Namespaced so a connector cannot pose as a local condition (e.g. its own
+    // "missing_api_key" being rendered as this server's missing-key guidance).
+    code.startsWith("connector_") ? code : `connector_${code}`,
+    // Quoted and attributed: this text is third-party data in the caller's context.
+    safeDetail
+      ? `Connector reported (HTTP ${response.status}): "${safeDetail}"`
+      : `Connector request failed with HTTP ${response.status}`,
     type,
     instance,
     requestId,
@@ -466,12 +471,12 @@ function reportedLinkIds(links: unknown): string[] {
 // A response entry that may be a live link: link-shaped and not already expired.
 function isPossiblyLiveLink(entry: unknown): boolean {
   const link = entry as { qurl_link?: unknown; qurl_id?: unknown; expires_at?: unknown } | null;
+  const parsable = (value: unknown) =>
+    typeof value === "string" && value.length <= MAX_LINK_LENGTH && URL.canParse(value);
   const expired = typeof link?.expires_at === "string" && Date.parse(link.expires_at) <= Date.now();
   // Real evidence of a minted token: a non-empty ID, or a link that parses.
   const hasId = typeof link?.qurl_id === "string" && link.qurl_id.length > 0;
-  return (
-    !expired && (hasId || (typeof link?.qurl_link === "string" && URL.canParse(link.qurl_link)))
-  );
+  return !expired && (hasId || parsable(link?.qurl_link));
 }
 
 function mintedLinkFrom(

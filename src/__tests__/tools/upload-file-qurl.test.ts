@@ -143,15 +143,15 @@ describe("uploadFileQurlTool", () => {
       expect(parsed).toEqual({
         resource_id: "r_upload12345",
         ...connectorMintedLink,
-        expires_at_differs_from_request: true,
-        expires_at_later_than_requested: true,
-        requested_expires_at: expect.any(String),
+        // The connector echoes the requested expiry: the normal, flag-free shape.
+        expires_at: mint.body.expires_at,
+        requested_expires_at: mint.body.expires_at,
         content_type: "application/pdf",
         file_name: "sample.pdf",
         size_bytes: expect.any(Number),
       });
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
-      expect(log).toHaveBeenCalledWith(expect.stringContaining("not the requested"));
+      expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     });
 
     it("emails the generated local-file link when requested", async () => {
@@ -258,7 +258,21 @@ describe("uploadFileQurlTool", () => {
       await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject({
         statusCode: 400,
         code: "connector_upload_failed",
-        message: `upload rejected${"x".repeat(1_009)}`,
+        message: `Connector reported (HTTP 400): "upload rejected${"x".repeat(1_009)}"`,
+      });
+    });
+
+    it("namespaces a connector's error code so it cannot pose as a local condition", async () => {
+      globalThis.fetch = vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ error: { code: "missing_api_key", detail: "nope" } }, { status: 401 }),
+        );
+      const tool = uploadFileQurlTool(makeMockClient());
+
+      await expect(tool.handler({ file_path: fixturePath })).rejects.toMatchObject({
+        code: "connector_missing_api_key",
+        message: 'Connector reported (HTTP 401): "nope"',
       });
     });
 
