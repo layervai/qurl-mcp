@@ -414,10 +414,18 @@ function describeLinks(links: unknown): string {
     .join(", ");
 }
 
+function validQurlIds(links: unknown): string[] {
+  return (Array.isArray(links) ? links : [])
+    .map((entry: unknown) => (entry as { qurl_id?: unknown } | null)?.qurl_id)
+    .filter((id): id is string => typeof id === "string" && isQurlDisplayId(id));
+}
+
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
-): { link: MintedLink; extraCount: number; extraQurlIds: string[] } | { problem: string } {
+):
+  | { link: MintedLink; extraCount: number; extraQurlIds: string[] }
+  | { problem: string; liveQurlIds: string[] } {
   const links = (parsed as { links?: unknown } | undefined)?.links;
   const first: unknown = Array.isArray(links) ? links[0] : undefined;
   const link = (typeof first === "object" && first !== null ? first : {}) as Record<
@@ -426,6 +434,7 @@ function mintedLinkFrom(
   >;
   const problem = (reason: string) => ({
     problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
+    liveQurlIds: validQurlIds(links).slice(0, 10),
   });
   if (typeof link.qurl_id !== "string" || typeof link.qurl_link !== "string") {
     return problem("no usable first link");
@@ -435,9 +444,7 @@ function mintedLinkFrom(
   return {
     link: { qurl_id: link.qurl_id, qurl_link: link.qurl_link, expires_at: link.expires_at },
     extraCount: Array.isArray(links) ? links.length - 1 : 0,
-    extraQurlIds: (Array.isArray(links) ? links.slice(1) : [])
-      .map((extra: unknown) => (extra as { qurl_id?: unknown } | null)?.qurl_id)
-      .filter((id): id is string => typeof id === "string" && isQurlDisplayId(id)),
+    extraQurlIds: validQurlIds(Array.isArray(links) ? links.slice(1) : []).slice(0, 10),
   };
 }
 
@@ -458,6 +465,7 @@ export async function mintUploadedFile(
   let requestSent = false;
   let minted: MintedLink;
   let extraCount = 0;
+  let liveQurlIds: string[] = [];
   let extraQurlIds: string[] = [];
   try {
     const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
@@ -513,7 +521,10 @@ export async function mintUploadedFile(
       throw unexpected(`Connector mint reported failure${reason}.`);
     }
     const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
-    if ("problem" in result) throw unexpected(result.problem);
+    if ("problem" in result) {
+      liveQurlIds = result.liveQurlIds;
+      throw unexpected(result.problem);
+    }
     if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(
@@ -538,9 +549,11 @@ export async function mintUploadedFile(
       `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
         "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
         "retrying uploads another copy." +
-        (requestSent
-          ? " If the request failed after reaching the connector, a link may already have been minted; check the connector before sharing a replacement."
-          : ""),
+        (liveQurlIds.length > 0
+          ? ` The connector did mint live link(s) this server refused to return: ${liveQurlIds.join(", ")}; tell the user.`
+          : requestSent
+            ? " If the request failed after reaching the connector, a link may already have been minted; check the connector before sharing a replacement."
+            : ""),
     );
   }
 
@@ -549,11 +562,12 @@ export async function mintUploadedFile(
     typeof minted.expires_at === "string" && !Number.isNaN(Date.parse(minted.expires_at))
       ? new Date(minted.expires_at).toISOString()
       : undefined;
-  if (
+  const driftsFromRequest = Boolean(
     requestedExpiresAt &&
     confirmedExpiresAt &&
-    Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > 60_000
-  ) {
+    Math.abs(Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)) > 60_000,
+  );
+  if (driftsFromRequest) {
     // A clamp or host clock skew changed the link's lifetime; make it visible.
     console.error(
       `Connector link ${minted.qurl_id} expires at ${confirmedExpiresAt}, not the requested ${requestedExpiresAt}`,
@@ -570,6 +584,7 @@ export async function mintUploadedFile(
     ...(requestedExpiresAt && !confirmedExpiresAt
       ? { requested_expires_at: requestedExpiresAt }
       : {}),
+    ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
     ...(extraCount > 0
       ? { unexpected_extra_link_count: extraCount, unexpected_extra_qurl_ids: extraQurlIds }
       : {}),

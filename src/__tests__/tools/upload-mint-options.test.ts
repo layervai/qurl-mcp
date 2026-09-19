@@ -15,6 +15,13 @@ describe("uploadMintOptionsShape", () => {
     expect(uploadMintOptionsSchema.parse(options)).toEqual(options);
   });
 
+  it("tolerates null for the rejected options, as some hosts send it", () => {
+    expect(
+      z.object(uploadMintOptionsShape).safeParse({ access_policy: null, max_sessions: null })
+        .success,
+    ).toBe(true);
+  });
+
   it("accepts an empty option set and rejects unknown fields", () => {
     expect(uploadMintOptionsSchema.parse({})).toEqual({});
     expect(uploadMintOptionsSchema.safeParse({ typo: true }).success).toBe(false);

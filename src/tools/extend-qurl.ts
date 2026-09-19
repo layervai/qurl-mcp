@@ -76,11 +76,18 @@ async function linkToExtend(
   if (!resource.qurls) {
     return { error: "The resource read did not include its links; pass qurl_id to choose one." };
   }
-  const active = resource.qurls.filter((link) => link.status === "active");
+  // A missing or unrecognized status is a candidate, like the named-link path:
+  // token status is optional in the API and can drift. Only a known inactive
+  // status excludes a link.
+  const INACTIVE = new Set(["consumed", "expired", "revoked"]);
+  const active = resource.qurls.filter((link) => !INACTIVE.has(link.status));
   if (active.length === 1) return { resourceId: resource.resource_id, qurlId: active[0].qurl_id };
   if (active.length === 0) {
     return {
-      error: "This resource has no active link to extend. Use mint_link to issue a new one.",
+      error:
+        resource.qurls.length === 0
+          ? "This resource has no link to extend. Use mint_link to issue one."
+          : "No link on this resource can be extended (all are consumed, expired, or revoked). Use mint_link to issue a new one.",
     };
   }
   const shown = active.slice(0, 10).map((link) => link.qurl_id);

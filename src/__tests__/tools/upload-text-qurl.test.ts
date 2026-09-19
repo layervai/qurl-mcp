@@ -154,6 +154,7 @@ describe("uploadTextQurlTool", () => {
       expect(parsed).toEqual({
         resource_id: "r_upload12345",
         ...connectorMintedLink,
+        expires_at_differs_from_request: true,
         content_type: "application/pdf",
         file_name: "hello.pdf",
         size_bytes: fixtureSize,

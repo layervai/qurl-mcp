@@ -319,6 +319,7 @@ describe("resource SDK boundary", () => {
     expect(result).not.toHaveProperty("requested_expires_at");
     // The extra live link reaches the caller, not only stderr.
     expect(result.unexpected_extra_link_count).toBe(3);
+    expect(result.expires_at_differs_from_request).toBe(true);
     expect(result.unexpected_extra_qurl_ids).toEqual(["q_0000000000a"]);
     expect(sent).toBeDefined();
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
@@ -429,10 +430,13 @@ describe("resource SDK boundary", () => {
         }),
       ),
     );
-    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
-      code: "upload_mint_failed",
-    });
+    const refused = await mintUploadedFile(config, publicKey, file, {}).catch(
+      (error: Error) => error,
+    );
+    expect(refused).toMatchObject({ code: "upload_mint_failed" });
     expect(log).toHaveBeenCalledWith(expect.stringContaining("(no qurl_id), q_0000000000a"));
+    // The caller learns the live link exists, not just the operator.
+    expect((refused as Error).message).toContain("q_0000000000a; tell the user");
 
     const fetchMock = mockConnectorFetch();
     vi.stubGlobal("fetch", fetchMock);
@@ -440,6 +444,26 @@ describe("resource SDK boundary", () => {
       mintUploadedFile(config, publicKey, file, { session_duration: "1 hour" }),
     ).rejects.toMatchObject({ code: "upload_mint_failed" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("bounds the returned extra link IDs while counting all of them", async () => {
+    const links = Array.from({ length: 30 }, (_, index) => ({
+      qurl_id: `q_${index.toString(16).padStart(11, "0")}`,
+      qurl_link: "https://l",
+    }));
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () => Response.json({ success: true, links })),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.unexpected_extra_link_count).toBe(29);
+    expect(result.unexpected_extra_qurl_ids).toHaveLength(10);
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {

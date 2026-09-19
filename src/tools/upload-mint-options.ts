@@ -15,7 +15,8 @@ import {
 const unsupportedForUploads = (field: string) =>
   z
     .unknown()
-    .refine((value) => value === undefined, {
+    // null is tolerated: some hosts serialize unused optional fields that way.
+    .refine((value) => value === undefined || value === null, {
       message: `${field} is not supported for uploaded files`,
     })
     .optional()

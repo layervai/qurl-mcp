@@ -117,7 +117,7 @@ describe("extendQurlTool", () => {
     });
 
     it.each([
-      { description: "no active link", links: [], message: "no active link" },
+      { description: "no links", links: [], message: "no link to extend" },
       {
         description: "several active links",
         links: [activeLink, sampleAccessToken({ qurl_id: "q_ddddddddddd", status: "active" })],
@@ -265,6 +265,32 @@ describe("extendQurlTool", () => {
           extendQurlSchema.safeParse({ resource_id: validResourceId, extend_by }).success,
         ).toBe(false);
       }
+    });
+
+    it("treats a link without a status as a candidate", async () => {
+      const unlabeled = { ...sampleAccessToken({ qurl_id: "q_aaaaaaaaaaa" }), status: undefined };
+      const updateQurlToken = vi.fn().mockResolvedValue({ data: activeLink });
+      const tool = extendQurlTool(
+        makeMockClient({ getQURL: withLinks(unlabeled as never), updateQurlToken }),
+      );
+
+      await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(updateQurlToken).toHaveBeenCalledWith(extendResourceId, "q_aaaaaaaaaaa", {
+        extend_by: "1h",
+      });
+    });
+
+    it("only suggests minting when every listed link is known to be inactive", async () => {
+      const tool = extendQurlTool(
+        makeMockClient({
+          getQURL: withLinks(sampleAccessToken({ qurl_id: "q_aaaaaaaaaaa", status: "revoked" })),
+        }),
+      );
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(JSON.stringify(result)).toContain("consumed, expired, or revoked");
     });
 
     it("caps the link list in the ambiguity message", async () => {

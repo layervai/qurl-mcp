@@ -207,6 +207,12 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .describe(
       "The expiry this server requested, present only when the connector did not confirm one; not guaranteed",
     ),
+  expires_at_differs_from_request: z
+    .boolean()
+    .optional()
+    .describe(
+      "Present when the connector's confirmed expiry differs from the requested expires_in by more than a minute (clamped or clock skew); tell the user the actual expires_at",
+    ),
   unexpected_extra_link_count: z
     .number()
     .optional()
@@ -216,7 +222,9 @@ export const uploadFileQurlOutputSchema = z.looseObject({
   unexpected_extra_qurl_ids: z
     .array(z.string())
     .optional()
-    .describe("Valid q_ IDs of those extra links; may be fewer than unexpected_extra_link_count"),
+    .describe(
+      "Up to 10 valid q_ IDs of those extra links; may be fewer than unexpected_extra_link_count",
+    ),
   file_name: z.string().describe("Filename registered with the connector"),
   content_type: z.string().describe("MIME type used for the uploaded file"),
   size_bytes: z.number().describe("Uploaded file size in bytes"),
