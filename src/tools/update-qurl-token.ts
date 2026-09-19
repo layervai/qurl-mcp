@@ -24,7 +24,7 @@ export const updateQurlTokenBaseSchema = z.object({
   extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d")
     .optional()
     .describe(
-      'Duration to extend this token by (e.g., "24h", "7d"). Mutually exclusive with expires_at.',
+      'Duration to extend this token by (e.g., "24h", "7d"; 1m to 30d per call). Mutually exclusive with expires_at.',
     ),
   expires_at: z
     .string()
@@ -45,7 +45,7 @@ export const updateQurlTokenBaseSchema = z.object({
     .union([z.literal(""), durationSchema(MIN_SESSION_MS, MAX_SESSION_MS, "1s to 24h")])
     .optional()
     .describe(
-      'How long access lasts after clicking (e.g., "1h"). Empty string applies the parent resource cap when one is set.',
+      'How long access lasts after clicking (e.g., "1h"; 1s to 24h). Empty string applies the parent resource cap when one is set.',
     ),
 });
 

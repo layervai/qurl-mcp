@@ -405,13 +405,14 @@ type MintedLink = { qurl_id: string; qurl_link: string; expires_at?: unknown };
 // so operator logs name all of them (bounded and flattened; the IDs are untrusted).
 function describeLinks(links: unknown): string {
   if (!Array.isArray(links)) return "none";
-  return links
+  const shown = links
     .slice(0, 10)
     .map((entry: unknown) => {
       const id = (entry as { qurl_id?: unknown } | null)?.qurl_id;
       return typeof id === "string" ? flattenControlCharacters(id).slice(0, 64) : "(no qurl_id)";
     })
     .join(", ");
+  return links.length > 10 ? `${shown} (+${links.length - 10} more)` : shown;
 }
 
 function validQurlIds(links: unknown): string[] {
@@ -443,7 +444,8 @@ function mintedLinkFrom(
           : undefined;
   const index = entries.findIndex((entry) => reasonFor(entry) === undefined);
   if (index === -1) {
-    const reason = entries.length > 0 ? reasonFor(entries[0]) : "no usable link";
+    const reasons = [...new Set(entries.map(reasonFor))].join(", ");
+    const reason = reasons || "no usable link";
     return {
       problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
       liveQurlIds: validQurlIds(links).slice(0, 10),
@@ -597,6 +599,7 @@ export async function mintUploadedFile(
     expires_at: confirmedExpiresAt,
     ...(requestedExpiresAt ? { requested_expires_at: requestedExpiresAt } : {}),
     ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
+    ...(requestedExpiresAt && !confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),
     ...(extraCount > 0
       ? { unexpected_extra_link_count: extraCount, unexpected_extra_qurl_ids: extraQurlIds }
       : {}),

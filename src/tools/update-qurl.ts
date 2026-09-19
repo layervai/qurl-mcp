@@ -26,7 +26,9 @@ export const updateQurlBaseSchema = z.object({
   resource_id: resourceIdSchema("update"),
   extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d")
     .optional()
-    .describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
+    .describe(
+      'Duration to extend by (e.g., "24h", "7d"; 1m to 30d per call; use expires_at for longer). Mutually exclusive with expires_at.',
+    ),
   expires_at: z
     .string()
     .datetime({ offset: true })

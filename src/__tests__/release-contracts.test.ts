@@ -247,6 +247,7 @@ describe("resource SDK boundary", () => {
     expect(result.qurl_link).toBe("https://l");
     expect(result.expires_at).toBeUndefined();
     expect(result.requested_expires_at).toBe(sent.expires_at);
+    expect(result.expires_at_unconfirmed).toBe(true);
   });
 
   it("accepts a plain-HTTP link only from a loopback development connector", async () => {
@@ -471,7 +472,7 @@ describe("resource SDK boundary", () => {
       "fetch",
       mockConnectorFetch(undefined, () => Response.json({ success: true, links })),
     );
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const result = await mintUploadedFile(
       { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
       publicKey,
@@ -480,6 +481,7 @@ describe("resource SDK boundary", () => {
     );
     expect(result.unexpected_extra_link_count).toBe(29);
     expect(result.unexpected_extra_qurl_ids).toHaveLength(10);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("(+20 more)"));
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {

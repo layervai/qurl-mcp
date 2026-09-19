@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { QURLAPIError, type IQURLClient } from "../client.js";
 import { formatErrorForLog } from "../logging.js";
-import { flattenControlCharacters } from "../text.js";
 import { durationSchema, MAX_EXPIRY_MS, MIN_EXPIRY_MS } from "./duration.js";
 import {
   isQurlDisplayId,
@@ -16,7 +15,7 @@ import { extendQurlOutputSchema } from "./output-schemas.js";
 export const extendQurlSchema = z.object({
   resource_id: resourceIdSchema("extend"),
   extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d").describe(
-    'Duration to extend by (e.g., "24h", "7d")',
+    'Duration to extend the link by (e.g., "24h", "7d"; 1m to 30d per call)',
   ),
   qurl_id: qurlDisplayIdSchema("extend")
     .optional()
@@ -55,7 +54,7 @@ async function linkToExtend(
     if (!(error instanceof QURLAPIError && [403, 404].includes(error.statusCode))) throw error;
     return {
       error:
-        `Reading the resource to pick a link failed (${flattenControlCharacters(error.message).slice(0, 200)}; ` +
+        `Reading the resource to pick a link failed (HTTP ${error.statusCode}; ` +
         "the resource may not exist, or the API key may lack qurl:read). Passing qurl_id with a resource ID skips this link-selection read, but building the response still needs qurl:read.",
     };
   }

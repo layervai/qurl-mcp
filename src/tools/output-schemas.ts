@@ -213,6 +213,12 @@ export const uploadFileQurlOutputSchema = z.looseObject({
     .describe(
       "Present when the connector's confirmed expiry differs from the requested expires_in by more than a minute (clamped or clock skew); tell the user the actual expires_at",
     ),
+  expires_at_unconfirmed: z
+    .boolean()
+    .optional()
+    .describe(
+      "Present when expires_in was requested but the connector confirmed no expiry; tell the user the lifetime is unconfirmed",
+    ),
   unexpected_extra_link_count: z
     .number()
     .optional()
