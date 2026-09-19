@@ -166,6 +166,47 @@ describe("resource SDK boundary", () => {
     },
   );
 
+  it.each([
+    ["https://connector.test/api/upload", "https://connector.test/api/mint_link/"],
+    ["https://host.test/connector/api/upload", "https://host.test/connector/api/mint_link/"],
+  ])("mints beside the upload route of %s", async (uploadUrl, mintPrefix) => {
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${mintPrefix}${publicKey}`);
+  });
+
+  it.each([
+    {
+      description: "an upload URL without the /api/upload route",
+      uploadUrl: "https://c.test/x",
+      options: {},
+    },
+    {
+      description: "an expires_in the duration grammar rejects",
+      uploadUrl: "https://c.test/api/upload",
+      options: { expires_in: "banana" },
+    },
+  ])("fails before minting given $description", async ({ uploadUrl, options }) => {
+    const fetchMock = mockConnectorFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    await expect(
+      mintUploadedFile(
+        { apiKey: "lv_live_test", uploadUrl },
+        publicKey,
+        { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+        options,
+      ),
+    ).rejects.toMatchObject({ code: "upload_mint_failed" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("returns the uploaded resource ID to the caller when mint fails", async () => {
     vi.stubGlobal(
       "fetch",

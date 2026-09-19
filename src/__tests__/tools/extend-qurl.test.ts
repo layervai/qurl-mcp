@@ -123,12 +123,37 @@ describe("extendQurlTool", () => {
           makeMockClient({ getQURL: withLinks(...links), updateQurlToken }),
         );
 
-        await expect(
-          tool.handler({ resource_id: extendResourceId, extend_by: "1h" }),
-        ).rejects.toThrow(message);
+        const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+        expect(result).toMatchObject({
+          isError: true,
+          content: [{ text: expect.stringContaining(message) }],
+        });
         expect(updateQurlToken).not.toHaveBeenCalled();
       },
     );
+
+    it("reports a completed extension without inviting a retry when the resource read fails", async () => {
+      const updateQurlToken = vi.fn().mockResolvedValue({
+        data: { ...activeLink, expires_at: "2026-09-20T00:00:00Z" },
+      });
+      const getQURL = vi.fn().mockRejectedValue(new Error("insufficient_scope"));
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      const result = await tool.handler({
+        resource_id: extendResourceId,
+        extend_by: "1h",
+        qurl_id: "q_aaaaaaaaaaa",
+      });
+
+      expect(updateQurlToken).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining("Do not retry") }],
+      });
+      expect(JSON.stringify(result)).toContain("2026-09-20T00:00:00Z");
+    });
 
     it("propagates client errors", async () => {
       const tool = extendQurlTool(

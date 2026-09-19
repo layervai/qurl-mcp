@@ -4,6 +4,7 @@ import {
   getRequestMaxUploadFileDataBytes,
   getRequestQurlApiKey,
   getRequestQurlConnectorUrl,
+  markRequestCredentialValidated,
 } from "../auth/request-context.js";
 import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../client.js";
 import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
@@ -388,6 +389,10 @@ export async function mintUploadedFile(
   let link: ConnectorMintedLink | undefined;
   try {
     const expiresInMs = input.expires_in ? parseDurationMs(input.expires_in) : undefined;
+    if (input.expires_in && expiresInMs === undefined) {
+      // Omitting expires_at would silently give the link the connector default.
+      throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${input.expires_in}`);
+    }
     const body = {
       n: 1,
       one_time_use: input.one_time_use ?? true,
@@ -414,6 +419,10 @@ export async function mintUploadedFile(
     if (typeof link?.qurl_id !== "string" || typeof link.qurl_link !== "string") {
       throw new QURLAPIError(0, "unexpected_response", "Connector mint returned no link.");
     }
+    // The connector authorizes the upload resource with this same bearer against
+    // the qURL API before minting, so an upload-only HTTP session is validated
+    // as if it had called the API directly (same operator-configured trust boundary).
+    markRequestCredentialValidated();
   } catch (error) {
     // The connector API exposes upload but no delete endpoint. Keep the mint
     // error primary and log the orphan resource for operator cleanup.
@@ -424,7 +433,8 @@ export async function mintUploadedFile(
       error instanceof QURLAPIError ? error.statusCode : 0,
       "upload_mint_failed",
       `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
-        "Retry the upload; the stored file cannot be re-linked from this tool.",
+        "Retry the upload; the stored file cannot be re-linked from this tool. " +
+        "If the request failed after reaching the connector, a link may already have been minted; check the connector before sharing a replacement.",
     );
   }
 

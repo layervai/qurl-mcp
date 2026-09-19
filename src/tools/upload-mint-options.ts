@@ -43,9 +43,14 @@ const durationSchema = (minMs: number, maxMs: number, range: string) =>
 // The file connector mints uploaded-file links, and its mint contract carries
 // no access policy or session cap. Reject them before the upload instead of
 // silently minting a link without the restriction the caller asked for.
+// z.unknown() emits a plain `{}` JSON Schema, which every host accepts; `not`
+// (from z.never) is dropped or rejected by some non-TypeScript hosts.
 const unsupportedForUploads = (field: string) =>
   z
-    .never({ error: `${field} is not supported for uploaded files` })
+    .unknown()
+    .refine((value) => value === undefined, {
+      message: `${field} is not supported for uploaded files`,
+    })
     .optional()
     .describe(`Not supported for uploaded files; setting ${field} rejects the request.`);
 
@@ -56,7 +61,7 @@ export const uploadMintOptionsShape = {
     .max(500)
     .optional()
     .describe(
-      "Human-readable label (max 500 chars) shown in email delivery and used as the PDF title by upload_text_qurl. It is not attached to the minted link.",
+      "Human-readable label (max 500 chars) shown in email delivery and used as the PDF title by upload_text_qurl. It is not attached to the minted link, so the link cannot be found by label afterward.",
     ),
   expires_in: durationSchema(60_000, 30 * 86_400_000, "1m to 30d")
     .optional()

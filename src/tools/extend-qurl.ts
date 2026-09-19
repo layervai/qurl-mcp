@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
+import { formatErrorForLog } from "../logging.js";
 import {
   qurlDisplayIdSchema,
   resourceIdSchema,
@@ -26,7 +27,7 @@ export const extendQurlSchema = z.object({
 async function linkToExtend(
   client: IQURLClient,
   input: z.infer<typeof extendQurlSchema>,
-): Promise<{ resourceId: string; qurlId: string }> {
+): Promise<{ resourceId: string; qurlId: string } | { error: string }> {
   if (input.qurl_id && !input.resource_id.startsWith("q_")) {
     return { resourceId: input.resource_id, qurlId: input.qurl_id };
   }
@@ -36,12 +37,18 @@ async function linkToExtend(
   if (named) return { resourceId: resource.resource_id, qurlId: named };
   const active = (resource.qurls ?? []).filter((link) => link.status === "active");
   if (active.length === 1) return { resourceId: resource.resource_id, qurlId: active[0].qurl_id };
-  throw new Error(
-    active.length === 0
-      ? "This resource has no active link to extend. Use mint_link to issue a new one."
-      : `This resource has ${active.length} active links (${active.map((link) => link.qurl_id).join(", ")}); pass qurl_id to choose which one to extend.`,
-  );
+  return {
+    error:
+      active.length === 0
+        ? "This resource has no active link to extend. Use mint_link to issue a new one."
+        : `This resource has ${active.length} active links (${active.map((link) => link.qurl_id).join(", ")}); pass qurl_id to choose which one to extend.`,
+  };
 }
+
+const errorResult = (text: string) => ({
+  isError: true as const,
+  content: [{ type: "text" as const, text }],
+});
 
 export function extendQurlTool(
   client: IQURLClient,
@@ -68,9 +75,25 @@ export function extendQurlTool(
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof extendQurlSchema>) => {
-      const { resourceId, qurlId } = await linkToExtend(client, input);
-      await client.updateQurlToken(resourceId, qurlId, { extend_by: input.extend_by });
-      const result = await client.getQURL(resourceId);
+      const target = await linkToExtend(client, input);
+      if ("error" in target) return errorResult(target.error);
+      const { resourceId, qurlId } = target;
+      const token = await client.updateQurlToken(resourceId, qurlId, {
+        extend_by: input.extend_by,
+      });
+      let result: Awaited<ReturnType<IQURLClient["getQURL"]>>;
+      try {
+        result = await client.getQURL(resourceId);
+      } catch (error) {
+        // The extension already happened; a retry would push the link out twice.
+        console.error(
+          `extend_qurl extended ${qurlId} but reading the resource failed (${formatErrorForLog(error)})`,
+        );
+        return errorResult(
+          `Link ${qurlId} was extended; it now expires at ${token.data.expires_at ?? "the new time"}. ` +
+            "Do not retry. Reading the updated resource failed (the API key may lack qurl:read).",
+        );
+      }
       return {
         content: [
           {
