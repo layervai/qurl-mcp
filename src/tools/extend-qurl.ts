@@ -148,6 +148,7 @@ export function extendQurlTool(
       "Use this when the only change you need is more time on the clock. " +
       "Use `update_qurl_token` instead to set an absolute `expires_at` or change the link's label, policy, or sessions. " +
       "Use `revoke_qurl_token` or `delete_qurl` when you want to cut off access. " +
+      "Links minted by the upload tools belong to the file connector and cannot be extended from this server. " +
       "**Not idempotent:** calling twice with the same `extend_by` extends the link twice; use `update_qurl_token` with `expires_at` when retries must not double-push. " +
       "Requires `qurl:write` and `qurl:read`: it reads the resource before updating, to check the link and to return it, so each extend costs two API calls (three when the read does not list the link). " +
       "A link cannot outlive its resource: if the resource's own `expires_at` is sooner, raise it with `update_qurl` first; the result then carries `extend_warning`. " +

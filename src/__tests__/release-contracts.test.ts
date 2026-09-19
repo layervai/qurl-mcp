@@ -34,6 +34,8 @@ const resource = { ...sampleQURL(), ...extra };
 const close: Array<() => Promise<void>> = [];
 afterEach(async () => {
   for (const fn of close.splice(0)) await fn();
+  // Spies (console.error especially) must not carry calls into later tests.
+  vi.restoreAllMocks();
 });
 
 async function connect() {
@@ -283,7 +285,6 @@ describe("resource SDK boundary", () => {
     expect(result.requested_expires_at).toBe(echoed);
     expect(result).not.toHaveProperty("expires_at_differs_from_request");
     expect(result).not.toHaveProperty("expires_at_unconfirmed");
-    // No drift line for this upload (the spy may carry earlier tests' calls).
     expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
   });
 
@@ -403,9 +404,14 @@ describe("resource SDK boundary", () => {
   });
 
   it("keeps the shared upload Returns text in step with the output schema", () => {
-    for (const key of Object.keys(uploadFileQurlOutputSchema.shape)) {
-      expect(UPLOAD_RETURNS_DESCRIPTION).toContain(key);
-    }
+    const schemaKeys = Object.keys(uploadFileQurlOutputSchema.shape);
+    for (const key of schemaKeys) expect(UPLOAD_RETURNS_DESCRIPTION).toContain(key);
+    // And the reverse: no field lingers in the text after leaving the schema.
+    const described = UPLOAD_RETURNS_DESCRIPTION.slice(
+      UPLOAD_RETURNS_DESCRIPTION.indexOf("{"),
+      UPLOAD_RETURNS_DESCRIPTION.indexOf("}") + 1,
+    ).match(/\w+(?=\??:)/g);
+    expect(described?.sort()).toEqual([...schemaKeys].sort());
   });
 
   it("accepts a plain-HTTP link only from a loopback development connector", async () => {
@@ -481,7 +487,6 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at_differs_from_request).toBe(true);
     // Any non-empty ID is reported, so the IDs never undercount the count.
     expect(result.unexpected_extra_qurl_ids).toEqual(["q_0000000000a", "not-a-qurl"]);
-    expect(sent).toBeDefined();
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>;
     expect(headers).toMatchObject({
       "Content-Type": "application/json",
