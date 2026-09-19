@@ -248,6 +248,25 @@ describe("resource SDK boundary", () => {
     expect(result.expires_at).toBeUndefined();
   });
 
+  it("accepts a plain-HTTP link only from a loopback development connector", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({
+          success: true,
+          links: [{ qurl_id: "q_123456789ab", qurl_link: "http://127.0.0.1:8080/views/x" }],
+        }),
+      ),
+    );
+    const result = await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "http://127.0.0.1:8080/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    );
+    expect(result.qurl_link).toBe("http://127.0.0.1:8080/views/x");
+  });
+
   it("returns the uploaded resource ID to the caller when mint fails", async () => {
     vi.stubGlobal(
       "fetch",

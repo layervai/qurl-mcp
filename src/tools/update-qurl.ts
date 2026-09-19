@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient, UpdateQURLInput, UpdateResourceInput } from "../client.js";
+import { durationSchema, MAX_EXPIRY_MS, MIN_EXPIRY_MS } from "./duration.js";
 import {
   resourceIdSchema,
   toStructuredContent,
@@ -23,9 +24,7 @@ const tagSchema = z
 
 export const updateQurlBaseSchema = z.object({
   resource_id: resourceIdSchema("update"),
-  extend_by: z
-    .string()
-    .min(1)
+  extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d")
     .optional()
     .describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
   expires_at: z

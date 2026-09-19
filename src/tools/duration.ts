@@ -47,6 +47,8 @@ export const durationSchema = (minMs: number, maxMs: number, range: string) =>
     );
 
 // validation.MinExpirationDuration and domain.MaxCustomerExpiryDuration; qurl-service
-// applies the same pair to expires_in and extend_by (ValidateDuration).
+// applies the same pair to expires_in and extend_by (ValidateDuration). Upload
+// links take them too: the connector forwards the requested expiry to
+// qurl-service's mint, which enforces the same ceiling.
 export const MIN_EXPIRY_MS = 60_000;
 export const MAX_EXPIRY_MS = 30 * 86_400_000;

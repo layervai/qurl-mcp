@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { QURLAPIError } from "../../client.js";
 import { extendQurlTool, extendQurlSchema } from "../../tools/extend-qurl.js";
 import { makeMockClient, sampleAccessToken, sampleQURL } from "../helpers.js";
 
@@ -170,15 +171,37 @@ describe("extendQurlTool", () => {
       expect(updateQurlToken).not.toHaveBeenCalled();
     });
 
-    it("explains a failed pre-update read instead of throwing it raw", async () => {
+    it("explains a not-found or forbidden pre-update read instead of throwing it raw", async () => {
       const updateQurlToken = vi.fn();
-      const getQURL = vi.fn().mockRejectedValue(new Error("insufficient_scope"));
+      const getQURL = vi
+        .fn()
+        .mockRejectedValue(new QURLAPIError(403, "forbidden", "insufficient_scope"));
       const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
 
       const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
 
       expect(JSON.stringify(result)).toContain("may lack qurl:read");
       expect(result).toMatchObject({ isError: true });
+      expect(updateQurlToken).not.toHaveBeenCalled();
+    });
+
+    it("lets a rate-limited pre-update read throw with its status", async () => {
+      const getQURL = vi.fn().mockRejectedValue(new QURLAPIError(429, "rate_limited", "slow down"));
+      const tool = extendQurlTool(makeMockClient({ getQURL }));
+
+      await expect(
+        tool.handler({ resource_id: extendResourceId, extend_by: "1h" }),
+      ).rejects.toMatchObject({ statusCode: 429, code: "rate_limited" });
+    });
+
+    it("refuses a q_ link that is no longer active", async () => {
+      const updateQurlToken = vi.fn();
+      const getQURL = withLinks(sampleAccessToken({ qurl_id: "q_eeeeeeeeeee", status: "revoked" }));
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      const result = await tool.handler({ resource_id: "q_eeeeeeeeeee", extend_by: "1h" });
+
+      expect(JSON.stringify(result)).toContain("is revoked");
       expect(updateQurlToken).not.toHaveBeenCalled();
     });
 

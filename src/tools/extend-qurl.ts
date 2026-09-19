@@ -47,6 +47,9 @@ async function linkToExtend(
   } catch (error) {
     // The shared wrapper turns a missing key into its own guidance.
     if (error instanceof QURLAPIError && error.code === "missing_api_key") throw error;
+    // Only not-found and forbidden are what the guidance below describes; rate
+    // limits, 5xx, and transport failures keep their status and code.
+    if (error instanceof QURLAPIError && ![403, 404].includes(error.statusCode)) throw error;
     return {
       error:
         `Reading the resource to pick a link failed (${error instanceof Error ? error.message : "unknown error"}; ` +
@@ -54,7 +57,15 @@ async function linkToExtend(
     };
   }
   const named = resourceIsLink ? input.resource_id : undefined;
-  if (named) return { resourceId: resource.resource_id, qurlId: named };
+  if (named) {
+    const status = resource.qurls?.find((link) => link.qurl_id === named)?.status;
+    if (status && status !== "active") {
+      return {
+        error: `Link ${named} is ${status}, so it cannot be extended. Use mint_link to issue a new one.`,
+      };
+    }
+    return { resourceId: resource.resource_id, qurlId: named };
+  }
   if (!resource.qurls) {
     return { error: "The resource read did not include its links; pass qurl_id to choose one." };
   }

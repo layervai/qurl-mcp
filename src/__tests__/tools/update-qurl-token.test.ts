@@ -36,6 +36,17 @@ describe("updateQurlTokenTool", () => {
       ).toBe(true);
     });
 
+    it("bounds extend_by like qurl-service's ValidateDuration", () => {
+      for (const extend_by of ["31d", "30s", "3 hours"]) {
+        const result = updateQurlTokenSchema.safeParse({
+          resource_id: resourceId,
+          qurl_id: qurlId,
+          extend_by,
+        });
+        expect(result.success, extend_by).toBe(false);
+      }
+    });
+
     it("rejects both extend_by and expires_at", () => {
       const result = updateQurlTokenSchema.safeParse({
         resource_id: resourceId,

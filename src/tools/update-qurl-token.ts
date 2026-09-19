@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import { accessPolicySchema } from "./create-qurl.js";
+import { durationSchema, MAX_EXPIRY_MS, MIN_EXPIRY_MS } from "./duration.js";
 import {
   qurlDisplayIdSchema,
   resourceOnlyIdSchema,
@@ -14,9 +15,7 @@ import { updateQurlTokenOutputSchema } from "./output-schemas.js";
 export const updateQurlTokenBaseSchema = z.object({
   resource_id: resourceOnlyIdSchema("update a specific qURL token under"),
   qurl_id: qurlDisplayIdSchema("update"),
-  extend_by: z
-    .string()
-    .min(1)
+  extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d")
     .optional()
     .describe(
       'Duration to extend this token by (e.g., "24h", "7d"). Mutually exclusive with expires_at.',

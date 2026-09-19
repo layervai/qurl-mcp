@@ -6,7 +6,7 @@ import {
   getRequestQurlConnectorUrl,
 } from "../auth/request-context.js";
 import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../client.js";
-import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
+import { isLoopbackHostname, loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters, isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN, isQurlDisplayId } from "./_shared.js";
@@ -379,10 +379,15 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
   return url.toString();
 }
 
-function isHttpsUrl(value: string): boolean {
+// The link carries an access token and may be emailed, so never plain HTTP,
+// except from a loopback development connector (the same exception the
+// connector URL itself gets in normalizeServiceBaseUrl).
+function isDeliverableLink(value: string): boolean {
   try {
-    // The link carries an access token and may be emailed, so never plain HTTP.
-    return new URL(value).protocol === "https:";
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" || (url.protocol === "http:" && isLoopbackHostname(url.hostname))
+    );
   } catch {
     return false;
   }
@@ -411,7 +416,7 @@ export async function mintUploadedFile(
   file: { name: string; contentType: string; sizeBytes: number },
   input: UploadMintOptions,
 ) {
-  let link: ConnectorMintedLink | undefined;
+  let minted: { qurl_id: string; qurl_link: string; expires_at?: unknown } | undefined;
   let requestedExpiresAt: string | undefined;
   let requestSent = false;
   try {
@@ -467,22 +472,26 @@ export async function mintUploadedFile(
         requestId,
       );
     }
-    link = firstMintedLink(parsed);
-    if (
-      typeof link?.qurl_id !== "string" ||
-      !isQurlDisplayId(link.qurl_id) ||
-      typeof link.qurl_link !== "string" ||
-      !isHttpsUrl(link.qurl_link)
-    ) {
-      throw new QURLAPIError(
-        0,
-        "unexpected_response",
-        "Connector mint returned no link.",
-        undefined,
-        undefined,
-        requestId,
+    const links = (parsed as { links?: unknown } | undefined)?.links;
+    if (Array.isArray(links) && links.length > 1) {
+      // n: 1 was requested; extra links would be live and unreported.
+      console.error(
+        `Connector minted ${links.length} links for ${resourceId}; returning the first`,
       );
     }
+    const link = firstMintedLink(parsed);
+    const problem =
+      typeof link?.qurl_id !== "string" || typeof link.qurl_link !== "string"
+        ? "Connector mint returned no link."
+        : !isQurlDisplayId(link.qurl_id)
+          ? "Connector mint returned a malformed qurl_id."
+          : !isDeliverableLink(link.qurl_link)
+            ? "Connector mint returned a non-HTTPS link."
+            : undefined;
+    if (problem) {
+      throw new QURLAPIError(0, "unexpected_response", problem, undefined, undefined, requestId);
+    }
+    minted = link as { qurl_id: string; qurl_link: string; expires_at?: unknown };
   } catch (error) {
     // The connector API exposes upload but no delete endpoint. Keep the mint
     // error primary and log the orphan resource for operator cleanup.
@@ -502,7 +511,11 @@ export async function mintUploadedFile(
     );
   }
 
-  const confirmedExpiresAt = typeof link.expires_at === "string" ? link.expires_at : undefined;
+  if (!minted) throw new Error("unreachable: mint returned without a link");
+  const confirmedExpiresAt =
+    typeof minted.expires_at === "string" && !Number.isNaN(Date.parse(minted.expires_at))
+      ? minted.expires_at
+      : undefined;
   if (
     requestedExpiresAt &&
     confirmedExpiresAt &&
@@ -510,14 +523,14 @@ export async function mintUploadedFile(
   ) {
     // A clamp or host clock skew changed the link's lifetime; make it visible.
     console.error(
-      `Connector link ${link.qurl_id} expires at ${confirmedExpiresAt}, not the requested ${requestedExpiresAt}`,
+      `Connector link ${minted.qurl_id} expires at ${confirmedExpiresAt}, not the requested ${requestedExpiresAt}`,
     );
   }
 
   return {
     resource_id: resourceId,
-    qurl_id: link.qurl_id,
-    qurl_link: link.qurl_link,
+    qurl_id: minted.qurl_id,
+    qurl_link: minted.qurl_link,
     // Only a connector-confirmed expiry is reported; the requested one may have
     // been clamped, and it reaches recipients in email.
     expires_at: confirmedExpiresAt,
