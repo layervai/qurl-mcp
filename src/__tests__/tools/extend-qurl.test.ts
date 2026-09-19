@@ -114,6 +114,21 @@ describe("extendQurlTool", () => {
       expect(getQURL).toHaveBeenCalledOnce();
     });
 
+    it("merges a sparse update response into the link it read", async () => {
+      const updateQurlToken = vi.fn().mockResolvedValue({
+        data: { qurl_id: activeLink.qurl_id, expires_at: "2099-01-01T00:00:00Z" },
+      });
+      const tool = extendQurlTool(
+        makeMockClient({ getQURL: withLinks(activeLink), updateQurlToken }),
+      );
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(result.structuredContent).toMatchObject({
+        qurls: [{ ...activeLink, expires_at: "2099-01-01T00:00:00Z" }],
+      });
+    });
+
     it("splices the updated link into the resource it already read", async () => {
       const extended = { ...activeLink, expires_at: "2099-01-01T00:00:00Z" };
       const updateQurlToken = vi.fn().mockResolvedValue({ data: extended });

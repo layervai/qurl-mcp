@@ -39,17 +39,20 @@ export function parseDurationMs(value: string): number | undefined {
 // Grammar and range fail with different messages so a caller retrying knows
 // whether to fix the syntax or the size. create_qurl and mint_link still defer
 // their durations to the API; tracked with the drift guard in #282.
-export const durationSchema = (minMs: number, maxMs: number, range: string) =>
+// allowEmpty lets "" through as its own value (a z.union would collapse both
+// messages into a generic "Invalid input").
+export const durationSchema = (minMs: number, maxMs: number, range: string, allowEmpty = false) =>
   z
     .string()
-    .min(1)
+    .min(allowEmpty ? 0 : 1)
     .max(32)
-    .refine((value) => parseDurationMs(value) !== undefined, {
+    .refine((value) => (allowEmpty && value === "") || parseDurationMs(value) !== undefined, {
       message: "Use a duration like '30m', '24h', or '7d'",
       abort: true,
     })
     .refine(
       (value) => {
+        if (allowEmpty && value === "") return true;
         const ms = parseDurationMs(value) ?? 0;
         return ms >= minMs && ms <= maxMs;
       },

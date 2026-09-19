@@ -41,8 +41,7 @@ export const updateQurlTokenBaseSchema = z.object({
     .optional()
     .describe("Maximum concurrent sessions for this token (0 = unlimited, max 1000)"),
   // "" keeps its meaning (apply the parent resource cap); anything else is a bounded duration.
-  session_duration: z
-    .union([z.literal(""), durationSchema(MIN_SESSION_MS, MAX_SESSION_MS, "1s to 24h")])
+  session_duration: durationSchema(MIN_SESSION_MS, MAX_SESSION_MS, "1s to 24h", true)
     .optional()
     .describe(
       'How long access lasts after clicking (e.g., "1h"; 1s to 24h). Empty string applies the parent resource cap when one is set.',

@@ -536,7 +536,7 @@ export async function mintUploadedFile(
     const body = {
       n: 1,
       one_time_use: input.one_time_use ?? true,
-      ...(requestedExpiresAt ? { expires_at: requestedExpiresAt } : {}),
+      expires_at: requestedExpiresAt,
       ...(input.session_duration ? { session_duration: input.session_duration } : {}),
     };
     const mintUrl = connectorMintUrl(connectorConfig.uploadUrl, resourceId);
@@ -611,7 +611,6 @@ export async function mintUploadedFile(
       ? new Date(minted.expires_at).toISOString()
       : undefined;
   const driftsFromRequest = Boolean(
-    requestedExpiresAt &&
     confirmedExpiresAt &&
     // Small fixed tolerance for the connector's whole-second rounding and the
     // round trip; any real clamp, even of a 1m link, is flagged.
@@ -631,7 +630,7 @@ export async function mintUploadedFile(
     // Only a connector-confirmed expiry is reported as expires_at; the request
     // may have been clamped, and expires_at reaches recipients in email.
     ...(confirmedExpiresAt ? { expires_at: confirmedExpiresAt } : {}),
-    ...(requestedExpiresAt ? { requested_expires_at: requestedExpiresAt } : {}),
+    requested_expires_at: requestedExpiresAt,
     ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
     ...(!confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),
     ...(extraCount > 0

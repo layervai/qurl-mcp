@@ -28,7 +28,7 @@ export const mintLinkBaseSchema = z.object({
     .min(1)
     .optional()
     .describe(
-      'Relative duration until expiration (e.g., "5m", "24h", "7d"; 1m to 30d). Mutually exclusive with expires_at',
+      'Relative duration until expiration (e.g., "5m", "24h", "7d"; the API enforces 1m to 30d). Mutually exclusive with expires_at',
     ),
   expires_at: z
     .string()

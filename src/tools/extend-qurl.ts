@@ -13,7 +13,9 @@ import {
 import { extendQurlOutputSchema } from "./output-schemas.js";
 
 export const extendQurlSchema = z.object({
-  resource_id: resourceIdSchema("extend"),
+  resource_id: resourceIdSchema("extend").describe(
+    "Resource ID, or a link's q_ display ID; a q_ ID selects that link, and this server reads the resource to find its parent",
+  ),
   extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d").describe(
     'Duration to extend the link by (e.g., "24h", "7d"; 1m to 30d per call)',
   ),
@@ -146,13 +148,16 @@ export function extendQurlTool(
         extend_by: input.extend_by,
       });
       // A token update leaves resource fields alone, so a resource already read
-      // to pick the link only needs the updated link spliced in. Only the
+      // to pick the link only needs the updated link merged in (a merge, so a
+      // sparser update response cannot drop fields the read had). Only the
       // qurl_id fast path, which skipped that read, reads after the update.
       let resource = target.resource;
       if (resource) {
         resource = {
           ...resource,
-          qurls: resource.qurls?.map((link) => (link.qurl_id === qurlId ? token.data : link)),
+          qurls: resource.qurls?.map((link) =>
+            link.qurl_id === qurlId ? { ...link, ...token.data } : link,
+          ),
         };
       } else {
         try {

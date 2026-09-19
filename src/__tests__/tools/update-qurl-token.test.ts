@@ -49,6 +49,15 @@ describe("updateQurlTokenTool", () => {
       expect(parse("25h")).toBe(false);
     });
 
+    it("gives session_duration's specific syntax and range messages", () => {
+      const message = (session_duration: string) =>
+        updateQurlTokenSchema
+          .safeParse({ resource_id: resourceId, qurl_id: qurlId, session_duration })
+          .error?.issues.map((issue) => issue.message);
+      expect(message("1 hour")).toEqual(["Use a duration like '30m', '24h', or '7d'"]);
+      expect(message("25h")).toEqual(["Duration must be 1s to 24h"]);
+    });
+
     it("bounds extend_by like qurl-service's ValidateDuration", () => {
       for (const extend_by of ["31d", "30s", "3 hours"]) {
         const result = updateQurlTokenSchema.safeParse({
