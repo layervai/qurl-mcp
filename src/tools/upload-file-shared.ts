@@ -509,6 +509,7 @@ export async function mintUploadedFile(
   let minted: MintedLink;
   let extraCount = 0;
   let liveQurlIds: string[] = [];
+  let liveLinkCount = 0;
   let extraQurlIds: string[] = [];
   try {
     // Upload links cannot be revoked from here (#281), so never leave the
@@ -561,7 +562,14 @@ export async function mintUploadedFile(
     }
     const parsed = parseJsonBody(raw);
     // Any link in a failed response is live and unrevocable here; report it.
-    liveQurlIds = reportedLinkIds((parsed as { links?: unknown } | undefined)?.links).slice(0, 10);
+    const responseLinks = (parsed as { links?: unknown } | undefined)?.links;
+    liveQurlIds = reportedLinkIds(responseLinks).slice(0, 10);
+    // Counted apart from IDs: a live link may come back without a qurl_id.
+    liveLinkCount = (Array.isArray(responseLinks) ? responseLinks : []).filter(
+      (entry: unknown) =>
+        typeof (entry as { qurl_link?: unknown } | null)?.qurl_link === "string" ||
+        typeof (entry as { qurl_id?: unknown } | null)?.qurl_id === "string",
+    ).length;
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");
@@ -573,6 +581,7 @@ export async function mintUploadedFile(
     const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
     if ("problem" in result) throw unexpected(result.problem);
     liveQurlIds = [];
+    liveLinkCount = 0;
     if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(
@@ -597,8 +606,12 @@ export async function mintUploadedFile(
       `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
         "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
         "do not retry automatically, since each retry stores another copy; tell the user and ask." +
-        (liveQurlIds.length > 0
-          ? ` The connector did mint live link(s) this server refused to return: ${liveQurlIds.join(", ")}; tell the user.`
+        (liveLinkCount > 0
+          ? ` The connector did mint ${liveLinkCount} live link(s) this server refused to return` +
+            (liveQurlIds.length > 0
+              ? `: ${liveQurlIds.join(", ")}`
+              : " (the connector reported no IDs for them)") +
+            "; tell the user."
           : requestSent
             ? " If the request failed after reaching the connector, a link may already have been minted; check the connector before sharing a replacement."
             : ""),

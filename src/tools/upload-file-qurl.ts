@@ -16,7 +16,11 @@ import {
   toEmailAugmentedResult,
   uploadEmailDetailLines,
 } from "./email-delivery.js";
-import { uploadMintOptionsShape } from "./upload-mint-options.js";
+import {
+  uploadMintOptionsShape,
+  UPLOAD_LINK_DESCRIPTION,
+  UPLOAD_RETURNS_DESCRIPTION,
+} from "./upload-mint-options.js";
 import {
   getConnectorConfig,
   getMaxUploadFileBytes,
@@ -189,10 +193,11 @@ export function uploadFileQurlTool(
       "This stdio-only tool can read any supported file that the local MCP process user can access; invoke it only for a path the user explicitly chose to share. " +
       "Deploy stdio under a restricted OS account or container whose readable files are limited to intended shareable content. " +
       "Use `create_qurl` when you already have a URL. Each call uploads the file again and returns one new link; `mint_link` cannot re-link an uploaded file. " +
-      "The tool reads `file_path`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. Uploaded-file links support `expires_in`, `one_time_use`, and `session_duration`; `access_policy` and `max_sessions` are rejected. **Revocation:** a link created here cannot be revoked from this server; `delete_qurl` on the returned `resource_id` does not stop it (revocation needs the connector's `/api/revoke_links`). Use a short `expires_in` and `one_time_use` for sensitive files. " +
+      "The tool reads `file_path`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. " +
+      UPLOAD_LINK_DESCRIPTION +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +
       "Requires both `QURL_API_KEY` and `QURL_CONNECTOR_URL` in the server environment or runtime config. " +
-      "**Returns:** `{ resource_id: string, qurl_id?: string, qurl_link: string, expires_at?: string, requested_expires_at?: string, expires_at_differs_from_request?: boolean, expires_at_unconfirmed?: boolean, unexpected_extra_link_count?: number, unexpected_extra_qurl_ids?: string[], file_name: string, content_type: string, size_bytes: number, email_delivery?: object }`. If `unexpected_extra_link_count` is present, the connector minted extra live links: tell the user. If `expires_at_differs_from_request` is set, tell the user the actual `expires_at`; if `expires_at_unconfirmed` is set, say the link's lifetime is unknown.",
+      UPLOAD_RETURNS_DESCRIPTION,
     inputSchema: uploadFileQurlSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {

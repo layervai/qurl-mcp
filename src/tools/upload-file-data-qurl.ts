@@ -24,7 +24,11 @@ import {
   validateFileSignature,
 } from "./upload-file-shared.js";
 import { uploadFileQurlOutputSchema } from "./output-schemas.js";
-import { uploadMintOptionsShape } from "./upload-mint-options.js";
+import {
+  uploadMintOptionsShape,
+  UPLOAD_LINK_DESCRIPTION,
+  UPLOAD_RETURNS_DESCRIPTION,
+} from "./upload-mint-options.js";
 
 // Uploads pass three deliberate bounds: a runtime-derived raw-string schema
 // ceiling, the HTTP JSON-body limit before tool dispatch, and
@@ -219,11 +223,12 @@ export function uploadFileDataQurlTool(
       "Use `upload_file_qurl` when the file already exists on the MCP server host, use `create_qurl` when you already have a URL. Each call uploads the file again and returns one new link; `mint_link` cannot re-link an uploaded file. " +
       "For compressible images, compress them before converting to base64 so the request is smaller and more reliable. " +
       "When the server upload limit is configured above 10 MB, a fresh HTTP session must complete a smaller qURL API call (e.g. `list_qurls`) before its first larger upload; uploads themselves do not count. " +
-      "The tool decodes `file_base64`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. Uploaded-file links support `expires_in`, `one_time_use`, and `session_duration`; `access_policy` and `max_sessions` are rejected. **Revocation:** a link created here cannot be revoked from this server; `delete_qurl` on the returned `resource_id` does not stop it (revocation needs the connector's `/api/revoke_links`). Use a short `expires_in` and `one_time_use` for sensitive files. " +
+      "The tool decodes `file_base64`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. " +
+      UPLOAD_LINK_DESCRIPTION +
       "Supported MIME types are application/pdf, image/png, image/jpeg, image/webp, and image/gif. " +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +
       "Requires `QURL_CONNECTOR_URL`; stdio reads `QURL_API_KEY` from server config, while HTTP uses the caller's bearer credential. " +
-      "**Returns:** `{ resource_id: string, qurl_id?: string, qurl_link: string, expires_at?: string, requested_expires_at?: string, expires_at_differs_from_request?: boolean, expires_at_unconfirmed?: boolean, unexpected_extra_link_count?: number, unexpected_extra_qurl_ids?: string[], file_name: string, content_type: string, size_bytes: number, email_delivery?: object }`. If `unexpected_extra_link_count` is present, the connector minted extra live links: tell the user. If `expires_at_differs_from_request` is set, tell the user the actual `expires_at`; if `expires_at_unconfirmed` is set, say the link's lifetime is unknown.",
+      UPLOAD_RETURNS_DESCRIPTION,
     inputSchema,
     outputSchema: uploadFileQurlOutputSchema,
     annotations: {

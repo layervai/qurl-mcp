@@ -12,6 +12,8 @@ import {
 } from "../tools/upload-file-shared.js";
 import { withMissingApiKeyHandler } from "../tools/_shared.js";
 import { createServer } from "../server.js";
+import { UPLOAD_RETURNS_DESCRIPTION } from "../tools/upload-mint-options.js";
+import { uploadFileQurlOutputSchema } from "../tools/output-schemas.js";
 import { resourceIdSchema, resourceOnlyIdSchema } from "../tools/_shared.js";
 import { accessPolicySchema } from "../tools/create-qurl.js";
 import { batchCreateSchema } from "../tools/batch-create.js";
@@ -331,6 +333,32 @@ describe("resource SDK boundary", () => {
     expect(lifetime).toBeGreaterThan(86_400_000 - 60_000);
     expect(lifetime).toBeLessThanOrEqual(86_400_000);
     expect(result.expires_at_unconfirmed).toBe(true);
+  });
+
+  it("says a refused link definitely exists even when the connector gave it no ID", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, () =>
+        Response.json({ success: true, links: [{ qurl_link: "http://qurl.link/#x" }] }),
+      ),
+    );
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const refused = (await mintUploadedFile(
+      { apiKey: "lv_live_test", uploadUrl: "https://c.test/api/upload" },
+      publicKey,
+      { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 },
+      {},
+    ).catch((error: unknown) => error)) as Error;
+    expect(refused.message).toContain(
+      "did mint 1 live link(s) this server refused to return (the connector reported no IDs for them); tell the user",
+    );
+    expect(refused.message).not.toContain("may already have been minted");
+  });
+
+  it("keeps the shared upload Returns text in step with the output schema", () => {
+    for (const key of Object.keys(uploadFileQurlOutputSchema.shape)) {
+      expect(UPLOAD_RETURNS_DESCRIPTION).toContain(key);
+    }
   });
 
   it("accepts a plain-HTTP link only from a loopback development connector", async () => {
