@@ -242,9 +242,10 @@ configured; startup warns when complete SMTP credentials lack that policy.
 Raising `maxUploadFileDataBytes` also raises the HTTP JSON parser's per-request
 memory ceiling to roughly 1.5 times that value (up to about 150 MB at the
 100 MB maximum), before base64 decoding applies the exact byte cap. Until a
-session has completed a successful downstream qURL API call, its parser ceiling
-remains at the smaller 10 MB default upload setting; clients configured for a
-larger first upload must validate the session with a small qURL API call first.
+session has completed a successful downstream qURL API call (a completed upload's
+link mint counts), its parser ceiling remains at the smaller 10 MB default upload
+setting; clients configured for a larger first upload must validate the session
+with a small qURL API call or a smaller upload first.
 Size the configured maximum and reverse-proxy concurrency limit together.
 
 Set `QURL_API_KEY` in the environment for `stdio` mode. In HTTP mode, every

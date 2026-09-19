@@ -1,3 +1,4 @@
+import { markRequestCredentialValidated } from "../auth/request-context.js";
 import { Buffer } from "node:buffer";
 import { basename, extname } from "node:path";
 import {
@@ -446,7 +447,9 @@ function reportedLinkIds(links: unknown): string[] {
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
-): { link: MintedLink; extraCount: number; extraQurlIds: string[] } | { problem: string } {
+):
+  | { link: MintedLink; others: unknown[]; extraCount: number; extraQurlIds: string[] }
+  | { problem: string } {
   const links = (parsed as { links?: unknown } | undefined)?.links;
   const entries = (Array.isArray(links) ? links : []).map(
     (entry: unknown) =>
@@ -481,6 +484,7 @@ function mintedLinkFrom(
       qurl_link: chosen.qurl_link as string,
       expires_at: chosen.expires_at,
     },
+    others,
     extraCount: others.length,
     extraQurlIds: reportedLinkIds(others).slice(0, 10),
   };
@@ -582,11 +586,15 @@ export async function mintUploadedFile(
     if ("problem" in result) throw unexpected(result.problem);
     liveQurlIds = [];
     liveLinkCount = 0;
+    // A deliverable mint means qurl-service accepted the forwarded bearer via
+    // the operator-configured connector: the same evidence, under the same
+    // trust assumption, as a successful direct API call (see QURLClient.call).
+    markRequestCredentialValidated();
     if (result.extraCount > 0) {
       // n: 1 was requested; extra links are live, so report them, not just log.
       console.error(
         `Connector minted ${result.extraCount + 1} links for ${resourceId}; returning one ` +
-          `(links: ${describeLinks((parsed as { links?: unknown }).links)})`,
+          `(links: ${describeLinks([result.link, ...result.others])})`,
       );
     }
     minted = result.link;
@@ -603,7 +611,11 @@ export async function mintUploadedFile(
     throw new QURLAPIError(
       error instanceof QURLAPIError ? error.statusCode : 0,
       "upload_mint_failed",
-      `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
+      `Upload succeeded but link creation failed` +
+        (error instanceof QURLAPIError && error.statusCode > 0
+          ? ` (connector responded HTTP ${error.statusCode})`
+          : "") +
+        `. Resource ID: ${resourceId}. ` +
         "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
         "do not retry automatically, since each retry stores another copy; tell the user and ask." +
         (liveLinkCount > 0

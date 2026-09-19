@@ -601,7 +601,7 @@ describe("resource SDK boundary", () => {
       qurl_link: "https://real",
       unexpected_extra_link_count: 1,
     });
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("q_0000000000z, q_0000000000a"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("q_0000000000a, q_0000000000z"));
 
     // A deliverable link without any qurl_id is still returned, not discarded.
     vi.stubGlobal(
@@ -697,6 +697,33 @@ describe("resource SDK boundary", () => {
     );
     const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string> | undefined;
     expect(headers?.Authorization).toBe("Bearer lv_live_caller");
+  });
+
+  it("validates the session only on a deliverable mint, and names the connector status on failure", async () => {
+    const file = { name: "a.pdf", contentType: "application/pdf", sizeBytes: 12 };
+    const mint = (response: () => Response) => {
+      vi.stubGlobal("fetch", mockConnectorFetch(undefined, response));
+      const markCredentialValidated = vi.fn();
+      const run = runWithRequestAuthContext(
+        {
+          qurlApiKey: "lv_live_caller",
+          qurlConnectorUrl: "https://c.test",
+          markCredentialValidated,
+        },
+        () => mintUploadedFile(getConnectorConfig(), publicKey, file, {}),
+      );
+      return { run, markCredentialValidated };
+    };
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const ok = mint(() => Response.json({ success: true, links: [{ qurl_link: "https://l" }] }));
+    await ok.run;
+    expect(ok.markCredentialValidated).toHaveBeenCalledOnce();
+
+    const missing = mint(() => Response.json({ error: "not found" }, { status: 404 }));
+    const error = (await missing.run.catch((caught: unknown) => caught)) as Error;
+    expect(error.message).toContain("link creation failed (connector responded HTTP 404)");
+    expect(missing.markCredentialValidated).not.toHaveBeenCalled();
   });
 
   it("returns the uploaded resource ID to the caller when mint fails", async () => {

@@ -130,6 +130,11 @@ describe("createServer", () => {
             `${field} is not supported for uploaded files`,
           );
         }
+        // Invalid durations are refused before the upload too, so a typo cannot orphan a file.
+        for (const invalid of [{ expires_in: "60d" }, { session_duration: "1 hour" }]) {
+          const rejected = await client.callTool({ name, arguments: { ...args, ...invalid } });
+          expect(rejected.isError).toBe(true);
+        }
         expect(fetchMock).not.toHaveBeenCalled();
 
         // Control: the same arguments without the restriction do upload.
