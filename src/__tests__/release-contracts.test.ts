@@ -567,9 +567,12 @@ describe("resource SDK boundary", () => {
         }),
       ),
     );
-    await expect(mintUploadedFile(config, publicKey, file, {})).rejects.toMatchObject({
-      code: "upload_mint_failed",
-    });
+    const expiredError = (await mintUploadedFile(config, publicKey, file, {}).catch(
+      (caught: unknown) => caught,
+    )) as Error;
+    expect(expiredError).toMatchObject({ code: "upload_mint_failed" });
+    // An expired link is not called live.
+    expect(expiredError.message).not.toContain("live link");
     expect(log).toHaveBeenCalledWith(
       expect.stringContaining("already-expired link (check this host's clock)"),
     );

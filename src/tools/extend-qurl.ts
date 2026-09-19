@@ -44,10 +44,12 @@ const RESOURCE_LINK_PREVIEW_LIMIT = 100;
 // Whether resource.qurls lists every link. qurl_count counts all retained
 // links; when it is omitted, only a list under the cap is known to be whole.
 function linkListComplete(resource: Resource): boolean {
+  // A list at the cap is never trusted as whole, whatever qurl_count says.
   const listed = resource.qurls?.length ?? 0;
-  return resource.qurl_count === undefined
-    ? listed < RESOURCE_LINK_PREVIEW_LIMIT
-    : resource.qurl_count <= listed;
+  return (
+    listed < RESOURCE_LINK_PREVIEW_LIMIT &&
+    (resource.qurl_count === undefined || resource.qurl_count <= listed)
+  );
 }
 
 async function linkToExtend(

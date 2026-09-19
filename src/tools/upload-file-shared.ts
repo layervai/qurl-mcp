@@ -569,11 +569,13 @@ export async function mintUploadedFile(
     const responseLinks = (parsed as { links?: unknown } | undefined)?.links;
     liveQurlIds = reportedLinkIds(responseLinks).slice(0, 10);
     // Counted apart from IDs: a live link may come back without a qurl_id.
-    liveLinkCount = (Array.isArray(responseLinks) ? responseLinks : []).filter(
-      (entry: unknown) =>
-        typeof (entry as { qurl_link?: unknown } | null)?.qurl_link === "string" ||
-        typeof (entry as { qurl_id?: unknown } | null)?.qurl_id === "string",
-    ).length;
+    // An already-expired link is not live, so it is not counted.
+    liveLinkCount = (Array.isArray(responseLinks) ? responseLinks : []).filter((entry: unknown) => {
+      const link = entry as { qurl_link?: unknown; qurl_id?: unknown; expires_at?: unknown } | null;
+      const expired =
+        typeof link?.expires_at === "string" && Date.parse(link.expires_at) <= Date.now();
+      return !expired && (typeof link?.qurl_link === "string" || typeof link?.qurl_id === "string");
+    }).length;
     if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
     if ((parsed as { success?: unknown } | undefined)?.success === false) {
       const { detail } = extractConnectorError(parsed, "connector_mint_failed");

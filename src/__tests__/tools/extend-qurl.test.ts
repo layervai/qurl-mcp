@@ -290,6 +290,25 @@ describe("extendQurlTool", () => {
       expect(updateQurlToken).not.toHaveBeenCalled();
     });
 
+    it("never trusts a list at the preview cap as complete, whatever qurl_count says", async () => {
+      const hundred = Array.from({ length: 100 }, (_, i) =>
+        sampleAccessToken({
+          qurl_id: `q_${i.toString(16).padStart(11, "0")}`,
+          status: i === 0 ? "active" : "revoked",
+        }),
+      );
+      const updateQurlToken = vi.fn();
+      const getQURL = vi.fn().mockResolvedValue({
+        data: { ...fixture, qurl_count: 40, qurls: hundred },
+      });
+      const tool = extendQurlTool(makeMockClient({ getQURL, updateQurlToken }));
+
+      const result = await tool.handler({ resource_id: extendResourceId, extend_by: "1h" });
+
+      expect(JSON.stringify(result)).toContain("pass qurl_id to choose");
+      expect(updateQurlToken).not.toHaveBeenCalled();
+    });
+
     it("refuses a named qurl_id that the read shows is revoked", async () => {
       const revoked = sampleAccessToken({ qurl_id: "q_ccccccccccc", status: "revoked" });
       const updateQurlToken = vi.fn();
