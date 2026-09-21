@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.5.0...qurl-mcp-v0.6.0) (2026-09-21)
+
+
+### ⚠ BREAKING CHANGES
+
+* align MCP quota contract with unlimited resource links ([#289](https://github.com/layervai/qurl-mcp/issues/289))
+* **tools:** extend_qurl now extends the link, not the resource, and requires qurl:read in addition to qurl:write (a write-only key now fails before any change). Upload tools mint links through the connector's /api/mint_link (links cannot be revoked from this server yet, #281), reject access_policy and max_sessions (uploaded files can no longer carry an access policy or session cap in any connector mode, including legacy ones where minting on the upload resource used to apply them), bound expires_in to 1m-30d (default 24h) and session_duration to whole seconds from 1s-24h, make qurl_id optional in the result (omitted when the connector reports none), and drop qurl_site/branded_domain/type from it. update_qurl and update_qurl_token bound extend_by locally (create_qurl and mint_link keep API-side duration validation, #282). Duration inputs accept unsigned Go-unit sequences or whole days/weeks and reject leading signs, leading-dot fractions, and Greek mu. IQURLClient.extendQURL is removed; use updateQurlToken.
+
+### Features
+
+* **tools:** add CRID-based qURL link sharing ([#272](https://github.com/layervai/qurl-mcp/issues/272)) ([3f7a020](https://github.com/layervai/qurl-mcp/commit/3f7a020d15f82d7042ed5a74dc09ea0bca045b8c))
+
+
+### Bug Fixes
+
+* align MCP quota contract with unlimited resource links ([#289](https://github.com/layervai/qurl-mcp/issues/289)) ([425d3d9](https://github.com/layervai/qurl-mcp/commit/425d3d94765e5a2a0f6d8db67217b76e73c6d0ae))
+* **tools:** mint upload links through the connector and extend the link, not the resource ([0717190](https://github.com/layervai/qurl-mcp/commit/071719055425d0cdd686b3a098603e39987df27b))
+
 ## [0.5.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.4.1...qurl-mcp-v0.5.0) (2026-09-19)
 
 
