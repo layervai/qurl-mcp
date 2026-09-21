@@ -25,7 +25,7 @@ const sampleQuota: QuotaOutput = {
     active_resources_percent: 4.5,
     data_transfer_bytes: 1024,
     data_transfer_available: true,
-    active_qurls_percent: 0.45,
+    active_qurls_percent: 4.5,
     total_accesses: 1250,
   },
 };
