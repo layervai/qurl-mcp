@@ -1433,14 +1433,20 @@ paths:
                     create_per_minute: 200
                     create_per_hour: 10000
                     list_per_minute: 120
-                    resolve_per_minute: 300
+                    resolve_per_minute: 120
+                    max_qurls: -1
+                    max_active_resources: 1000
                     max_active_qurls: 1000
-                    max_tokens_per_qurl: 50
+                    max_tokens_per_qurl: -1
+                    max_data_transfer_bytes: -1
                     max_expiry_seconds: 2592000
                   usage:
                     qurls_created: 150
+                    active_resources: 45
+                    active_resources_percent: 4.5
                     active_qurls: 45
-                    active_qurls_percent: 0.45
+                    active_qurls_percent: 4.5
+                    data_transfer_bytes: 4294967296
                     total_accesses: 1250
                 meta:
                   request_id: "req_abc123"
@@ -4374,33 +4380,101 @@ components:
               type: integer
             resolve_per_minute:
               type: integer
-              description: Rate limit for token resolution requests
+              description: >-
+                Sustained token resolution refill rate per minute (-1 = unlimited).
+                The instantaneous burst allowance can be smaller; X-RateLimit-Limit
+                reports that burst allowance.
+            max_qurls:
+              type: integer
+              description: >-
+                Maximum qURLs you may hold across all your protected
+                resources (-1 = unlimited). Currently unlimited on every
+                plan — read the live value rather than assuming it.
+
+                `max_active_resources` bounds how many things you may
+                protect. It does not limit how many qURLs you may issue for
+                one protected resource.
+            max_active_resources:
+              type: integer
+              description: >-
+                Maximum active protected resources — the target URLs and
+                qURL Connectors you protect (-1 = unlimited). Reached only
+                when protecting something new; creating more qURLs for an existing
+                resource does not use this allowance. Other limits, access rules,
+                and resource status still apply.
             max_active_qurls:
               type: integer
-              description: Maximum active qURLs allowed (-1 = unlimited)
+              deprecated: true
+              description: >-
+                Deprecated — use `max_active_resources`, whose value this
+                mirrors. Despite the name it has always reported the
+                protected-resource cap, never a qURL cap. For the qURL cap,
+                read `max_qurls`.
             max_tokens_per_qurl:
               type: integer
-              description: Maximum tokens per qURL (-1 = unlimited)
+              deprecated: true
+              description: Deprecated compatibility field. Always -1 (unlimited); there is no per-resource qURL cap.
+            max_data_transfer_bytes:
+              type: integer
+              format: int64
+              description: >-
+                Maximum data proxied through your protected resources per
+                calendar month, in bytes (-1 = unlimited).
             max_expiry_seconds:
               type: integer
-              description: Maximum expiry duration in seconds (free=259200/3d, growth=2592000/30d, enterprise=2592000/30d)
+              description: Maximum expiry duration in seconds (2592000, or 30 days, on all customer plans)
         usage:
           type: object
           readOnly: true
           properties:
             qurls_created:
               type: integer
-              description: Total qURLs created this period
+              description: Total recorded qURL creations and link mints this UTC calendar month, including share links. Counts update asynchronously.
+            active_resources:
+              type: integer
+              description: Currently active protected resources
+            active_resources_percent:
+              type: number
+              format: float
+              minimum: 0
+              nullable: true
+              description: >-
+                Percentage of max_active_resources used. Null in TWO cases,
+                which a client must not conflate: your plan is unlimited, or
+                your plan could not be determined right now — in the second
+                case the limits reported alongside it are placeholders, so
+                do not render "unlimited" on a null alone.
+                Can exceed 100: the cap is applied when you protect something
+                new, so an account already above it keeps everything it has
+                and reports over 100 until it drops back under.
             active_qurls:
               type: integer
-              description: Currently active qURLs
+              deprecated: true
+              description: >-
+                Deprecated — use `active_resources`, whose value this
+                mirrors. Despite the name it has always reported the count
+                of active protected resources.
             active_qurls_percent:
               type: number
               format: float
               minimum: 0
-              maximum: 100
               nullable: true
-              description: Percentage of max_active_qurls used (0-100, null if unlimited)
+              deprecated: true
+              description: >-
+                Deprecated — use `active_resources_percent`, whose value
+                this mirrors, including the fact that it can exceed 100 and
+                that null means either "unlimited" or "plan could not be
+                determined".
+            data_transfer_bytes:
+              type: integer
+              format: int64
+              description: >-
+                Request and response bytes proxied in the current UTC calendar
+                month. Recent traffic can take a short time to appear. Use only
+                when data_transfer_available is true.
+            data_transfer_available:
+              type: boolean
+              description: Whether traffic measurement is enabled and the account usage was resolved.
             total_accesses:
               type: integer
               description: Total access attempts this period

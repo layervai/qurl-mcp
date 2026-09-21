@@ -211,12 +211,18 @@ export interface QuotaOutput {
     list_per_minute: number;
     resolve_per_minute: number;
     max_active_qurls: number;
-    max_tokens_per_qurl: number;
+    max_active_resources?: number;
+    max_qurls?: number;
+    max_data_transfer_bytes?: number;
     max_expiry_seconds: number;
   };
   usage: {
     qurls_created: number;
     active_qurls: number;
+    active_resources?: number;
+    active_resources_percent?: number | null;
+    data_transfer_bytes?: number;
+    data_transfer_available?: boolean;
     active_qurls_percent: number | null;
     total_accesses: number;
   };
