@@ -334,7 +334,7 @@ jobs:
           # Keep comment-triggered analysis on the same proven model as the
           # automatic PR review. The action's implicit default may select the
           # 1M-context variant, which this repository credential cannot start.
-          # scripts/check-claude-model-lockstep.py enforces this coupling.
+          # Nothing in this repository enforces this coupling; change both together.
           # Do not add extra allowed tools by default: the action's base GitHub
           # tools are sufficient here. The automatic review workflow uses a
           # narrow GitHub MCP allowlist because its explicit prompt needs PR
