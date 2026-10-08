@@ -334,7 +334,8 @@ jobs:
           # Keep comment-triggered analysis on the same proven model as the
           # automatic PR review. The action's implicit default may select the
           # 1M-context variant, which this repository credential cannot start.
-          # scripts/check-claude-model-lockstep.py enforces this coupling.
+          # Nothing in this repository enforces this coupling: change the model and
+          # effort here and in claude-code-review.yml together.
           # Do not add extra allowed tools by default: the action's base GitHub
           # tools are sufficient here. The automatic review workflow uses a
           # narrow GitHub MCP allowlist because its explicit prompt needs PR
@@ -387,7 +388,7 @@ jobs:
           # restoreConfigFromBase() fetches the base branch through it.
           # Asserting the LOCAL_ORIGIN pin survived therefore tested the
           # action's version, not Claude's behavior, and failed closed on every
-          # real PR. Still present in v1.0.194, so bumping does not fix it.
+          # real PR. Still present in v1.0.238, so bumping does not fix it.
           #
           # The property that pin bought still has to hold: origin may only ever
           # address THIS repository, so no credential-bearing remote can point
