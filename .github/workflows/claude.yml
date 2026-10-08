@@ -408,7 +408,7 @@ jobs:
           # the action_origin construction below is updated. The failure prints
           # the observed host and the expected destination, so start there.
           # The authority is everything up to the first "/", and userinfo is everything
-          # in it through the LAST "@". Host and userinfo are then held to allowlists,
+          # in it before the LAST "@". Host and userinfo are then held to allowlists,
           # because a URL client ends the host at "#", "?" or "\" as well: without that,
           # https://evil.example#@github.com/o/r.git parses here as host github.com
           # while git connects to evil.example. A shape outside the allowlists (an IPv6
