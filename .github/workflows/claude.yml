@@ -321,7 +321,7 @@ jobs:
         if: success()
         # v1.0.180 keeps interactive commands on the same fail-closed runner as
         # automatic review and avoids the v1.0.140/141 issue-comment crash.
-        uses: anthropics/claude-code-action@56cf60fde42f7b19c3abfd5c9c48b69a1288461f # v1.0.222
+        uses: anthropics/claude-code-action@12dd8d74c712f5f3669365b2369b558c495b1104 # v1.0.238
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Omit github_token so the action uses its OIDC/GitHub App token path.
@@ -339,7 +339,7 @@ jobs:
           # tools are sufficient here. The automatic review workflow uses a
           # narrow GitHub MCP allowlist because its explicit prompt needs PR
           # inspection.
-          claude_args: '--model claude-opus-5'
+          claude_args: '--model claude-opus-5-5 --effort medium'
 
       - name: Verify reviewed pull request head
         if: success() && steps.claude.outcome == 'success'
