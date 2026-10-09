@@ -1,14 +1,26 @@
-# @layervai/qurl-mcp
+# qURL MCP server for temporary access links
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
-> **⚠️ Renamed from `@layerv/qurl-mcp` in v0.4.0.** The old package is deprecated and will not receive further updates. If you're using `@layerv/qurl-mcp@0.3.x`, swap the scope in your MCP client config — same binary, same API key, no other changes.
+Give an AI agent tools to create and manage temporary qURL™ access links
+through the Model Context Protocol. The `@layervai/qurl-mcp` package runs as
+a local stdio server or an authenticated remote HTTP server and connects to
+the LayerV qURL API.
 
-> A qURL MCP Server that supports both local `stdio` mode and remote `HTTP` mode for creating, managing, resolving, and sharing secure access links.
+Start with the [MCP client configuration](#mcp-client-example), then choose
+the [link-management tools](#qurl-management-tools) for your task. Use the
+[qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli)
+to publish a local app first; creating a link does not start a connector or
+restrict an existing public URL. Uploads use a separate connector lifecycle;
+see [upload tools](#upload-tools) for their supported options and limits.
+
+> **⚠️ Renamed from `@layerv/qurl-mcp` in v0.4.0.** The old package is deprecated and will not receive further updates. If you're using `@layerv/qurl-mcp@0.3.x`, swap the scope in your MCP client config — same binary, same API key, no other changes.
 
 ## Overview
 
-`qURL MCP` exposes qURL capabilities to MCP clients, GPTs, ChatGPT, and other remote integrations.
+The server exposes qURL operations as MCP tools for clients that support the
+configured transport. See the [LayerV MCP guide](https://layerv.ai/mcp/) for
+product setup and the tables below for the capabilities in this source version.
 
 It currently supports:
 
