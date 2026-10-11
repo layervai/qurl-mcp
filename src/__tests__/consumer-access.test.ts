@@ -76,15 +76,13 @@ describe("consumer access publisher tools", () => {
   });
   it("passes opaque entitlement receipts without inventing payment verification", async () => {
     const client = makeMockClient({
-      approveConsumerGrant: vi
-        .fn()
-        .mockResolvedValue({
-          id: "a".repeat(64),
-          status: "active",
-          version: 2,
-          entitlement_id: "receipt-1",
-          expires_at: resource.expires_at,
-        }),
+      approveConsumerGrant: vi.fn().mockResolvedValue({
+        id: "a".repeat(64),
+        status: "active",
+        version: 2,
+        entitlement_id: "receipt-1",
+        expires_at: resource.expires_at,
+      }),
     });
     const approval = {
       expected_version: 1,

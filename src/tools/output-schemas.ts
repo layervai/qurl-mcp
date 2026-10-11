@@ -74,6 +74,15 @@ export const accessTokenOutputSchema = z
 
 /** Stable QURL resource shape returned by get/list/update/extend. */
 export const qurlSchema = z.looseObject({
+  crid: z.string().optional(),
+  private: z.boolean().optional(),
+  consumer_access: z
+    .looseObject({
+      mode: z.enum(["keys", "invite_only", "email_capture", "review", "contract"]),
+      version: z.number(),
+      contract_id: z.string().optional(),
+    })
+    .optional(),
   resource_id: z.string().describe("Stable resource identifier (public key or legacy r_ ID)"),
   qurl_site: z.string().optional(),
   target_url: z
