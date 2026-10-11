@@ -14,6 +14,31 @@ const resource = {
   expires_at: "2026-10-12T00:00:00Z",
 };
 describe("consumer access publisher tools", () => {
+  it("configures the first policy with version zero without weakening decision versions", async () => {
+    const client = makeMockClient({
+      updateResource: vi.fn().mockResolvedValue({ data: resource }),
+    });
+    const tool = manageCridAccessTool(client);
+    const result = await tool.handler({
+      action: "configure",
+      resource_id: resource.crid,
+      expected_version: 0,
+      policy: resource.consumer_access,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(client.updateResource).toHaveBeenCalledWith(resource.crid, {
+      consumer_access: resource.consumer_access,
+      expected_consumer_access_version: 0,
+    });
+    const refused = await tool.handler({
+      action: "revoke_grant",
+      resource_id: resource.crid,
+      id: "a".repeat(64),
+      expected_version: 0,
+    });
+    expect(refused.isError).toBe(true);
+    expect(client.revokeConsumerGrant).not.toHaveBeenCalled();
+  });
   it("publishes through the SDK helper and emits only resource metadata", async () => {
     const client = makeMockClient({
       protectUrl: vi
