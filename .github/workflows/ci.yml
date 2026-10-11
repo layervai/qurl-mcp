@@ -34,7 +34,7 @@ jobs:
         with:
           # Exercise the package's declared minimum runtime; lint/build run on
           # Node 22 so both the floor and primary development line are covered.
-          node-version: "20"
+          node-version: "22.12"
           cache: "npm"
       - run: npm ci
       - run: npm run test:coverage

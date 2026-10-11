@@ -19,6 +19,31 @@ It currently supports:
 - optionally serving LayerV public legal pages
 - serving a configurable MP4 video playback page
 
+## Private consumer access
+
+Node.js 22.12 or later is required by the shared qURL SDK.
+
+`publish_crid` creates a private URL resource with keys, invite_only,
+email_capture, review, or contract access. `manage_crid_access` changes the
+policy with its current version, sends invitations, lists grants, approves
+or denies requests, and removes access. The tools return resource-scoped
+receipts and omit invitation secrets and bearer links. Local apps use the
+qURL CLI on the publisher machine.
+
+For example, an assistant can turn “share this with ana@example.com, and
+allow no requests” into an invite_only resource and an authorized invitation.
+For email capture, the consumer must know that the publisher receives their
+verified email. A verified email proves mailbox control, not legal identity.
+Contract approval requires a trusted publisher backend entitlement receipt;
+these tools do not verify payment. Do not report connection removal as
+complete while session_cleanup is pending.
+
+This feature requires the matching service and admission readers. Keep it
+disabled until the publisher and consumer journeys pass. The draft pins a
+signed SDK commit for integration; before release, replace it with the
+published SDK version and verify a clean install with dependency scripts
+blocked. Do not weaken the script block to ship the Git dependency.
+
 ## Runtime Modes
 
 | Mode    | Purpose                         | Start Command        | Typical Use Case                                           |

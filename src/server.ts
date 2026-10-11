@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 import type { IQURLClient } from "./client.js";
+import { publishCridTool, manageCridAccessTool } from "./tools/consumer-access.js";
 import { createQurlTool } from "./tools/create-qurl.js";
 import { resolveQurlTool } from "./tools/resolve-qurl.js";
 import { listQurlsTool } from "./tools/list-qurls.js";
@@ -54,6 +55,8 @@ export type ToolFactory = (
 export type ServerMode = ToolRuntimeOptions["mode"];
 
 const sharedToolFactories = [
+  publishCridTool,
+  manageCridAccessTool,
   createQurlTool,
   resolveQurlTool,
   listQurlsTool,
