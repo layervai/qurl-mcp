@@ -9063,6 +9063,7 @@ components:
         - qurl.updated
         - resource.closed
         - qurl.accessed
+        - consumer.subscribed
         - qurl.access_denied
         - qurl.token_exhausted
         - quota.warning
@@ -9086,6 +9087,7 @@ components:
         - **qurl.updated** - Resource metadata or an individual qURL was updated. Individual link updates include `qurl_display_id`.
         - **resource.closed** - Not yet delivered. Planned to report that all links have ended and no active sessions remain.
         - **qurl.accessed** - Access through a qURL succeeded. Resources with `type=transit` omit viewer IP and user agent. See `WebhookPayload`.
+        - **consumer.subscribed** - A publisher backend confirmed a contract entitlement. Contains a resource-scoped consumer reference, policy and grant versions, contract and expiry; omits consumer email and credential identity. Deduplicate by resource, consumer_reference and grant_version.
         - **qurl.access_denied** - Access to a qURL was denied by policy
         - **qurl.token_exhausted** - A one-time-use token was fully consumed
         - **quota.warning** - Approaching quota limit (80%)
