@@ -56,7 +56,7 @@ function receipt<T>(schema: z.ZodType<T>, value: unknown, resourceId: string): T
   if (!parsed.success) {
     throw new QURLAPIError(
       0,
-      "invalid_response",
+      "access_receipt_unconfirmed",
       `The service returned an unrecognized access receipt. A write may have been applied; read resource ${resourceId} and list its access before retrying.`,
     );
   }
@@ -71,7 +71,7 @@ export function publishCridTool(
     name: "publish_crid",
     title: "Publish a private CRID",
     description:
-      "Publish a URL with private access. Choose keys for approved credentials, invite_only for publisher email invitations with no access requests, email_capture for verified email capture with consent, review for verified email requests, or contract for a publisher backend entitlement receipt. This tool does not verify payment. Use version 1 for creation. For local apps use the qURL CLI. Public sharing uses create_qurl.",
+      "Publish a URL with private access. Choose keys for approved credentials, invite_only for publisher email invitations with no access requests, email_capture for verified email capture with consent, review for verified email requests, or contract for a publisher backend entitlement receipt. This tool does not verify payment. Use version 1 for creation. Repeating this call creates another resource; after an uncertain result use get_qurl or list_qurls before retrying. For local apps use the qURL CLI. Public sharing uses create_qurl.",
     inputSchema: publishInput,
     outputSchema: resource,
     annotations: {
@@ -218,7 +218,7 @@ export function manageCridAccessTool(
           ) {
             throw new QURLAPIError(
               0,
-              "invalid_response",
+              "access_receipt_unconfirmed",
               "The service did not confirm the private access policy; the update may have been applied. Re-read the resource before retrying.",
             );
           }

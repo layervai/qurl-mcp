@@ -16,21 +16,20 @@ const resource = {
 describe("consumer access publisher tools", () => {
   it("keeps a failed receipt recoverable without leaking response secrets", async () => {
     const client = makeMockClient({
-      protectUrl: vi
-        .fn()
-        .mockResolvedValue({
-          crid: resource.crid,
-          details: { ...resource, private: false, invitation_token: "must-not-leak" },
-        }),
+      protectUrl: vi.fn().mockResolvedValue({
+        crid: resource.crid,
+        details: { ...resource, private: false, invitation_token: "must-not-leak" },
+      }),
     });
-    const error = await publishCridTool(client)
-      .handler({ target_url: resource.target_url, policy: resource.consumer_access })
-      .catch((error: Error) => error);
-    expect(error).toBeInstanceOf(Error);
-    expect(String(error)).toContain(resource.crid);
-    expect(String(error)).toContain("write may have been applied");
-    expect(String(error)).toContain("before retrying");
-    expect(String(error)).not.toContain("must-not-leak");
+    const result = await publishCridTool(client).handler({
+      target_url: resource.target_url,
+      policy: resource.consumer_access,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain(resource.crid);
+    expect(JSON.stringify(result)).toContain("write may have been applied");
+    expect(JSON.stringify(result)).toContain("before retrying");
+    expect(JSON.stringify(result)).not.toContain("must-not-leak");
     expect(client.protectUrl).toHaveBeenCalledTimes(1);
   });
   it("rejects display IDs and version-zero existing grant approvals before writing", async () => {
@@ -125,14 +124,16 @@ describe("consumer access publisher tools", () => {
         },
       }),
     });
-    await expect(
-      manageCridAccessTool(client).handler({
-        action: "configure",
-        resource_id: resource.crid,
-        expected_version: 0,
-        policy: { mode: "contract", version: 1, contract_id: "requested" },
-      }),
-    ).rejects.toThrow("the update may have been applied. Re-read the resource before retrying");
+    const result = await manageCridAccessTool(client).handler({
+      action: "configure",
+      resource_id: resource.crid,
+      expected_version: 0,
+      policy: { mode: "contract", version: 1, contract_id: "requested" },
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result)).toContain(
+      "the update may have been applied. Re-read the resource before retrying",
+    );
   });
 
   it("preserves new server receipt statuses without exposing added fields", async () => {
