@@ -39,10 +39,10 @@ these tools do not verify payment. Do not report connection removal as
 complete while session_cleanup is pending.
 
 This feature requires the matching service and admission readers. Keep it
-disabled until the publisher and consumer journeys pass. The draft pins a
-signed SDK commit for integration; before release, replace it with the
-published SDK version and verify a clean install with dependency scripts
-blocked. Do not weaken the script block to ship the Git dependency.
+disabled until the publisher and consumer journeys pass. The package pins
+the published SDK 3.0.0 and supports clean installation with dependency
+scripts blocked. This release requires Node.js 22.12 or later; Node.js 20
+is no longer supported.
 
 ## Runtime Modes
 

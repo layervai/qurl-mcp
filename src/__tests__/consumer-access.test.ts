@@ -14,6 +14,147 @@ const resource = {
   expires_at: "2026-10-12T00:00:00Z",
 };
 describe("consumer access publisher tools", () => {
+  it("keeps a failed receipt recoverable without leaking response secrets", async () => {
+    const client = makeMockClient({
+      protectUrl: vi
+        .fn()
+        .mockResolvedValue({
+          crid: resource.crid,
+          details: { ...resource, private: false, invitation_token: "must-not-leak" },
+        }),
+    });
+    const error = await publishCridTool(client)
+      .handler({ target_url: resource.target_url, policy: resource.consumer_access })
+      .catch((error: Error) => error);
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toContain(resource.crid);
+    expect(String(error)).toContain("write may have been applied");
+    expect(String(error)).toContain("before retrying");
+    expect(String(error)).not.toContain("must-not-leak");
+    expect(client.protectUrl).toHaveBeenCalledTimes(1);
+  });
+  it("rejects display IDs and version-zero existing grant approvals before writing", async () => {
+    const client = makeMockClient();
+    const tool = manageCridAccessTool(client);
+    expect(
+      (
+        await tool.handler({
+          action: "invite",
+          resource_id: "q_123456789ab",
+          email: "ana@example.com",
+        })
+      ).isError,
+    ).toBe(true);
+    expect(client.inviteConsumer).not.toHaveBeenCalled();
+    expect(
+      (
+        await tool.handler({
+          action: "approve",
+          resource_id: resource.crid,
+          id: "a".repeat(64),
+          approval: { expected_version: 0 },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(client.approveConsumerGrant).not.toHaveBeenCalled();
+  });
+
+  it("accepts new credential approval at version zero", async () => {
+    const client = makeMockClient({
+      approveConsumerGrant: vi
+        .fn()
+        .mockResolvedValue({ id: "a".repeat(64), status: "active", version: 1 }),
+    });
+    expect(
+      (
+        await manageCridAccessTool(client).handler({
+          action: "approve",
+          resource_id: resource.crid,
+          id: "new",
+          approval: { expected_version: 0 },
+        })
+      ).isError,
+    ).not.toBe(true);
+    expect(client.approveConsumerGrant).toHaveBeenCalledWith(resource.crid, "new", {
+      expected_version: 0,
+    });
+  });
+
+  it("strips added output policy fields while keeping strict input policies", async () => {
+    const client = makeMockClient({
+      updateResource: vi.fn().mockResolvedValue({
+        data: {
+          ...resource,
+          consumer_access: { ...resource.consumer_access, invitation_token: "must-not-leak" },
+        },
+      }),
+    });
+    const result = await manageCridAccessTool(client).handler({
+      action: "configure",
+      resource_id: resource.crid,
+      expected_version: 0,
+      policy: resource.consumer_access,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(JSON.stringify(result)).not.toContain("must-not-leak");
+    expect(
+      (
+        await publishCridTool(client).handler({
+          target_url: resource.target_url,
+          policy: { mode: "contract", version: 1 },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(
+      (
+        await publishCridTool(client).handler({
+          target_url: resource.target_url,
+          policy: { ...resource.consumer_access, contract_id: "wrong" },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(client.protectUrl).not.toHaveBeenCalled();
+  });
+
+  it("reports a policy mismatch as a possibly applied update", async () => {
+    const client = makeMockClient({
+      updateResource: vi.fn().mockResolvedValue({
+        data: {
+          ...resource,
+          consumer_access: { mode: "contract", version: 1, contract_id: "other" },
+        },
+      }),
+    });
+    await expect(
+      manageCridAccessTool(client).handler({
+        action: "configure",
+        resource_id: resource.crid,
+        expected_version: 0,
+        policy: { mode: "contract", version: 1, contract_id: "requested" },
+      }),
+    ).rejects.toThrow("the update may have been applied. Re-read the resource before retrying");
+  });
+
+  it("preserves new server receipt statuses without exposing added fields", async () => {
+    const client = makeMockClient({
+      inviteConsumer: vi.fn().mockResolvedValue({
+        id: "a".repeat(64),
+        email: "ana@example.com",
+        status: "open",
+        delivery: "delayed",
+        version: 1,
+        expires_at: resource.expires_at,
+        invitation_token: "must-not-leak",
+      }),
+    });
+    const result = await manageCridAccessTool(client).handler({
+      action: "invite",
+      resource_id: resource.crid,
+      email: "ana@example.com",
+    });
+    expect(result.structuredContent).toMatchObject({ invitation: { delivery: "delayed" } });
+    expect(JSON.stringify(result)).not.toContain("must-not-leak");
+  });
   it("configures the first policy with version zero without weakening decision versions", async () => {
     const client = makeMockClient({
       updateResource: vi.fn().mockResolvedValue({ data: resource }),

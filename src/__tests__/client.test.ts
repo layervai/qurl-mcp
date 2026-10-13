@@ -428,6 +428,15 @@ describe("QURLClient adapter", () => {
   });
 
   describe("error translation", () => {
+    it.each(["r_test1234567", "a".repeat(60)])(
+      "deletes resource identifier %s through the SDK",
+      async (id) => {
+        sdk.deleteResourceByIdentifier.mockResolvedValue(undefined);
+        await newClient().deleteQURL(id);
+        expect(sdk.deleteResourceByIdentifier).toHaveBeenCalledWith(id);
+      },
+    );
+
     it("maps an SDK NotFoundError to QURLAPIError with statusCode 404 (delete-qurl branch)", async () => {
       sdk.deleteResourceByIdentifier.mockRejectedValue(
         new NotFoundError({

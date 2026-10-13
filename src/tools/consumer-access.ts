@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { QURLAPIError, type IQURLClient } from "../client.js";
 import {
-  resourceIdSchema,
+  resourceOnlyIdSchema,
   toStructuredContent,
   withMissingApiKeyHandler,
   zodErrorToToolResult,
@@ -25,20 +25,20 @@ const resource = z.object({
   resource_id: z.string(),
   crid: z.string(),
   private: z.literal(true),
-  consumer_access: policy,
+  consumer_access: policy.strip(),
 });
 const invitation = z.object({
   id: z.string(),
   email: z.string(),
-  status: z.enum(["open", "enrolled", "revoked"]),
-  delivery: z.enum(["queued", "accepted", "failed"]),
+  status: z.string().min(1).max(64),
+  delivery: z.string().min(1).max(64),
   version,
   expires_at: z.string(),
   session_cleanup: z.enum(["pending", "complete"]).optional(),
 });
 const grant = z.object({
   id: z.string(),
-  status: z.enum(["pending", "active", "revoked"]),
+  status: z.string().min(1).max(64),
   version,
   credential_kind: z.enum(["passkey", "device"]).optional(),
   credential_id: z.string().optional(),
@@ -50,6 +50,18 @@ const grant = z.object({
   session_cleanup: z.enum(["pending", "complete"]).optional(),
 });
 const publishInput = z.object({ target_url: z.string().url(), policy: validPolicy }).strict();
+
+function receipt<T>(schema: z.ZodType<T>, value: unknown, resourceId: string): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) {
+    throw new QURLAPIError(
+      0,
+      "invalid_response",
+      `The service returned an unrecognized access receipt. A write may have been applied; read resource ${resourceId} and list its access before retrying.`,
+    );
+  }
+  return parsed.data;
+}
 
 export function publishCridTool(
   client: IQURLClient,
@@ -75,7 +87,7 @@ export function publishCridTool(
       const handle = await client.protectUrl(parsed.data.target_url, {
         consumerAccess: parsed.data.policy,
       });
-      const data = resource.parse(handle.details);
+      const data = receipt(resource, handle.details, handle.crid);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(data) }],
         structuredContent: toStructuredContent(data),
@@ -107,7 +119,7 @@ const base = z
       "deny",
       "revoke_grant",
     ]),
-    resource_id: resourceIdSchema("manage access"),
+    resource_id: resourceOnlyIdSchema("manage access"),
     policy: validPolicy.optional(),
     email: z.string().email().max(320).optional(),
     id: z.string().min(1).max(64).optional(),
@@ -117,35 +129,41 @@ const base = z
     limit: z.number().int().min(1).max(100).optional(),
   })
   .strict();
-const identity = z.object({ resource_id: resourceIdSchema("manage access") });
+const identity = z.object({ resource_id: resourceOnlyIdSchema("manage access") });
 const decision = { id: z.string().regex(/^[a-f0-9]{64}$/), expected_version: version };
 const page = {
   cursor: z.string().max(4096).optional(),
   limit: z.number().int().min(1).max(100).optional(),
 };
-const actions = z.discriminatedUnion("action", [
-  identity
-    .extend({
-      action: z.literal("configure"),
-      policy: validPolicy,
-      expected_version: initialVersion,
-    })
-    .strict(),
-  identity.extend({ action: z.literal("invite"), email: z.string().email().max(320) }).strict(),
-  identity.extend({ action: z.literal("list_invitations"), ...page }).strict(),
-  identity.extend({ action: z.literal("list_grants"), ...page }).strict(),
-  identity.extend({ action: z.literal("resend"), ...decision }).strict(),
-  identity.extend({ action: z.literal("revoke_invitation"), ...decision }).strict(),
-  identity
-    .extend({
-      action: z.literal("approve"),
-      id: z.union([decision.id, z.literal("new")]),
-      approval,
-    })
-    .strict(),
-  identity.extend({ action: z.literal("deny"), ...decision }).strict(),
-  identity.extend({ action: z.literal("revoke_grant"), ...decision }).strict(),
-]);
+const actions = z
+  .discriminatedUnion("action", [
+    identity
+      .extend({
+        action: z.literal("configure"),
+        policy: validPolicy,
+        expected_version: initialVersion,
+      })
+      .strict(),
+    identity.extend({ action: z.literal("invite"), email: z.string().email().max(320) }).strict(),
+    identity.extend({ action: z.literal("list_invitations"), ...page }).strict(),
+    identity.extend({ action: z.literal("list_grants"), ...page }).strict(),
+    identity.extend({ action: z.literal("resend"), ...decision }).strict(),
+    identity.extend({ action: z.literal("revoke_invitation"), ...decision }).strict(),
+    identity
+      .extend({
+        action: z.literal("approve"),
+        id: z.union([decision.id, z.literal("new")]),
+        approval,
+      })
+      .strict(),
+    identity.extend({ action: z.literal("deny"), ...decision }).strict(),
+    identity.extend({ action: z.literal("revoke_grant"), ...decision }).strict(),
+  ])
+  .refine(
+    (input) =>
+      input.action !== "approve" || input.id === "new" || input.approval.expected_version >= 1,
+    "Approval of an existing grant requires expected_version of at least 1",
+  );
 const output = z
   .object({
     action: base.shape.action,
@@ -166,7 +184,7 @@ export function manageCridAccessTool(
     name: "manage_crid_access",
     title: "Manage private CRID access",
     description:
-      "Publisher access control. Configure the next policy version, send or resend an email invitation, list invitations or consumer grants, approve or deny a request, approve a credential with id new, or revoke access. Read the current version before a decision; configuring the first policy on an existing private resource uses expected_version 0. Invite-only access has no consumer requests. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. A removal is complete only when session_cleanup is complete; retry the same removal/version while pending. Email proves mailbox control, not legal identity. Only listed fields are returned; invitation secrets and bearer links are never returned.",
+      "Publisher access control. Configure the next policy version, send or resend an email invitation, list invitations or consumer grants, approve or deny a request, approve a credential with id new, or revoke access. Read the current version before a decision; configuring the first policy on an existing private resource uses expected_version 0. For approve, put expected_version inside approval; zero is allowed only for id new. After an uncertain invite result, list invitations before retrying. Invite-only access has no consumer requests. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. A removal is complete only when session_cleanup is complete; retry the same removal/version while pending. Email proves mailbox control, not legal identity. Only listed fields are returned; invitation secrets and bearer links are never returned.",
     inputSchema: base,
     outputSchema: output,
     annotations: {
@@ -183,13 +201,15 @@ export function manageCridAccessTool(
       let result: z.infer<typeof output> = { action: input.action };
       switch (input.action) {
         case "configure":
-          result.resource = resource.parse(
+          result.resource = receipt(
+            resource,
             (
               await client.updateResource(input.resource_id, {
                 consumer_access: input.policy,
                 expected_consumer_access_version: input.expected_version,
               })
             ).data,
+            input.resource_id,
           );
           if (
             result.resource.consumer_access.mode !== input.policy.mode ||
@@ -199,46 +219,58 @@ export function manageCridAccessTool(
             throw new QURLAPIError(
               0,
               "invalid_response",
-              "The service did not confirm the private access policy",
+              "The service did not confirm the private access policy; the update may have been applied. Re-read the resource before retrying.",
             );
           }
           break;
         case "invite":
-          result.invitation = invitation.parse(
+          result.invitation = receipt(
+            invitation,
             await client.inviteConsumer(input.resource_id, input.email),
+            input.resource_id,
           );
           break;
         case "resend":
-          result.invitation = invitation.parse(
+          result.invitation = receipt(
+            invitation,
             await client.resendConsumerInvitation(
               input.resource_id,
               input.id,
               input.expected_version,
             ),
+            input.resource_id,
           );
           break;
         case "revoke_invitation":
-          result.invitation = invitation.parse(
+          result.invitation = receipt(
+            invitation,
             await client.revokeConsumerInvitation(
               input.resource_id,
               input.id,
               input.expected_version,
             ),
+            input.resource_id,
           );
           break;
         case "approve":
-          result.grant = grant.parse(
+          result.grant = receipt(
+            grant,
             await client.approveConsumerGrant(input.resource_id, input.id, input.approval),
+            input.resource_id,
           );
           break;
         case "deny":
-          result.grant = grant.parse(
+          result.grant = receipt(
+            grant,
             await client.denyConsumerGrant(input.resource_id, input.id, input.expected_version),
+            input.resource_id,
           );
           break;
         case "revoke_grant":
-          result.grant = grant.parse(
+          result.grant = receipt(
+            grant,
             await client.revokeConsumerGrant(input.resource_id, input.id, input.expected_version),
+            input.resource_id,
           );
           break;
         case "list_invitations": {
@@ -246,8 +278,8 @@ export function manageCridAccessTool(
             cursor: input.cursor,
             limit: input.limit,
           });
-          result.invitations = z.array(invitation).parse(reply.invitations);
-          result.next_cursor = reply.next_cursor;
+          result.invitations = receipt(z.array(invitation), reply.invitations, input.resource_id);
+          result.next_cursor = reply.next_cursor ?? undefined;
           break;
         }
         case "list_grants": {
@@ -255,8 +287,8 @@ export function manageCridAccessTool(
             cursor: input.cursor,
             limit: input.limit,
           });
-          result.grants = z.array(grant).parse(reply.grants);
-          result.next_cursor = reply.next_cursor;
+          result.grants = receipt(z.array(grant), reply.grants, input.resource_id);
+          result.next_cursor = reply.next_cursor ?? undefined;
           break;
         }
       }
