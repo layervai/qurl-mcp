@@ -5,7 +5,7 @@
 
 ### ⚠ BREAKING CHANGES
 
-* **tools:** add private CRID publishing and access tools ([#313](https://github.com/layervai/qurl-mcp/issues/313))
+* **tools:** Node.js 22.12 or later is required by SDK 3.0.0; Node.js 20 is no longer supported. Add private CRID publishing and access tools ([#313](https://github.com/layervai/qurl-mcp/issues/313)).
 * align MCP quota contract with unlimited resource links ([#289](https://github.com/layervai/qurl-mcp/issues/289))
 * **tools:** extend_qurl now extends the link, not the resource, and requires qurl:read in addition to qurl:write (a write-only key now fails before any change). Upload tools mint links through the connector's /api/mint_link (links cannot be revoked from this server yet, #281), reject access_policy and max_sessions (uploaded files can no longer carry an access policy or session cap in any connector mode, including legacy ones where minting on the upload resource used to apply them), bound expires_in to 1m-30d (default 24h) and session_duration to whole seconds from 1s-24h, make qurl_id optional in the result (omitted when the connector reports none), and drop qurl_site/branded_domain/type from it. update_qurl and update_qurl_token bound extend_by locally (create_qurl and mint_link keep API-side duration validation, #282). Duration inputs accept unsigned Go-unit sequences or whole days/weeks and reject leading signs, leading-dot fractions, and Greek mu. IQURLClient.extendQURL is removed; use updateQurlToken.
 
