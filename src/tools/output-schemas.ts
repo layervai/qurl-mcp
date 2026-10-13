@@ -77,9 +77,9 @@ export const qurlSchema = z.looseObject({
   crid: z.string().optional(),
   private: z.boolean().optional(),
   consumer_access: z
-    .looseObject({
-      mode: z.enum(["keys", "invite_only", "email_capture", "review", "contract"]),
-      version: z.number(),
+    .object({
+      mode: z.string(),
+      version: z.number().optional(),
       contract_id: z.string().optional(),
     })
     .optional(),

@@ -60,9 +60,12 @@ describe("output schema <-> client type alignment", () => {
       consumer_access: { mode: "contract", version: 2, contract_id: "paid-access" },
     };
     expect(qurlSchema.parse(resource)).toEqual(resource);
-    expect(qurlSchema.safeParse({ ...resource, consumer_access: { mode: "keys" } }).success).toBe(
-      false,
-    );
+    expect(
+      qurlSchema.parse({
+        ...resource,
+        consumer_access: { mode: "future_mode", invitation_token: "must-not-leak" },
+      }).consumer_access,
+    ).toEqual({ mode: "future_mode" });
   });
 
   it("createQurlOutputSchema matches CreateQURLData", () => {

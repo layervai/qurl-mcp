@@ -60,7 +60,7 @@ export interface SessionData {
 export interface QURL {
   crid?: string;
   private?: boolean;
-  consumer_access?: ConsumerAccessPolicy;
+  consumer_access?: { mode: string; version?: number; contract_id?: string };
   resource_id: string;
   qurl_site?: string;
   // Connector-owned resources intentionally omit target_url from management
