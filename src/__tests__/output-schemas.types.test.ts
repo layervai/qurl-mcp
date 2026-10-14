@@ -52,6 +52,22 @@ describe("output schema <-> client type alignment", () => {
     expectTypeOf<KnownFields<z.infer<typeof qurlSchema>>>().toEqualTypeOf<QURL>();
   });
 
+  it("retains private resource policy metadata", () => {
+    const resource = {
+      ...sampleQURL(),
+      crid: "resource-crid",
+      private: true,
+      consumer_access: { mode: "contract", version: 2, contract_id: "paid-access" },
+    };
+    expect(qurlSchema.parse(resource)).toEqual(resource);
+    expect(
+      qurlSchema.parse({
+        ...resource,
+        consumer_access: { mode: "future_mode", invitation_token: "must-not-leak" },
+      }).consumer_access,
+    ).toEqual({ mode: "future_mode" });
+  });
+
   it("createQurlOutputSchema matches CreateQURLData", () => {
     type CreateToolOutput = Omit<CreateQURLData, "qurl_site" | "expires_at"> &
       Partial<Pick<CreateQURLData, "qurl_site" | "expires_at">> & {

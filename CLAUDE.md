@@ -58,7 +58,8 @@ qURL MCP Server is a TypeScript [Model Context Protocol](https://modelcontextpro
 ```
 qurl-mcp/
 ├── src/
-│   ├── index.ts           # Entry point, env validation, stdio transport
+│   ├── index.ts           # Entry point, env validation, stdio transport (API key or local CLI)
+│   ├── qurl-cli.ts        # Bounded runner for the local qURL CLI (no-account stdio mode)
 │   ├── http.ts            # Authenticated HTTP transport and public routes
 │   ├── http-config.ts     # Bounded listener/session/proxy configuration
 │   ├── config.ts          # Shared qURL, connector, SMTP, and media config
@@ -69,6 +70,8 @@ qurl-mcp/
 │   │   ├── duration.ts      # Duration grammar and bounds mirrored from qurl-service
 │   │   ├── upload-mint-options.ts # Shared upload link options and descriptions
 │   │   ├── create-qurl.ts
+│   │   ├── consumer-access.ts # Private publishing, invitations, and consumer grants
+│   │   ├── local-cli.ts     # No-account tools that run the local qURL CLI
 │   │   ├── resolve-qurl.ts
 │   │   ├── list-qurls.ts
 │   │   ├── get-qurl.ts
@@ -133,7 +136,7 @@ npm run format
 
 | Variable                                                            | Required  | Description                                                          | Default                 |
 | ------------------------------------------------------------------- | --------- | -------------------------------------------------------------------- | ----------------------- |
-| `QURL_API_KEY`                                                      | Yes       | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes | —                       |
+| `QURL_API_KEY`                                                      | No        | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes; unset in stdio = local qURL CLI mode | —                       |
 | `QURL_API_URL`                                                      | No        | qURL API base URL                                                    | `https://api.layerv.ai` |
 | `QURL_CONNECTOR_URL`                                                | Uploads   | HTTPS connector base URL                                             | —                       |
 | `QURL_MCP_CONFIG`                                                   | No        | Shared runtime config path                                           | `qurl-mcp.config.json`  |
@@ -151,23 +154,32 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 
 ## MCP Usage
 
+Without an account (stdio with no `QURL_API_KEY`), the server drives the locally
+installed `qurl` CLI and lists only the tools in `src/tools/local-cli.ts`:
+`publish_crid`, `share_by_crid`, `list_crids`, `manage_crid_requests`,
+`manage_crid_access`, `set_crid_sharing`, `delete_crid`.
+
 ```json
 {
   "mcpServers": {
     "qurl": {
       "command": "npx",
-      "args": ["@layervai/qurl-mcp"],
-      "env": { "QURL_API_KEY": "lv_live_xxx" }
+      "args": ["-y", "@layervai/qurl-mcp"]
     }
   }
 }
 ```
+
+With an account key, add `"env": { "QURL_API_KEY": "lv_live_xxx" }`; the tools
+below use the qURL API. HTTP mode always takes the key as a per-request bearer.
 
 ## Tools
 
 | Tool                      | Scope Required | Description                                             |
 | ------------------------- | -------------- | ------------------------------------------------------- |
 | `create_qurl`             | `qurl:write`   | Create a protected link                                 |
+| `publish_crid`            | `qurl:write`   | Publish a private URL CRID                              |
+| `manage_crid_access`      | `qurl:write` for writes, `qurl:read` for lists | Manage private invitations and grants |
 | `resolve_qurl`            | `qurl:resolve` | Resolve token + grant network access                    |
 | `list_qurls`              | `qurl:read`    | List qURLs with filtering                               |
 | `get_qurl`                | `qurl:read`    | Get qURL details                                        |
@@ -254,8 +266,8 @@ The additive `POST /v1/resources/{id}/share` route is not yet in this older
 snapshot. Its `ttl_seconds` request and share response were checked against
 qurl-service `3e06b0b` (`internal/api/handlers/resource_share.go` and the generated
 API types), plus live CRID share smoke tests. The raw share client makes one
-attempt with a 30-second timeout because SDK 0.3.1 has no share method or public
-request API. A repeated MCP call is a new mint and can create another link.
+attempt with a 30-second timeout. A repeated MCP call is a new mint and can
+create another link. The package now uses the published SDK 3.0.0.
 
 ## npm Publishing (Trusted Publishing / OIDC)
 

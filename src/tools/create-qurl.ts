@@ -147,7 +147,7 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
       "**Behavior:** not idempotent — calling twice produces two distinct qURL tokens, though both may share the same `resource_id` when the target URL groups to an existing same-type resource (this tool doesn't surface the underlying API's `Idempotency-Key` header). " +
       "The returned `qurl_link` is shown ONCE in this response and is never recoverable through `get_qurl` or `list_qurls`; persist or share it immediately. " +
       "A returned resource is in `active` status with the policy and per-token limits applied. " +
-      "If `expires_in` is omitted the API defaults to **24h** — do not assume the link is permanent. " +
+      "Set `expires_in` explicitly for a predictable lifetime; otherwise the service uses its defaults. Read `expires_at` in the response. " +
       "`max_sessions` is per minted qURL, not resource-wide; set `one_time_use: false` explicitly when you need `max_sessions: 0` to mean unlimited visitors. " +
       "**Returns:** `{ qurl_id: string (q_…), resource_id: string, qurl_link: string (shown once), branded_domain?: string, qurl_site: string, expires_at: string (RFC 3339), label?: string, type?: string }`. " +
       "`qurl_id` is the only `q_…` display ID an agent gets in this response — keep it if you plan a follow-up against `get_qurl`/`update_qurl`/`mint_link` (which accept either prefix). " +

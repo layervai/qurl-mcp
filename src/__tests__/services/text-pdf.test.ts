@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, WriteStream } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Writable } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -109,9 +109,6 @@ describe("createTextPdfTempFile", () => {
   });
 
   it("destroys the write stream and removes the temp directory after a render error", async () => {
-    const tempEntriesBefore = new Set(
-      readdirSync(tmpdir()).filter((entry) => entry.startsWith("qurl-text-pdf-")),
-    );
     const destroy = vi.spyOn(Writable.prototype, "destroy");
     vi.spyOn(PDFDocument.prototype, "text").mockImplementation(() => {
       throw new Error("text render failed");
@@ -120,9 +117,9 @@ describe("createTextPdfTempFile", () => {
     await expect(createTextPdfTempFile({ content: "hello" })).rejects.toThrow("text render failed");
 
     expect(destroy).toHaveBeenCalled();
-    const newTempEntries = readdirSync(tmpdir()).filter(
-      (entry) => entry.startsWith("qurl-text-pdf-") && !tempEntriesBefore.has(entry),
-    );
-    expect(newTempEntries).toEqual([]);
+    // Other test workers can create PDFs in the same temporary directory.
+    const stream = destroy.mock.instances.find((instance) => instance instanceof WriteStream);
+    expect(stream).toBeDefined();
+    expect(existsSync(dirname(stream!.path.toString()))).toBe(false);
   });
 });
