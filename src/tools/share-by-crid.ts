@@ -38,7 +38,7 @@ const UNIT_NANOSECONDS: Record<string, bigint> = {
   ns: 1n,
 };
 
-function parseTTLSeconds(ttl: string): number | undefined {
+export function parseTTLSeconds(ttl: string): number | undefined {
   let offset = ttl.startsWith("+") ? 1 : 0;
   let nanoseconds = 0n;
 
@@ -61,7 +61,7 @@ function parseTTLSeconds(ttl: string): number | undefined {
     : undefined;
 }
 
-function normalizeCRID(crid: string): string | undefined {
+export function normalizeCRID(crid: string): string | undefined {
   const trimmed = crid.trim();
   const normalized = trimmed.startsWith("$") ? trimmed.slice(1).trim() : trimmed;
   return normalized || undefined;

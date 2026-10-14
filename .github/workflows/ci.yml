@@ -64,44 +64,43 @@ jobs:
           # misleading "missing tool" message. Fail at the actual cause.
           set -euo pipefail
           shopt -s inherit_errexit
-          # Pipe stderr to a separate file so we can assert the
-          # introspection-only warning still prints. The warning is the only
-          # signal a misconfigured user gets that they're booting without an
-          # API key under the deferred-auth model; silently stripping it
-          # should fail CI.
           # `timeout 30s` fails fast with a clear signal if the entrypoint
           # hangs (e.g. an SDK notification-ordering bug) instead of letting
           # the step run to the GitHub Actions default.
-          # Probe asserts three things end-to-end:
-          #   1. tools/list exposes the full registered surface
-          #   2. boot-time stderr warning fires when QURL_API_KEY is unset
-          #   3. a tool invocation under introspection-only mode surfaces
-          #      the typed missing_api_key error as an isError content
-          #      block (not as a JSON-RPC transport error), locking in the
-          #      withMissingApiKeyHandler wrapper from tools/_shared.ts
-          out=$(printf '%s\n' \
-            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}' \
-            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_qurls","arguments":{}}}' \
-            | timeout 30s docker run -i --rm qurl-mcp:ci 2>/tmp/mcp-stderr)
+          init='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"1.0"}}}'
+          ready='{"jsonrpc":"2.0","method":"notifications/initialized"}'
+          list='{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
           # Match the JSON-RPC `name` field specifically. A loose grep on the
           # tool name alone would pass when the tool only appears in another
-          # tool's description (e.g. update_qurl's description mentions
-          # extend_qurl), so dropping a tool from registration could go
+          # tool's description, so dropping a tool from registration could go
           # undetected. The MCP SDK emits minified JSON, so the literal
           # "name":"<tool>" substring appears exactly once per registered tool.
-          for tool in create_qurl resolve_qurl list_qurls get_qurl delete_qurl extend_qurl update_qurl mint_link batch_create_qurls; do
-            grep -Fq "\"name\":\"$tool\"" <<<"$out" || { echo "tools/list missing $tool (no \"name\":\"$tool\" match)"; echo "$out"; exit 1; }
-          done
-          grep -q "QURL_API_KEY is not set" /tmp/mcp-stderr || { echo "missing introspection-only warning on stderr"; cat /tmp/mcp-stderr; exit 1; }
-          # Assert the tool/call response under no-key surfaces the typed
-          # error as content, not as a transport error. The wrapper returns
-          # `{ isError: true, content: [{ type: "text", text: "QURL_API_KEY is not set..." }] }`
-          # so we look for both markers.
+          expect_tools() {
+            local out="$1"; shift
+            for tool in "$@"; do
+              grep -Fq "\"name\":\"$tool\"" <<<"$out" || { echo "tools/list missing $tool (no \"name\":\"$tool\" match)"; echo "$out"; exit 1; }
+            done
+          }
+
+          # 1. No QURL_API_KEY: the no-account mode, backed by the local qURL
+          #    CLI. The image has no qurl binary, so a tool call must return
+          #    the install instruction as an isError content block (not a
+          #    JSON-RPC transport error), and stderr must say which mode runs.
+          out=$(printf '%s\n' "$init" "$ready" "$list" \
+            '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_crids","arguments":{}}}' \
+            | timeout 30s docker run -i --rm qurl-mcp:ci 2>/tmp/mcp-stderr)
+          expect_tools "$out" publish_crid share_by_crid list_crids manage_crid_requests manage_crid_access set_crid_sharing delete_crid
+          if grep -Fq '"name":"create_qurl"' <<<"$out"; then echo "account-key tools must not be listed without QURL_API_KEY"; echo "$out"; exit 1; fi
+          grep -q "QURL_API_KEY is not set" /tmp/mcp-stderr || { echo "missing no-account mode notice on stderr"; cat /tmp/mcp-stderr; exit 1; }
           grep -Fq '"isError":true' <<<"$out" || { echo "tools/call did not return isError content block"; echo "$out"; exit 1; }
-          grep -Fq "QURL_API_KEY is not set" <<<"$out" || { echo "tools/call response missing the actionable error message"; echo "$out"; exit 1; }
-          echo "MCP introspection OK; all 9 tools exposed; warning printed; tools/call surfaces missing_api_key as expected"
+          grep -Fq "qURL CLI (qurl) is not installed" <<<"$out" || { echo "tools/call response missing the install instruction"; echo "$out"; exit 1; }
+
+          # 2. With an account key: the account-key tool surface. tools/list
+          #    makes no API call, so a placeholder key is enough.
+          out=$(printf '%s\n' "$init" "$ready" "$list" \
+            | timeout 30s docker run -i --rm -e QURL_API_KEY=lv_ci_introspection_only qurl-mcp:ci 2>/dev/null)
+          expect_tools "$out" create_qurl resolve_qurl list_qurls get_qurl delete_qurl extend_qurl update_qurl mint_link batch_create_qurls publish_crid manage_crid_access
+          echo "MCP introspection OK; no-account tools and install instruction, and account-key tools exposed"
 
   ci-status:
     # `name:` is intentionally omitted: the runner-job lookup below filters

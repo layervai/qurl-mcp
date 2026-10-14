@@ -20,8 +20,8 @@
       "environmentVariables": [
         {
           "name": "QURL_API_KEY",
-          "description": "API key for the qURL API with qurl:read, qurl:write, and/or qurl:resolve scopes. Obtain from https://layerv.ai.",
-          "isRequired": true,
+          "description": "Optional. Without it, the tools run through the local qURL CLI (qurl), which needs no account. With it, the tools use the qURL API: a key with qurl:read, qurl:write, and/or qurl:resolve scopes from https://layerv.ai.",
+          "isRequired": false,
           "isSecret": true,
           "format": "string"
         },

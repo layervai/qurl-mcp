@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   connect: vi.fn(),
   createClient: vi.fn(),
+  createLocalCliServer: vi.fn(),
+  createQurlCli: vi.fn(),
   createServer: vi.fn(),
   formatErrorForLog: vi.fn((error: unknown) =>
     error instanceof Error ? `${error.name}: ${error.message}` : "UnknownError",
@@ -25,7 +27,6 @@ vi.mock("../config.js", () => ({
 }));
 
 vi.mock("../client.js", () => ({
-  MISSING_API_KEY_MESSAGE: "QURL_API_KEY is not set",
   QURLClient: class {
     constructor(config: unknown) {
       mocks.createClient(config);
@@ -34,7 +35,16 @@ vi.mock("../client.js", () => ({
 }));
 
 vi.mock("../server.js", () => ({
+  createLocalCliServer: mocks.createLocalCliServer,
   createServer: mocks.createServer,
+}));
+
+vi.mock("../qurl-cli.js", () => ({
+  QurlCli: class {
+    constructor() {
+      mocks.createQurlCli();
+    }
+  },
 }));
 
 vi.mock("@modelcontextprotocol/sdk/server/stdio.js", () => ({
@@ -48,6 +58,7 @@ describe("stdio bootstrap", () => {
     vi.clearAllMocks();
     mocks.connect.mockResolvedValue(undefined);
     mocks.createServer.mockReturnValue({ connect: mocks.connect });
+    mocks.createLocalCliServer.mockReturnValue({ connect: mocks.connect });
     mocks.loadRuntimeConfig.mockReturnValue({
       defaultQurlApiUrl: "https://api.layerv.ai",
       maxUploadFileDataBytes: 10 * 1024 * 1024,
@@ -79,20 +90,30 @@ describe("stdio bootstrap", () => {
     expect(mocks.logInfo).toHaveBeenCalledWith("SMTP is not configured. Missing fields: host");
   });
 
-  it("warns when the API key is absent", async () => {
+  it("drives the local qURL CLI when the API key is absent", async () => {
     mocks.loadRuntimeConfig.mockReturnValue({
       defaultQurlApiUrl: "https://api.layerv.ai",
       maxUploadFileDataBytes: 10 * 1024 * 1024,
     });
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     await main();
 
-    expect(error).toHaveBeenCalledWith("Warning: QURL_API_KEY is not set");
-    expect(mocks.createClient).toHaveBeenCalledWith({
-      apiKey: "",
-      baseURL: "https://api.layerv.ai",
-    });
+    expect(mocks.createQurlCli).toHaveBeenCalledOnce();
+    expect(mocks.createLocalCliServer).toHaveBeenCalledWith(expect.anything(), expect.any(String));
+    expect(mocks.connect).toHaveBeenCalledOnce();
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.createServer).not.toHaveBeenCalled();
+    expect(mocks.inspectSmtpConfig).not.toHaveBeenCalled();
+    expect(mocks.logInfo).toHaveBeenCalledWith(
+      "QURL_API_KEY is not set: tools run through the local qURL CLI (qurl), which needs no account.",
+    );
+  });
+
+  it("keeps the account-key server when the API key is set", async () => {
+    await main();
+
+    expect(mocks.createLocalCliServer).not.toHaveBeenCalled();
+    expect(mocks.createQurlCli).not.toHaveBeenCalled();
   });
 
   it("reports bootstrap failures and sets a failing process status", async () => {

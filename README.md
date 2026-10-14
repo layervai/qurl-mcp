@@ -19,6 +19,117 @@ It currently supports:
 - optionally serving LayerV public legal pages
 - serving a configurable MP4 video playback page
 
+## Quick start: no account needed
+
+Share an app running on your machine, or a URL, privately from Claude
+Desktop, Claude Code, Cursor, Codex, or any local MCP client. You need no
+account and no API key: with no `QURL_API_KEY` set, the server drives the
+[qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli)
+installed on your machine, and the first publish creates this machine's
+identity by itself.
+
+**1. Install the qURL CLI** (macOS and Linux; Node.js 22.12 or later is
+needed for the MCP server):
+
+```bash
+(umask 022 && mkdir -p "$HOME/.local/bin" "$HOME/.local/state") && chmod go-w "$HOME/.local" "$HOME/.local/bin" "$HOME/.local/state" && curl -fsSL --proto '=https' https://raw.githubusercontent.com/layervai/qurl-integrations/main/scripts/install.sh | INSTALL_DIR="$HOME/.local/bin" sh
+```
+
+On Windows, download `qurl.exe` from the
+[latest release](https://github.com/layervai/qurl-integrations/releases/latest)
+and put its folder on `PATH`. The server finds `qurl` on `PATH`, and also in
+`~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`, which many MCP
+clients leave off the `PATH` they give servers. If the CLI is missing, every
+tool answers with this install command instead of failing.
+
+**2. Add the server to your MCP client**, with no `env` block.
+
+Claude Desktop (`claude_desktop_config.json`) and Cursor (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "qurl": {
+      "command": "npx",
+      "args": ["-y", "@layervai/qurl-mcp"]
+    }
+  }
+}
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.qurl]
+command = "npx"
+args = ["-y", "@layervai/qurl-mcp"]
+```
+
+Claude Code:
+
+```bash
+claude mcp add qurl -- npx -y @layervai/qurl-mcp
+```
+
+**3. Ask for what you want**, for example "share the app on localhost:3000
+with my client". The agent publishes the app (it stays on your machine; the
+CLI's background service keeps the share running), and gives you a
+short-lived link for one person, or turns on access requests so people can
+ask for access.
+
+### Tools without an account
+
+| Tool                   | What it does                                                                 | CLI command                                              |
+| ---------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `publish_crid`         | Publish a local app or URL privately and return its CRID                     | `qurl publish <url> [--allow-requests] [--access <mode>]` |
+| `share_by_crid`        | Make a short-lived access link for a CRID this machine published             | `qurl share <CRID> [--ttl] [--session-duration]`        |
+| `list_crids`           | List this machine's published resources (read-only)                          | `qurl list --status active`                              |
+| `manage_crid_requests` | List, approve by code, or deny access requests; list or remove approved people; turn requests on or off | `qurl requests`, `qurl approve`, `qurl deny`, `qurl grants` |
+| `manage_crid_access`   | Private access policy, invitations, and consumer grants                      | `qurl access <action> <CRID>`                            |
+| `set_crid_sharing`     | Stop, start, or restart sharing a local app                                  | `qurl stop`, `qurl start`, `qurl restart`                |
+| `delete_crid`          | Delete a resource permanently                                                | `qurl delete <CRID> --yes`                               |
+
+The tools follow the same rules as the qURL agent skill
+(<https://layerv.ai/skills/qurl/SKILL.md>):
+
+- Everything is published private. These tools have no option to publish
+  publicly.
+- A pending access request is approved only with the six-digit code the
+  person gives you. No listing shows a code, and no tool approves by name:
+  anyone can type any name, and names come back as unverified data.
+- An access link is a bearer secret for one recipient. A CRID grants nothing
+  by itself and is safe to share.
+
+The server runs the CLI with an argument array (never a shell), with
+JSON output, closed stdin, a timeout, and bounded output, and it does not
+log what the CLI prints. The tools that need an account key (the qURL link,
+token, session, and upload tools, and the `qurl://` resources and prompts)
+are not listed in this mode.
+
+### With an account key
+
+Set `QURL_API_KEY` to a LayerV API key and the server uses the qURL API
+directly, with the full tool set described in the [feature map](#feature-map):
+
+```json
+{
+  "mcpServers": {
+    "qurl": {
+      "command": "npx",
+      "args": ["-y", "@layervai/qurl-mcp"],
+      "env": { "QURL_API_KEY": "lv_live_xxx" }
+    }
+  }
+}
+```
+
+### Remote HTTP server
+
+The HTTP transport (`qurl-mcp-http`) serves remote agent runtimes. It is
+account-based: every request carries the caller's qURL API key as a bearer
+token, and it never runs a local CLI. See [HTTP Authentication](#http-authentication)
+and the [LayerV MCP guide](https://layerv.ai/mcp/).
+
 ## Private consumer access
 
 Node.js 22.12 or later is required by the shared qURL SDK.
@@ -197,19 +308,11 @@ npm run start:http
 
 ## MCP Client Example
 
-If you want to use this server in `stdio` mode with a local MCP client:
-
-```json
-{
-  "mcpServers": {
-    "qurl": {
-      "command": "npx",
-      "args": ["@layervai/qurl-mcp"],
-      "env": { "QURL_API_KEY": "lv_live_xxx" }
-    }
-  }
-}
-```
+If you want to use this server in `stdio` mode with a local MCP client, use
+the configuration from [Quick start](#quick-start-no-account-needed). Leave
+out `env` to work without an account through the local qURL CLI, or add
+`"env": { "QURL_API_KEY": "lv_live_xxx" }` to use the qURL API with an
+account key.
 
 ## Configuration Files
 
@@ -285,7 +388,9 @@ setting; clients configured for a larger first upload must validate the session
 with a small qURL API call or a smaller upload first.
 Size the configured maximum and reverse-proxy concurrency limit together.
 
-Set `QURL_API_KEY` in the environment for `stdio` mode. In HTTP mode, every
+Set `QURL_API_KEY` in the environment for `stdio` mode to use the qURL API.
+Without it, `stdio` mode runs through the local qURL CLI and needs no account
+(see [Quick start](#quick-start-no-account-needed)). In HTTP mode, every
 client request supplies its own qURL API key as a bearer token.
 
 `defaultQurlApiUrl` and `QURL_API_URL` require HTTPS for non-loopback hosts

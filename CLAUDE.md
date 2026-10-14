@@ -58,7 +58,8 @@ qURL MCP Server is a TypeScript [Model Context Protocol](https://modelcontextpro
 ```
 qurl-mcp/
 ├── src/
-│   ├── index.ts           # Entry point, env validation, stdio transport
+│   ├── index.ts           # Entry point, env validation, stdio transport (API key or local CLI)
+│   ├── qurl-cli.ts        # Bounded runner for the local qURL CLI (no-account stdio mode)
 │   ├── http.ts            # Authenticated HTTP transport and public routes
 │   ├── http-config.ts     # Bounded listener/session/proxy configuration
 │   ├── config.ts          # Shared qURL, connector, SMTP, and media config
@@ -70,6 +71,7 @@ qurl-mcp/
 │   │   ├── upload-mint-options.ts # Shared upload link options and descriptions
 │   │   ├── create-qurl.ts
 │   │   ├── consumer-access.ts # Private publishing, invitations, and consumer grants
+│   │   ├── local-cli.ts     # No-account tools that run the local qURL CLI
 │   │   ├── resolve-qurl.ts
 │   │   ├── list-qurls.ts
 │   │   ├── get-qurl.ts
@@ -134,7 +136,7 @@ npm run format
 
 | Variable                                                            | Required  | Description                                                          | Default                 |
 | ------------------------------------------------------------------- | --------- | -------------------------------------------------------------------- | ----------------------- |
-| `QURL_API_KEY`                                                      | Yes       | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes | —                       |
+| `QURL_API_KEY`                                                      | No        | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes; unset in stdio = local qURL CLI mode | —                       |
 | `QURL_API_URL`                                                      | No        | qURL API base URL                                                    | `https://api.layerv.ai` |
 | `QURL_CONNECTOR_URL`                                                | Uploads   | HTTPS connector base URL                                             | —                       |
 | `QURL_MCP_CONFIG`                                                   | No        | Shared runtime config path                                           | `qurl-mcp.config.json`  |
@@ -152,17 +154,24 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 
 ## MCP Usage
 
+Without an account (stdio with no `QURL_API_KEY`), the server drives the locally
+installed `qurl` CLI and lists only the tools in `src/tools/local-cli.ts`:
+`publish_crid`, `share_by_crid`, `list_crids`, `manage_crid_requests`,
+`manage_crid_access`, `set_crid_sharing`, `delete_crid`.
+
 ```json
 {
   "mcpServers": {
     "qurl": {
       "command": "npx",
-      "args": ["@layervai/qurl-mcp"],
-      "env": { "QURL_API_KEY": "lv_live_xxx" }
+      "args": ["-y", "@layervai/qurl-mcp"]
     }
   }
 }
 ```
+
+With an account key, add `"env": { "QURL_API_KEY": "lv_live_xxx" }`; the tools
+below use the qURL API. HTTP mode always takes the key as a per-request bearer.
 
 ## Tools
 

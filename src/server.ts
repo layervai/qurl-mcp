@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 import type { IQURLClient } from "./client.js";
+import type { IQurlCli } from "./qurl-cli.js";
+import { localCliToolFactories } from "./tools/local-cli.js";
 import { publishCridTool, manageCridAccessTool } from "./tools/consumer-access.js";
 import { createQurlTool } from "./tools/create-qurl.js";
 import { resolveQurlTool } from "./tools/resolve-qurl.js";
@@ -88,6 +90,32 @@ export function getToolFactoriesForMode(mode: ServerMode): ToolFactory[] {
   return mode === "http"
     ? toolFactories.filter((factory) => factory !== uploadFileQurlTool)
     : toolFactories;
+}
+
+/**
+ * Server for stdio without QURL_API_KEY: every tool runs the locally
+ * installed qURL CLI, which publishes without an account. Only tools that
+ * work this way are registered. The account-key tools, the link resources,
+ * and the prompts that drive them are not listed at all, so an agent never
+ * plans around a tool that can only fail here.
+ */
+export function createLocalCliServer(cli: IQurlCli, version: string): McpServer {
+  const server = new McpServer({ name: "qurl", version });
+  for (const factory of localCliToolFactories) {
+    const tool = factory(cli);
+    server.registerTool(
+      tool.name,
+      {
+        title: tool.title,
+        description: tool.description,
+        inputSchema: tool.inputSchema.shape,
+        outputSchema: tool.outputSchema,
+        annotations: tool.annotations,
+      },
+      tool.handler,
+    );
+  }
+  return server;
 }
 
 export function createServer(
