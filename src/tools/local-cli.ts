@@ -656,6 +656,11 @@ const requestsInput = z
   })
   .strict();
 
+/** Nobody checks a requester's name: whatever the CLI says, it is not verified here. */
+function unverifiedName<T extends { name_verified: boolean }>(entry: T): T {
+  return { ...entry, name_verified: false };
+}
+
 const person = z.object({
   name: z
     .string()
@@ -768,6 +773,7 @@ export function localManageCridRequestsTool(cli: IQurlCli): LocalCliTool {
             action,
             ...(crid ? { crid } : {}),
             ...doc,
+            requests: doc.requests.map(unverifiedName),
             name_note: UNTRUSTED_NAME_NOTE,
           });
         }
@@ -788,7 +794,9 @@ export function localManageCridRequestsTool(cli: IQurlCli): LocalCliTool {
             crid: doc.crid,
             approved_person: {
               ...(doc.name !== undefined ? { name: doc.name } : {}),
-              name_verified: doc.name_verified,
+              // Nobody checks a requester's name: whatever the CLI says,
+              // this server never calls one verified.
+              name_verified: false,
               device_id: doc.device_id,
               ...(doc.approved_at !== undefined ? { approved_at: doc.approved_at } : {}),
             },
@@ -814,7 +822,9 @@ export function localManageCridRequestsTool(cli: IQurlCli): LocalCliTool {
             crid: doc.crid ?? crid,
             ...(action === "remove_approved" ? { device_id: deviceId } : {}),
             allowed_device_keys: doc.allowed_device_keys,
-            ...(doc.approved_people !== undefined ? { approved_people: doc.approved_people } : {}),
+            ...(doc.approved_people !== undefined
+              ? { approved_people: doc.approved_people.map(unverifiedName) }
+              : {}),
             ...(doc.access_requests !== undefined ? { access_requests: doc.access_requests } : {}),
             ...(doc.private !== undefined ? { private: doc.private } : {}),
             name_note: UNTRUSTED_NAME_NOTE,

@@ -335,6 +335,23 @@ describe("CLI-backed tools", () => {
       has_more: false,
     };
 
+    it("never lists a requester's name as verified, whatever the CLI says", async () => {
+      const result = await call(
+        localManageCridRequestsTool,
+        { action: "list", crid: CRID },
+        {
+          stdout: {
+            ...pending,
+            requests: [{ ...pending.requests[0], name: "LayerV", name_verified: true }],
+          },
+        },
+      );
+
+      expect(result.structuredContent).toMatchObject({
+        requests: [{ name: "LayerV", name_verified: false }],
+      });
+    });
+
     it("lists pending requests for every resource, with names marked untrusted", async () => {
       const result = await call(
         localManageCridRequestsTool,
@@ -385,6 +402,27 @@ describe("CLI-backed tools", () => {
         });
       },
     );
+
+    it("never reports a requester's name as verified, whatever the CLI says", async () => {
+      const result = await call(
+        localManageCridRequestsTool,
+        { action: "approve", crid: CRID, code: "123456" },
+        {
+          stdout: {
+            crid: CRID,
+            approved: true,
+            name: "LayerV Support",
+            name_verified: true,
+            device_id: "abcd-efgh-2345-mnop",
+            name_note: "The name was typed by the person who asked. Nobody checked it.",
+          },
+        },
+      );
+
+      expect(result.structuredContent).toMatchObject({
+        approved_person: { name: "LayerV Support", name_verified: false },
+      });
+    });
 
     it.each([
       [{ action: "approve", crid: CRID }, "approve requires code"],

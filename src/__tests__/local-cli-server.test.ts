@@ -76,6 +76,20 @@ describe("createLocalCliServer", () => {
     await vi.waitFor(() => expect(seen?.aborted).toBe(true));
   });
 
+  it("refuses an argument a tool does not have instead of dropping it", async () => {
+    fake = makeFakeQurl();
+    const mcp = await connect(fake.cli({ stdout: {} }));
+
+    const result = await mcp.callTool({
+      name: "publish_crid",
+      arguments: { target_url: "http://localhost:3000", public: true },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("public");
+    expect(fake.calls()).toEqual([]);
+  });
+
   it("answers a tool call with the install instruction when the CLI is missing", async () => {
     const mcp = await connect(new QurlCli({ env: { PATH: "" }, fallbackDirs: [] }));
 

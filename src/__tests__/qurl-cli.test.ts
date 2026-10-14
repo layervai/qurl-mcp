@@ -167,6 +167,21 @@ describe("QurlCli", () => {
     expect(Date.now() - started).toBeLessThan(5_000);
   });
 
+  it("keeps a finished run when its call is cancelled after the process exited", async () => {
+    const cli = fake.cli({ stdout: { ok: true } });
+    const controller = new globalThis.AbortController();
+
+    const document = await cliCallContext.run({ signal: controller.signal }, async () => {
+      const run = cli.runJson(["list"]);
+      await vi.waitFor(() => expect(fake.calls()).toHaveLength(1));
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 200));
+      controller.abort();
+      return run;
+    });
+
+    expect(document).toEqual({ ok: true });
+  });
+
   it("never starts a run whose call was cancelled before it began", async () => {
     const cli = fake.cli({ stdout: {} });
     const controller = new globalThis.AbortController();

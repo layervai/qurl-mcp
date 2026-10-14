@@ -298,16 +298,21 @@ export class QurlCli implements IQurlCli {
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
+      const exited = () => child.exitCode !== null || child.signalCode !== null;
       const stop = (reason: QurlCliError) => {
         failure ??= reason;
-        if (child.exitCode !== null || child.signalCode !== null) return;
+        if (exited()) return;
         child.kill("SIGTERM");
         killTimer ??= setTimeout(() => child.kill("SIGKILL"), this.killGraceMs);
         killTimer.unref?.();
       };
 
+      // A timeout or a cancel that comes after the process exited (while its
+      // pipes drain) does not undo a run that finished: only a run that is
+      // still going is stopped and reported as such.
       const timer = setTimeout(
         () =>
+          !exited() &&
           stop(
             new QurlCliError(
               "cli_timeout",
@@ -318,7 +323,9 @@ export class QurlCli implements IQurlCli {
       );
 
       const signal = options.signal;
-      const onAbort = () => stop(cancelled(command));
+      const onAbort = () => {
+        if (!exited()) stop(cancelled(command));
+      };
       if (signal?.aborted) onAbort();
       else signal?.addEventListener("abort", onAbort, { once: true });
 

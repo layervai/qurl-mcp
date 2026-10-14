@@ -115,7 +115,11 @@ export function createLocalCliServer(cli: IQurlCli, version: string): McpServer 
       {
         title: tool.title,
         description: tool.description,
-        inputSchema: tool.inputSchema.shape,
+        // The whole object, not its shape: the SDK rebuilds a shape as a
+        // loose object and drops unknown keys, so a call with an argument
+        // these tools do not have (say public: true) would run without it
+        // instead of being refused.
+        inputSchema: tool.inputSchema,
         outputSchema: tool.outputSchema,
         annotations: tool.annotations,
       },
