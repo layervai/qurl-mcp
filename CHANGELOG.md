@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.6.0...qurl-mcp-v0.7.0) (2026-10-14)
+
+
+### Features
+
+* **tools:** run stdio without an account through the local qURL CLI ([#316](https://github.com/layervai/qurl-mcp/issues/316)) ([5c90e0c](https://github.com/layervai/qurl-mcp/commit/5c90e0ccaedaea6207961a7e431560a29e7bdebf))
+
 ## [0.6.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.5.0...qurl-mcp-v0.6.0) (2026-10-13)
 
 
