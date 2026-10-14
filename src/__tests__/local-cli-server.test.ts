@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { QURL_CLI_MISSING_MESSAGE, QurlCli, type IQurlCli } from "../qurl-cli.js";
-import { createLocalCliServer } from "../server.js";
+import { cliCallContext, QURL_CLI_MISSING_MESSAGE, QurlCli, type IQurlCli } from "../qurl-cli.js";
+import { createLocalCliServer, LOCAL_CLI_INSTRUCTIONS } from "../server.js";
 import { makeFakeQurl, SAMPLE_CRID, type FakeQurl } from "./fake-qurl.js";
 
 describe("createLocalCliServer", () => {
@@ -43,6 +43,37 @@ describe("createLocalCliServer", () => {
     ]);
     expect(mcp.getServerCapabilities()?.resources).toBeUndefined();
     expect(mcp.getServerCapabilities()?.prompts).toBeUndefined();
+  });
+
+  it("tells the client it runs without an account, so the agent can say so", async () => {
+    const mcp = await connect(new QurlCli({ env: { PATH: "" }, fallbackDirs: [] }));
+
+    expect(mcp.getInstructions()).toBe(LOCAL_CLI_INSTRUCTIONS);
+    expect(mcp.getInstructions()).toContain("without a LayerV account");
+    expect(mcp.getInstructions()).toContain("QURL_API_KEY is not set");
+  });
+
+  it("hands a tool call's cancel signal to the CLI runs of that call", async () => {
+    let seen: { aborted: boolean } | undefined;
+    const cli: IQurlCli = {
+      runJson: () =>
+        new Promise((_resolve, reject) => {
+          const signal = cliCallContext.getStore()?.signal;
+          seen = signal;
+          signal?.addEventListener("abort", () => reject(new Error("cancelled")), { once: true });
+        }),
+    };
+    const mcp = await connect(cli);
+    const controller = new globalThis.AbortController();
+
+    const pending = mcp
+      .callTool({ name: "list_crids", arguments: {} }, undefined, { signal: controller.signal })
+      .catch(() => undefined);
+    await vi.waitFor(() => expect(seen).toBeDefined());
+    controller.abort();
+    await pending;
+
+    await vi.waitFor(() => expect(seen?.aborted).toBe(true));
   });
 
   it("answers a tool call with the install instruction when the CLI is missing", async () => {

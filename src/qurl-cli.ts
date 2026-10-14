@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { spawn } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -26,7 +27,7 @@ export const QURL_CLI_INSTALL_COMMAND =
   '(umask 022 && mkdir -p "$HOME/.local/bin" "$HOME/.local/state") && chmod go-w "$HOME/.local" "$HOME/.local/bin" "$HOME/.local/state" && curl -fsSL --proto \'=https\' https://raw.githubusercontent.com/layervai/qurl-integrations/main/scripts/install.sh | INSTALL_DIR="$HOME/.local/bin" sh';
 
 export const QURL_CLI_MISSING_MESSAGE =
-  "The qURL CLI (qurl) is not installed or could not be found. Install it on macOS or Linux with: " +
+  "The qURL CLI (qurl) is not installed or could not be found. Show the user this install command and let them run it; do not run it without their approval. On macOS or Linux: " +
   QURL_CLI_INSTALL_COMMAND +
   " On Windows, download qurl.exe from https://github.com/layervai/qurl-integrations/releases/latest and put its folder on PATH. " +
   "No account is needed. This server also looks in ~/.local/bin, so no restart of the MCP client is needed after installing. " +
@@ -43,7 +44,30 @@ const PIPE_CLOSE_GRACE_MS = 2_000;
 const MAX_ERROR_DETAIL_CHARS = 1_500;
 
 export type QurlCliErrorCode =
-  "cli_missing" | "cli_failed" | "cli_timeout" | "cli_output_too_large" | "cli_bad_output";
+  | "cli_missing"
+  | "cli_failed"
+  | "cli_timeout"
+  | "cli_cancelled"
+  | "cli_output_too_large"
+  | "cli_bad_output";
+
+/**
+ * The tool call a CLI run belongs to. The server runs every tool handler in
+ * this context with the MCP request's abort signal, so a call that the client
+ * cancels (or gives up on at its own timeout) stops the qurl process instead
+ * of leaving it running behind a failed call.
+ */
+export const cliCallContext = new AsyncLocalStorage<{ signal?: CancelSignal }>();
+
+/** The part of an abort signal a run uses (the MCP request's signal fits it). */
+export type CancelSignal = {
+  readonly aborted: boolean;
+  addEventListener(type: "abort", listener: () => void, options?: { once?: boolean }): void;
+  removeEventListener(type: "abort", listener: () => void): void;
+};
+
+/** At most this many qurl processes run at once; later calls wait their turn. */
+const MAX_CONCURRENT_RUNS = 3;
 
 export class QurlCliError extends Error {
   constructor(
@@ -73,7 +97,7 @@ export type QurlCliOptions = {
   killGraceMs?: number;
 };
 
-export type QurlCliRunOptions = { timeoutMs?: number };
+export type QurlCliRunOptions = { timeoutMs?: number; signal?: CancelSignal };
 
 /** The surface the CLI-backed tools use; tests may substitute it. */
 export interface IQurlCli {
@@ -184,7 +208,14 @@ export class QurlCli implements IQurlCli {
     const binary = this.findBinary();
     if (!binary) throw new QurlCliError("cli_missing", QURL_CLI_MISSING_MESSAGE);
     const command = args[0] ?? "";
-    const stdout = await this.run(binary, [...args, "--output=json"], command, options);
+    const signal = options.signal ?? cliCallContext.getStore()?.signal;
+    await this.acquire(signal, command);
+    let stdout: string;
+    try {
+      stdout = await this.run(binary, [...args, "--output=json"], command, { ...options, signal });
+    } finally {
+      this.release();
+    }
     const text = stdout.trim();
     try {
       const parsed: unknown = JSON.parse(text);
@@ -196,6 +227,36 @@ export class QurlCli implements IQurlCli {
       "cli_bad_output",
       `qurl ${command} did not return a JSON document. The command may have taken effect; check with list_crids before retrying, and upgrade the qURL CLI if this repeats.`,
     );
+  }
+
+  private running = 0;
+  private readonly waiting: Array<() => void> = [];
+
+  private acquire(signal: CancelSignal | undefined, command: string): Promise<void> {
+    if (signal?.aborted) return Promise.reject(cancelled(command));
+    if (this.running < MAX_CONCURRENT_RUNS) {
+      this.running += 1;
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const start = () => {
+        signal?.removeEventListener("abort", onAbort);
+        this.running += 1;
+        resolve();
+      };
+      const onAbort = () => {
+        const index = this.waiting.indexOf(start);
+        if (index >= 0) this.waiting.splice(index, 1);
+        reject(cancelled(command));
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      this.waiting.push(start);
+    });
+  }
+
+  private release(): void {
+    this.running -= 1;
+    this.waiting.shift()?.();
   }
 
   private childEnv(): CliEnv {
@@ -256,8 +317,14 @@ export class QurlCli implements IQurlCli {
         timeoutMs,
       );
 
+      const signal = options.signal;
+      const onAbort = () => stop(cancelled(command));
+      if (signal?.aborted) onAbort();
+      else signal?.addEventListener("abort", onAbort, { once: true });
+
       const finish = () => {
         if (settled) return;
+        signal?.removeEventListener("abort", onAbort);
         settled = true;
         clearTimeout(timer);
         if (killTimer) clearTimeout(killTimer);
@@ -332,4 +399,11 @@ export class QurlCli implements IQurlCli {
       });
     });
   }
+}
+
+function cancelled(command: string): QurlCliError {
+  return new QurlCliError(
+    "cli_cancelled",
+    `qurl ${command} was stopped because the tool call was cancelled. It may have taken effect; check with list_crids before retrying.`,
+  );
 }

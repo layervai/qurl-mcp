@@ -1,8 +1,9 @@
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  cliCallContext,
   QURL_CLI_INSTALL_COMMAND,
   QURL_CLI_MISSING_MESSAGE,
   QurlCli,
@@ -147,6 +148,79 @@ describe("QurlCli", () => {
     expect(error.code).toBe("cli_timeout");
     expect(error.message).toContain("did not finish within 1 second");
     expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("stops a run when its tool call is cancelled", async () => {
+    const cli = fake.cli({ stdout: {}, sleepMs: 10_000 }, { killGraceMs: 100 });
+    const controller = new globalThis.AbortController();
+    const started = Date.now();
+
+    const pending = cli
+      .runJson(["publish", "x"], { signal: controller.signal })
+      .catch((e: unknown) => e);
+    await vi.waitFor(() => expect(fake.calls()).toHaveLength(1));
+    controller.abort();
+    const error = (await pending) as QurlCliError;
+
+    expect(error.code).toBe("cli_cancelled");
+    expect(error.message).toContain("check with list_crids before retrying");
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("never starts a run whose call was cancelled before it began", async () => {
+    const cli = fake.cli({ stdout: {} });
+    const controller = new globalThis.AbortController();
+    controller.abort();
+
+    const error = (await cli
+      .runJson(["publish", "x"], { signal: controller.signal })
+      .catch((e: unknown) => e)) as QurlCliError;
+
+    expect(error.code).toBe("cli_cancelled");
+    expect(fake.calls()).toHaveLength(0);
+  });
+
+  it("reads the cancel signal of the tool call it runs in", async () => {
+    const cli = fake.cli({ stdout: {}, sleepMs: 10_000 }, { killGraceMs: 100 });
+    const controller = new globalThis.AbortController();
+
+    const pending = cliCallContext
+      .run({ signal: controller.signal }, () => cli.runJson(["list"]))
+      .catch((e: unknown) => e);
+    await vi.waitFor(() => expect(fake.calls()).toHaveLength(1));
+    controller.abort();
+
+    expect(((await pending) as QurlCliError).code).toBe("cli_cancelled");
+  });
+
+  it("runs at most three CLI processes at once, and starts the next when one ends", async () => {
+    // Each run takes 3 s, so the fourth cannot start inside the check below
+    // even on a loaded machine where the first three start far apart.
+    const cli = fake.cli({ stdout: {}, sleepMs: 3_000 });
+
+    const runs = [1, 2, 3, 4].map((n) => cli.runJson(["list", `--limit=${n}`]));
+    await vi.waitFor(() => expect(fake.calls()).toHaveLength(3));
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 300));
+    expect(fake.calls()).toHaveLength(3);
+    await Promise.all(runs);
+
+    expect(fake.calls()).toHaveLength(4);
+  }, 15_000);
+
+  it("drops a waiting run whose call is cancelled, so it never starts", async () => {
+    const cli = fake.cli({ stdout: {}, sleepMs: 800 });
+    const controller = new globalThis.AbortController();
+
+    const running = [1, 2, 3].map((n) => cli.runJson(["list", `--limit=${n}`]));
+    const waiting = cli
+      .runJson(["list", "--limit=9"], { signal: controller.signal })
+      .catch((e: unknown) => e);
+    await vi.waitFor(() => expect(fake.calls()).toHaveLength(3));
+    controller.abort();
+
+    expect(((await waiting) as QurlCliError).code).toBe("cli_cancelled");
+    await Promise.all(running);
+    expect(fake.calls().map((call) => call.argv[1])).not.toContain("--limit=9");
   });
 
   it("honours a per-call timeout", async () => {

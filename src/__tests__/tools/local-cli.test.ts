@@ -132,10 +132,13 @@ describe("CLI-backed tools", () => {
         { target_url: "http://localhost:1", allow_requests: true, policy: { mode: "keys" } },
         "cannot be combined",
       ],
-      [{ target_url: "http://localhost:1", policy: { mode: "contract" } }, "contract_id"],
+      [
+        { target_url: "http://localhost:1", policy: { mode: "contract" } },
+        "contract access requires contract_id.",
+      ],
       [
         { target_url: "http://localhost:1", policy: { mode: "keys", contract_id: "x" } },
-        "contract_id",
+        "contract_id applies only to contract access.",
       ],
       [{ target_url: "http://localhost:1", description: "two\nlines" }, "Control characters"],
     ])("refuses %j before running the CLI", async (input, message) => {

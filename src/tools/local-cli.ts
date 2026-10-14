@@ -52,7 +52,10 @@ const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$/;
 function cridSchema(verb: string) {
   return z
     .string()
-    .regex(CRID_PATTERN, "Expected a CRID: 60 lowercase characters a-z and 2-7, copied exactly")
+    .regex(
+      CRID_PATTERN,
+      "Expected a CRID: 47 or 60 lowercase characters a-z and 2-7, copied exactly",
+    )
     .describe(`The CRID of the resource to ${verb}. Copy it exactly; never trim or change case.`);
 }
 
@@ -83,6 +86,15 @@ function dataResult<T extends object & { length?: never }>(data: T): ToolResult 
     content: [{ type: "text", text: JSON.stringify(data) }],
     structuredContent: toStructuredContent(data),
   };
+}
+
+/** Why a policy's contract_id does not fit its mode, or undefined when it does. */
+function contractIdProblem(policy: { mode: string; contract_id?: string }): string | undefined {
+  if (policy.mode === "contract" && policy.contract_id === undefined)
+    return "contract access requires contract_id.";
+  if (policy.mode !== "contract" && policy.contract_id !== undefined)
+    return "contract_id applies only to contract access.";
+  return undefined;
 }
 
 function withCliErrors<I>(
@@ -213,12 +225,8 @@ export function localPublishCridTool(cli: IQurlCli): LocalCliTool {
       if (input.policy && input.allow_requests) {
         return errorResult("policy cannot be combined with allow_requests; choose one.");
       }
-      if (
-        input.policy &&
-        (input.policy.mode === "contract") !== (input.policy.contract_id !== undefined)
-      ) {
-        return errorResult("Only contract access requires a contract_id.");
-      }
+      const contractProblem = input.policy && contractIdProblem(input.policy);
+      if (contractProblem) return errorResult(contractProblem);
       const args = ["publish", input.target_url];
       if (input.allow_requests) args.push("--allow-requests");
       if (input.policy) {
@@ -356,9 +364,8 @@ function accessArgs(input: z.infer<typeof accessInput>): string[] | string {
       if (policy.version !== current + 1) {
         return "policy.version must be expected_version + 1 (the current version plus one).";
       }
-      if ((policy.mode === "contract") !== (policy.contract_id !== undefined)) {
-        return "Only contract access requires a contract_id.";
-      }
+      const contractProblem = contractIdProblem(policy);
+      if (contractProblem) return contractProblem;
       const args = ["access", "configure", crid, `--mode=${policy.mode}`];
       if (policy.contract_id !== undefined) args.push(`--contract=${policy.contract_id}`);
       args.push(`--version=${current}`);
@@ -516,7 +523,7 @@ export function localShareByCridTool(cli: IQurlCli): LocalCliTool {
       const crid = normalizeCRID(parsed.data.crid);
       if (crid === undefined || !CRID_PATTERN.test(crid)) {
         return errorResult(
-          "crid must be a CRID: 60 lowercase characters a-z and 2-7, copied exactly.",
+          "crid must be a CRID: 47 or 60 lowercase characters a-z and 2-7, copied exactly.",
         );
       }
       const args = ["share", crid];
