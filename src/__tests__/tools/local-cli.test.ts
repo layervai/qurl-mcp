@@ -403,6 +403,26 @@ describe("CLI-backed tools", () => {
       },
     );
 
+    it("refuses an approval document for a different CRID", async () => {
+      const result = await call(
+        localManageCridRequestsTool,
+        { action: "approve", crid: CRID, code: "123456" },
+        {
+          stdout: {
+            crid: "b".repeat(60),
+            approved: true,
+            name: "Ana",
+            name_verified: false,
+            device_id: "abcd-efgh-2345-mnop",
+            name_note: "The name was typed by the person who asked. Nobody checked it.",
+          },
+        },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("answered for a different CRID");
+    });
+
     it("never reports a requester's name as verified, whatever the CLI says", async () => {
       const result = await call(
         localManageCridRequestsTool,

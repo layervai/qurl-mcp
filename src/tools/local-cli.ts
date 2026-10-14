@@ -656,6 +656,21 @@ const requestsInput = z
   })
   .strict();
 
+/**
+ * The CLI answered for the CRID it was asked about. A document for another
+ * CRID is refused: what it says (who was approved or denied, which requests
+ * changed) would be reported to the user as being about this one.
+ */
+function forCrid<T extends { crid?: string }>(doc: T, crid: string, command: string): T {
+  if (doc.crid !== undefined && doc.crid !== crid) {
+    throw new QurlCliError(
+      "cli_bad_output",
+      `qurl ${command} answered for a different CRID than the one asked about. Check with list_crids before retrying.`,
+    );
+  }
+  return doc;
+}
+
 /** Nobody checks a requester's name: whatever the CLI says, it is not verified here. */
 function unverifiedName<T extends { name_verified: boolean }>(entry: T): T {
   return { ...entry, name_verified: false };
@@ -784,9 +799,13 @@ export function localManageCridRequestsTool(cli: IQurlCli): LocalCliTool {
               "approve requires code: the six-digit code the person gave the publisher themselves (123456, 123 456, or 123-456). Ask them for it; it is never shown in a listing, and a name is never enough.",
             );
           }
-          const doc = cliDocument(
-            approvedDoc,
-            await cli.runJson(["approve", crid!, groups[1] + groups[2]]),
+          const doc = forCrid(
+            cliDocument(
+              approvedDoc,
+              await cli.runJson(["approve", crid!, groups[1] + groups[2]]),
+              "approve",
+            ),
+            crid!,
             "approve",
           );
           return dataResult({
@@ -804,7 +823,11 @@ export function localManageCridRequestsTool(cli: IQurlCli): LocalCliTool {
           });
         }
         case "deny": {
-          const doc = cliDocument(deniedDoc, await cli.runJson(["deny", crid!, deviceId!]), "deny");
+          const doc = forCrid(
+            cliDocument(deniedDoc, await cli.runJson(["deny", crid!, deviceId!]), "deny"),
+            crid!,
+            "deny",
+          );
           return dataResult({
             action,
             crid: doc.crid,
@@ -816,7 +839,11 @@ export function localManageCridRequestsTool(cli: IQurlCli): LocalCliTool {
         case "remove_approved": {
           const args = ["grants", crid!];
           if (action === "remove_approved") args.push(`--remove=${deviceId!}`);
-          const doc = cliDocument(grantsDoc, await cli.runJson(args), "grants");
+          const doc = forCrid(
+            cliDocument(grantsDoc, await cli.runJson(args), "grants"),
+            crid!,
+            "grants",
+          );
           return dataResult({
             action,
             crid: doc.crid ?? crid,
@@ -833,9 +860,9 @@ export function localManageCridRequestsTool(cli: IQurlCli): LocalCliTool {
         case "turn_on":
         case "turn_off": {
           const flag = action === "turn_on" ? "--on" : "--off";
-          const doc = cliDocument(
-            settingDoc,
-            await cli.runJson(["requests", crid!, flag]),
+          const doc = forCrid(
+            cliDocument(settingDoc, await cli.runJson(["requests", crid!, flag]), "requests"),
+            crid!,
             "requests",
           );
           return dataResult({ action, ...doc });
