@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it, expect, vi } from "vitest";
 import { MISSING_API_KEY_MESSAGE, QURLAPIError, type IQURLClient } from "../client.js";
+import { publishCridTool, manageCridAccessTool } from "../tools/consumer-access.js";
 import { batchCreateTool } from "../tools/batch-create.js";
 import { createQurlTool } from "../tools/create-qurl.js";
 import { deleteQurlTool } from "../tools/delete-qurl.js";
@@ -53,6 +54,18 @@ type ToolCase = {
 };
 
 const toolCases: ToolCase[] = [
+  {
+    name: "publish_crid",
+    build: publishCridTool,
+    stubs: ["protectUrl"],
+    input: { target_url: "https://example.com", policy: { mode: "invite_only", version: 1 } },
+  },
+  {
+    name: "manage_crid_access",
+    build: manageCridAccessTool,
+    stubs: ["inviteConsumer"],
+    input: { action: "invite", resource_id: "r_test1234567", email: "ana@example.com" },
+  },
   {
     name: "create_qurl",
     build: createQurlTool,

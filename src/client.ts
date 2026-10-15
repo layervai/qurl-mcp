@@ -12,6 +12,7 @@
 import { QURLClient as SDKQURLClient, QURLError } from "@layervai/qurl";
 import { markRequestCredentialValidated } from "./auth/request-context.js";
 import type {
+  ConsumerAccessPolicy,
   QURL as SDKQURL,
   Resource as SDKResource,
   UpdateResourceQurlInput as SDKUpdateResourceQurlInput,
@@ -57,6 +58,9 @@ export interface SessionData {
 }
 
 export interface QURL {
+  crid?: string;
+  private?: boolean;
+  consumer_access?: { mode: string; version?: number; contract_id?: string };
   resource_id: string;
   qurl_site?: string;
   // Connector-owned resources intentionally omit target_url from management
@@ -146,6 +150,8 @@ export interface UpdateQURLInput {
 }
 
 export interface UpdateResourceInput {
+  consumer_access?: ConsumerAccessPolicy;
+  expected_consumer_access_version?: number;
   tags?: string[];
   description?: string;
   custom_domain?: string;
@@ -305,6 +311,33 @@ export interface SessionTerminateOutput {
 // --- Client interface ---
 
 export interface IQURLClient {
+  protectUrl(
+    ...args: Parameters<SDKQURLClient["protectUrl"]>
+  ): ReturnType<SDKQURLClient["protectUrl"]>;
+  inviteConsumer(
+    ...args: Parameters<SDKQURLClient["inviteConsumer"]>
+  ): ReturnType<SDKQURLClient["inviteConsumer"]>;
+  listConsumerInvitations(
+    ...args: Parameters<SDKQURLClient["listConsumerInvitations"]>
+  ): ReturnType<SDKQURLClient["listConsumerInvitations"]>;
+  resendConsumerInvitation(
+    ...args: Parameters<SDKQURLClient["resendConsumerInvitation"]>
+  ): ReturnType<SDKQURLClient["resendConsumerInvitation"]>;
+  revokeConsumerInvitation(
+    ...args: Parameters<SDKQURLClient["revokeConsumerInvitation"]>
+  ): ReturnType<SDKQURLClient["revokeConsumerInvitation"]>;
+  listConsumerGrants(
+    ...args: Parameters<SDKQURLClient["listConsumerGrants"]>
+  ): ReturnType<SDKQURLClient["listConsumerGrants"]>;
+  approveConsumerGrant(
+    ...args: Parameters<SDKQURLClient["approveConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["approveConsumerGrant"]>;
+  denyConsumerGrant(
+    ...args: Parameters<SDKQURLClient["denyConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["denyConsumerGrant"]>;
+  revokeConsumerGrant(
+    ...args: Parameters<SDKQURLClient["revokeConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["revokeConsumerGrant"]>;
   /**
    * Create a new qURL. Returns `CreateQURLData` — the ephemeral create-time
    * shape that carries `qurl_link` (shown only once) and `qurl_id`. This is
@@ -508,6 +541,60 @@ export class QURLClient implements IQURLClient {
   // The tools additionally validate every `structuredContent` against their
   // zod `outputSchema`, so any residual response drift surfaces at runtime.
 
+  async protectUrl(
+    ...args: Parameters<SDKQURLClient["protectUrl"]>
+  ): ReturnType<SDKQURLClient["protectUrl"]> {
+    return this.call((sdk) => sdk.protectUrl(...args));
+  }
+
+  async inviteConsumer(
+    ...args: Parameters<SDKQURLClient["inviteConsumer"]>
+  ): ReturnType<SDKQURLClient["inviteConsumer"]> {
+    return this.call((sdk) => sdk.inviteConsumer(...args));
+  }
+
+  async listConsumerInvitations(
+    ...args: Parameters<SDKQURLClient["listConsumerInvitations"]>
+  ): ReturnType<SDKQURLClient["listConsumerInvitations"]> {
+    return this.call((sdk) => sdk.listConsumerInvitations(...args));
+  }
+
+  async resendConsumerInvitation(
+    ...args: Parameters<SDKQURLClient["resendConsumerInvitation"]>
+  ): ReturnType<SDKQURLClient["resendConsumerInvitation"]> {
+    return this.call((sdk) => sdk.resendConsumerInvitation(...args));
+  }
+
+  async revokeConsumerInvitation(
+    ...args: Parameters<SDKQURLClient["revokeConsumerInvitation"]>
+  ): ReturnType<SDKQURLClient["revokeConsumerInvitation"]> {
+    return this.call((sdk) => sdk.revokeConsumerInvitation(...args));
+  }
+
+  async listConsumerGrants(
+    ...args: Parameters<SDKQURLClient["listConsumerGrants"]>
+  ): ReturnType<SDKQURLClient["listConsumerGrants"]> {
+    return this.call((sdk) => sdk.listConsumerGrants(...args));
+  }
+
+  async approveConsumerGrant(
+    ...args: Parameters<SDKQURLClient["approveConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["approveConsumerGrant"]> {
+    return this.call((sdk) => sdk.approveConsumerGrant(...args));
+  }
+
+  async denyConsumerGrant(
+    ...args: Parameters<SDKQURLClient["denyConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["denyConsumerGrant"]> {
+    return this.call((sdk) => sdk.denyConsumerGrant(...args));
+  }
+
+  async revokeConsumerGrant(
+    ...args: Parameters<SDKQURLClient["revokeConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["revokeConsumerGrant"]> {
+    return this.call((sdk) => sdk.revokeConsumerGrant(...args));
+  }
+
   async createQURL(input: CreateQURLInput): Promise<{ data: CreateQURLData }> {
     return this.call(async (sdk) => ({ data: (await sdk.create(input)) as CreateQURLData }));
   }
@@ -530,8 +617,8 @@ export class QURLClient implements IQURLClient {
   }
 
   async deleteQURL(id: string): Promise<void> {
-    // Preserve the legacy endpoint while bypassing its SDK prefix guard for modern IDs.
-    await this.call((sdk) => (id.startsWith("r_") ? sdk.delete(id) : sdk.deleteResource(id)));
+    // Keep the routes used by callers migrating from legacy IDs to CRIDs.
+    await this.call((sdk) => sdk.deleteResourceByIdentifier(id));
   }
 
   async updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }> {

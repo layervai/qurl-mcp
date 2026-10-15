@@ -5,9 +5,10 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { formatErrorForLog, installTimestampedConsole, logInfo } from "./logging.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { MISSING_API_KEY_MESSAGE, QURLClient } from "./client.js";
+import { QURLClient } from "./client.js";
 import { getDefaultConfigPath, inspectSmtpConfig, loadRuntimeConfig } from "./config.js";
-import { createServer } from "./server.js";
+import { QurlCli } from "./qurl-cli.js";
+import { createLocalCliServer, createServer } from "./server.js";
 
 installTimestampedConsole();
 
@@ -20,7 +21,15 @@ export async function main(): Promise<void> {
     const runtimeConfig = loadRuntimeConfig(runtimeConfigPath);
     const apiKey = runtimeConfig.qurlApiKey ?? "";
     if (!apiKey) {
-      console.error(`Warning: ${MISSING_API_KEY_MESSAGE}`);
+      // No account key: drive the locally installed qURL CLI, which publishes
+      // without an account. The CLI is looked up per tool call, so a missing
+      // CLI becomes an install instruction in the tool result, not a startup
+      // failure.
+      logInfo(
+        "QURL_API_KEY is not set: tools run through the local qURL CLI (qurl), which needs no account.",
+      );
+      await createLocalCliServer(new QurlCli(), version).connect(new StdioServerTransport());
+      return;
     }
     const smtpInspection = inspectSmtpConfig(runtimeConfigPath);
     logInfo("Runtime config loaded.");

@@ -96,7 +96,9 @@ export function withMissingApiKeyHandler<I>(
     } catch (err) {
       if (
         err instanceof QURLAPIError &&
-        (err.code === "missing_api_key" || err.code === "upload_mint_failed")
+        (err.code === "missing_api_key" ||
+          err.code === "upload_mint_failed" ||
+          err.code === "access_receipt_unconfirmed")
       ) {
         return {
           isError: true,

@@ -22,6 +22,15 @@ export function readApiSpec(): string {
 
 export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClient {
   return {
+    protectUrl: vi.fn(),
+    inviteConsumer: vi.fn(),
+    listConsumerInvitations: vi.fn(),
+    resendConsumerInvitation: vi.fn(),
+    revokeConsumerInvitation: vi.fn(),
+    listConsumerGrants: vi.fn(),
+    approveConsumerGrant: vi.fn(),
+    denyConsumerGrant: vi.fn(),
+    revokeConsumerGrant: vi.fn(),
     createQURL: vi.fn(),
     getQURL: vi.fn(),
     listQURLs: vi.fn(),
