@@ -2,21 +2,42 @@
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
-Give an AI agent tools to share localhost web apps, private APIs, and selected files through expiring [qURL™ by LayerV](https://layerv.ai/qurl/) access links. This repository implements the Model Context Protocol server for that workflow. The `@layervai/qurl-mcp` package runs as a local stdio server backed by the qURL CLI or API, or as an authenticated remote HTTP server backed by the API.
+Give an AI agent tools to share localhost web apps, private APIs, and selected
+files through expiring [qURL™ by LayerV](https://layerv.ai/qurl/) access links.
+This repository implements the Model Context Protocol server for that workflow.
+The `@layervai/qurl-mcp` package runs as a local stdio server backed by the
+qURL CLI or API, or as an authenticated remote HTTP server backed by the API.
 
-Start with the [no-account local quickstart](#quick-start-no-account-needed) or [account-backed client configuration](#mcp-client-example), then choose the tools for your task. In local mode, `publish_crid` runs the installed CLI to publish an app that is already running; `share_by_crid` issues its access link. Creating a link alone does not publish an app or restrict an existing public URL. Uploads require the account-backed tool set and use a separate connector lifecycle; see [upload tools](#upload-tools) for their supported options and limits.
+Start with the [no-account local quickstart](#quick-start-no-account-needed)
+or [account-backed client configuration](#mcp-client-example), then choose
+the tools for your task. In local mode, `publish_crid` runs the installed
+CLI to publish an app that is already running; `share_by_crid` issues its
+access link. Creating a link alone does not publish an app or restrict an
+existing public URL. Uploads require the account-backed tool set and use a separate connector lifecycle;
+see [upload tools](#upload-tools) for their supported options and limits.
 
-[Local app sharing](#let-an-ai-agent-share-a-localhost-preview) · [File sharing](#let-an-ai-agent-share-a-pdf-or-image) · [Sharing questions](#mcp-sharing-questions) · [Private links](https://qurl.link/)
+[Local app sharing](#let-an-ai-agent-share-a-localhost-preview) ·
+[File sharing](#let-an-ai-agent-share-a-pdf-or-image) ·
+[Sharing questions](#mcp-sharing-questions) · [Private links](https://qurl.link/)
 
 > **⚠️ Renamed from `@layerv/qurl-mcp` in v0.4.0.** The old package is deprecated and will not receive further updates. If you're using `@layerv/qurl-mcp@0.3.x`, swap the scope in your MCP client config — same binary, same API key, no other changes.
 
 ## Let an AI agent share a localhost preview
 
-Use this workflow when an agent needs to give a reviewer access to a development preview or internal API. A tool that creates a link does not start the app on your laptop.
+Use this workflow when an agent needs to give a reviewer access to a development
+preview or internal API. A tool that creates a link does not start the app on
+your laptop.
 
-1. Keep the local app running. Configure a local stdio MCP client using the [no-account quickstart](#quick-start-no-account-needed), with the qURL CLI installed on the same host and no `QURL_API_KEY` set.
-2. Ask the agent to call `publish_crid` with the app's root loopback URL, such as `http://127.0.0.1:3000`, and save the returned CRID. Alternatively, publish it directly with the [CLI](https://github.com/layervai/qurl-integrations#share-a-localhost-web-app). Local tools use that machine's device identity; a CRID does not grant another device authority over the resource.
-3. Ask the agent to call `share_by_crid` with the published CRID and a requested lifetime. The following is a tool argument object, not a complete MCP message:
+1. Keep the local app running. Configure a local stdio MCP client using the
+   [no-account quickstart](#quick-start-no-account-needed), with the qURL CLI
+   installed on the same host and no `QURL_API_KEY` set.
+2. Ask the agent to call `publish_crid` with the app's root loopback URL, such
+   as `http://127.0.0.1:3000`, and save the returned CRID. Alternatively, publish
+   it directly with the [CLI](https://github.com/layervai/qurl-integrations#share-a-localhost-web-app).
+   Local tools use that machine's device identity; a CRID does not grant another
+   device authority over the resource.
+3. Ask the agent to call `share_by_crid` with the published CRID and a requested
+   lifetime. The following is a tool argument object, not a complete MCP message:
 
    ```json
    {
@@ -25,13 +46,23 @@ Use this workflow when an agent needs to give a reviewer access to a development
    }
    ```
 
-4. Share the full returned link through your intended private channel and report the expiry returned by the service. Do not assume the requested TTL was granted unchanged. Keep the publishing host and app available.
+4. Share the full returned link through your intended private channel and
+   report the expiry returned by the service. Do not assume the requested TTL
+   was granted unchanged. Keep the publishing host and app available.
 
-Check that your installed release exposes these tools. In account-backed mode, `share_by_crid` instead uses the API credential and requires `qurl:resolve` and resource authorization. For resources already managed through the API, see `mint_link` and the other [link-management tools](#qurl-management-tools). Tool availability and resource identifiers matter; an uploaded-file identifier cannot be substituted into the same workflow.
+Check that your installed release exposes these tools. In account-backed mode,
+`share_by_crid` instead uses the API credential and requires `qurl:resolve` and
+resource authorization. For resources already managed through the API, see `mint_link` and the other
+[link-management tools](#qurl-management-tools). Tool availability and resource
+identifiers matter; an uploaded-file identifier cannot be substituted into
+the same workflow.
 
 ## Let an AI agent share a PDF or image
 
-For example, give a reviewer a short-lived link to a selected PDF report. Use account-backed stdio mode (`QURL_API_KEY` set) or authenticated HTTP mode, then configure the upload Connector under [configuration files](#configuration-files). Upload tools are not listed in no-account local mode. Choose the tool for the transport:
+For example, give a reviewer a short-lived link to a selected PDF report.
+Use account-backed stdio mode (`QURL_API_KEY` set) or authenticated HTTP mode,
+then configure the upload Connector under [configuration files](#configuration-files).
+Upload tools are not listed in no-account local mode. Choose the tool for the transport:
 
 | File location | Tool | Important requirement |
 | --- | --- | --- |
@@ -49,27 +80,43 @@ A stdio tool argument example:
 }
 ```
 
-Pass these arguments to `upload_file_qurl` only for a file the user selected. The tool uploads to the configured file service and returns a new access link. Use the confirmed expiry in its response. Opening a single-use link to test it can consume it before the recipient opens it.
+Pass these arguments to `upload_file_qurl` only for a file the user selected.
+The tool uploads to the configured file service and returns a new access link.
+Use the confirmed expiry in its response. Opening a single-use link to test it
+can consume it before the recipient opens it.
 
-Upload links cannot currently be revoked through this MCP server, and `mint_link` cannot create another link for an uploaded file. See [upload tools](#upload-tools) for the supported formats, size limits, response fields, and cleanup limitations.
+Upload links cannot currently be revoked through this MCP server, and `mint_link`
+cannot create another link for an uploaded file. See [upload tools](#upload-tools)
+for the supported formats, size limits, response fields, and cleanup limitations.
 
 ## MCP sharing questions
 
 ### Is this a public tunnel to my localhost app?
 
-In no-account stdio mode, this server invokes the local CLI to publish and manage an already running app. API-backed and remote HTTP modes use their configured resources; a remote server cannot publish an app on your laptop through its own localhost address. Use the [localhost-sharing comparison](https://github.com/layervai/qurl-integrations#qurl-and-ngrok-for-localhost-sharing) when choosing between resource access links and a public endpoint workflow.
+In no-account stdio mode, this server invokes the local CLI to publish and
+manage an already running app. API-backed and remote HTTP modes use their
+configured resources; a remote server cannot publish an app on your laptop
+through its own localhost address. Use the
+[localhost-sharing comparison](https://github.com/layervai/qurl-integrations#qurl-and-ngrok-for-localhost-sharing)
+when choosing between resource access links and a public endpoint workflow.
 
 ### Does every AI client support the same tools?
 
-No. Configure the client's supported transport and check the installed server's tool list. A remote HTTP server cannot use `upload_file_qurl` to read a file from the client's laptop; use the file-data tool for a supported attachment.
+No. Configure the client's supported transport and check the installed server's
+tool list. A remote HTTP server cannot use `upload_file_qurl` to read a file
+from the client's laptop; use the file-data tool for a supported attachment.
 
 ### Can I use an app link and an uploaded-file link interchangeably?
 
-No. App resource management and uploaded-file link minting use different lifecycles. Follow the tool that issued the link, including its revocation limits. Your local app's own login continues to apply when the link opens it.
+No. App resource management and uploaded-file link minting use different
+lifecycles. Follow the tool that issued the link, including its revocation limits.
+Your local app's own login continues to apply when the link opens it.
 
 ## Overview
 
-The server exposes qURL operations as MCP tools for clients that support the configured transport. See the [LayerV MCP guide](https://layerv.ai/mcp/) for product setup and the tables below for the capabilities in this source version.
+The server exposes qURL operations as MCP tools for clients that support the
+configured transport. See the [LayerV MCP guide](https://layerv.ai/mcp/) for
+product setup and the tables below for the capabilities in this source version.
 
 It currently supports:
 
@@ -82,15 +129,26 @@ It currently supports:
 
 ## Quick start: no account needed
 
-Share an app running on your machine, or a URL, privately from Claude Desktop, Claude Code, Cursor, Codex, or any local MCP client. You need no account and no API key: with no `QURL_API_KEY` set, the server drives the [qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli) installed on your machine, and the first publish creates this machine's identity by itself.
+Share an app running on your machine, or a URL, privately from Claude
+Desktop, Claude Code, Cursor, Codex, or any local MCP client. You need no
+account and no API key: with no `QURL_API_KEY` set, the server drives the
+[qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli)
+installed on your machine, and the first publish creates this machine's
+identity by itself.
 
-**1. Install the qURL CLI** (macOS and Linux; Node.js 22.12 or later is needed for the MCP server):
+**1. Install the qURL CLI** (macOS and Linux; Node.js 22.12 or later is
+needed for the MCP server):
 
 ```bash
 (umask 022 && mkdir -p "$HOME/.local/bin" "$HOME/.local/state") && chmod go-w "$HOME/.local" "$HOME/.local/bin" "$HOME/.local/state" && curl -fsSL --proto '=https' https://raw.githubusercontent.com/layervai/qurl-integrations/main/scripts/install.sh | INSTALL_DIR="$HOME/.local/bin" sh
 ```
 
-On Windows, download `qurl.exe` from the [latest release](https://github.com/layervai/qurl-integrations/releases/latest) and put its folder on `PATH`. The server finds `qurl` on `PATH`, and also in `~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`, which many MCP clients leave off the `PATH` they give servers. If the CLI is missing, every tool answers with this install command instead of failing.
+On Windows, download `qurl.exe` from the
+[latest release](https://github.com/layervai/qurl-integrations/releases/latest)
+and put its folder on `PATH`. The server finds `qurl` on `PATH`, and also in
+`~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`, which many MCP
+clients leave off the `PATH` they give servers. If the CLI is missing, every
+tool answers with this install command instead of failing.
 
 **2. Add the server to your MCP client**, with no `env` block.
 
@@ -121,7 +179,11 @@ Claude Code:
 claude mcp add qurl -- npx -y @layervai/qurl-mcp
 ```
 
-**3. Ask for what you want**, for example "share the app on localhost:3000 with my client". The agent publishes the app (it stays on your machine; the CLI's background service keeps the share running), and gives you a short-lived link for one person, or turns on access requests so people can ask for access.
+**3. Ask for what you want**, for example "share the app on localhost:3000
+with my client". The agent publishes the app (it stays on your machine; the
+CLI's background service keeps the share running), and gives you a
+short-lived link for one person, or turns on access requests so people can
+ask for access.
 
 ### Tools without an account
 
@@ -135,17 +197,27 @@ claude mcp add qurl -- npx -y @layervai/qurl-mcp
 | `set_crid_sharing`     | Stop, start, or restart sharing a local app                                  | `qurl stop`, `qurl start`, `qurl restart`                |
 | `delete_crid`          | Delete a resource permanently                                                | `qurl delete <CRID> --yes`                               |
 
-The tools follow the same rules as the qURL agent skill (<https://layerv.ai/skills/qurl/SKILL.md>):
+The tools follow the same rules as the qURL agent skill
+(<https://layerv.ai/skills/qurl/SKILL.md>):
 
-- Everything is published private. These tools have no option to publish publicly.
-- A pending access request is approved only with the six-digit code the person gives you. No listing shows a code, and no tool approves by name: anyone can type any name, and names come back as unverified data.
-- An access link is a bearer secret for one recipient. A CRID grants nothing by itself and is safe to share.
+- Everything is published private. These tools have no option to publish
+  publicly.
+- A pending access request is approved only with the six-digit code the
+  person gives you. No listing shows a code, and no tool approves by name:
+  anyone can type any name, and names come back as unverified data.
+- An access link is a bearer secret for one recipient. A CRID grants nothing
+  by itself and is safe to share.
 
-The server runs the CLI with an argument array (never a shell), with JSON output, closed stdin, a timeout, and bounded output, and it does not log what the CLI prints. The tools that need an account key (the qURL link, token, session, and upload tools, and the `qurl://` resources and prompts) are not listed in this mode.
+The server runs the CLI with an argument array (never a shell), with
+JSON output, closed stdin, a timeout, and bounded output, and it does not
+log what the CLI prints. The tools that need an account key (the qURL link,
+token, session, and upload tools, and the `qurl://` resources and prompts)
+are not listed in this mode.
 
 ### With an account key
 
-Set `QURL_API_KEY` to a LayerV API key and the server uses the qURL API directly, with the full tool set described in the [feature map](#feature-map):
+Set `QURL_API_KEY` to a LayerV API key and the server uses the qURL API
+directly, with the full tool set described in the [feature map](#feature-map):
 
 ```json
 {
@@ -161,17 +233,35 @@ Set `QURL_API_KEY` to a LayerV API key and the server uses the qURL API directly
 
 ### Remote HTTP server
 
-The HTTP transport (`qurl-mcp-http`) serves remote agent runtimes. It is account-based: every request carries the caller's qURL API key as a bearer token, and it never runs a local CLI. See [HTTP Authentication](#http-authentication) and the [LayerV MCP guide](https://layerv.ai/mcp/).
+The HTTP transport (`qurl-mcp-http`) serves remote agent runtimes. It is
+account-based: every request carries the caller's qURL API key as a bearer
+token, and it never runs a local CLI. See [HTTP Authentication](#http-authentication)
+and the [LayerV MCP guide](https://layerv.ai/mcp/).
 
 ## Private consumer access
 
 Node.js 22.12 or later is required by the shared qURL SDK.
 
-`publish_crid` creates a private URL resource with keys, invite_only, email_capture, review, or contract access. `manage_crid_access` changes the policy with its current version, sends invitations, lists grants, approves or denies requests, and removes access. The tools return resource-scoped receipts and omit invitation secrets and bearer links. Local apps use the qURL CLI on the publisher machine.
+`publish_crid` creates a private URL resource with keys, invite_only,
+email_capture, review, or contract access. `manage_crid_access` changes the
+policy with its current version, sends invitations, lists grants, approves
+or denies requests, and removes access. The tools return resource-scoped
+receipts and omit invitation secrets and bearer links. Local apps use the
+qURL CLI on the publisher machine.
 
-For example, an assistant can turn “share this with ana@example.com, and allow no requests” into an invite_only resource and an authorized invitation. For email capture, the consumer must know that the publisher receives their verified email. A verified email proves mailbox control, not legal identity. Contract approval requires a trusted publisher backend entitlement receipt; these tools do not verify payment. Do not report connection removal as complete while session_cleanup is pending.
+For example, an assistant can turn “share this with ana@example.com, and
+allow no requests” into an invite_only resource and an authorized invitation.
+For email capture, the consumer must know that the publisher receives their
+verified email. A verified email proves mailbox control, not legal identity.
+Contract approval requires a trusted publisher backend entitlement receipt;
+these tools do not verify payment. Do not report connection removal as
+complete while session_cleanup is pending.
 
-This feature requires the matching service and admission readers. Keep it disabled until the publisher and consumer journeys pass. The package pins the published SDK 3.0.0 and supports clean installation with dependency scripts blocked. This release requires Node.js 22.12 or later; Node.js 20 is no longer supported.
+This feature requires the matching service and admission readers. Keep it
+disabled until the publisher and consumer journeys pass. The package pins
+the published SDK 3.0.0 and supports clean installation with dependency
+scripts blocked. This release requires Node.js 22.12 or later; Node.js 20
+is no longer supported.
 
 ## Runtime Modes
 
@@ -201,11 +291,25 @@ This feature requires the matching service and admission readers. Keep it disabl
 | `list_qurl_sessions`      | List active access sessions                         |
 | `terminate_qurl_sessions` | Terminate one or all active sessions                |
 
-`share_by_crid` recognizes a standalone `$<CRID>` value as an explicit request to mint a temporary link for that CRID. The `$` is a user-facing marker and is removed before the CRID is sent to the qURL API. A bare CRID remains supported. This tool requires `qurl:resolve`. Its optional Go-duration `ttl` must resolve to a positive whole number of seconds. The service clamps the requested lifetime. Sharing makes one request with a 30-second timeout and does not automatically retry. Repeating the tool call can mint another link.
+`share_by_crid` recognizes a standalone `$<CRID>` value as an explicit request
+to mint a temporary link for that CRID. The `$` is a user-facing marker and is
+removed before the CRID is sent to the qURL API. A bare CRID remains supported.
+This tool requires `qurl:resolve`. Its optional Go-duration `ttl` must resolve to
+a positive whole number of seconds. The service clamps the requested lifetime.
+Sharing makes one request with a 30-second timeout and does not automatically
+retry. Repeating the tool call can mint another link.
 
-Resource status filters accept `active`, `revoked`, or `active,revoked`. A resource remains active or revoked even when its `expires_at` is in the past; individual access tokens can expire. `expired` is not accepted by `list_qurls`, even though response parsing tolerates legacy values. The snapshot retains upstream's stale expiration prose; its active/revoked status enum is authoritative.
+Resource status filters accept `active`, `revoked`, or `active,revoked`.
+A resource remains active or revoked even when its `expires_at` is in the past;
+individual access tokens can expire. `expired` is not accepted by `list_qurls`,
+even though response parsing tolerates legacy values. The snapshot retains
+upstream's stale expiration prose; its active/revoked status enum is authoritative.
 
-The qURL SDK reuses the same `Idempotency-Key` and request body when retrying POST/PATCH requests after a network failure or HTTP 429. Mutating HTTP 5xx responses are not automatically retried. Each new MCP tool invocation is a new operation with a new key, so repeating `create_qurl`, `batch_create_qurls`, or `mint_link` can mint additional tokens. MCP does not expose a caller-supplied key.
+The qURL SDK reuses the same `Idempotency-Key` and request body when retrying
+POST/PATCH requests after a network failure or HTTP 429. Mutating HTTP 5xx
+responses are not automatically retried. Each new MCP tool invocation is a new
+operation with a new key, so repeating `create_qurl`, `batch_create_qurls`, or
+`mint_link` can mint additional tokens. MCP does not expose a caller-supplied key.
 
 ### Upload Tools
 
@@ -215,7 +319,53 @@ The qURL SDK reuses the same `Idempotency-Key` and request body when retrying PO
 | `upload_file_data_qurl` | `stdio`/HTTP | Upload base64 file content and mint a qURL |
 | `upload_text_qurl`      | `stdio`/HTTP | Upload text content and mint a qURL        |
 
-`upload_file_qurl` is intentionally stdio-only. It can read any supported PDF/image that the local MCP process user can access, so agents should invoke it only for a path the user explicitly selected for sharing. Do not expose it to untrusted prompts or autonomous agents: prompt injection could otherwise select another readable PDF/image on the host. Run stdio under an OS account whose filesystem access is limited to intended shareable content. HTTP mode never registers this host-file tool. The byte/text tools are also available in stdio so local clients can share in-chat attachments without first materializing them at a known host path. Connector upload and link minting are separate operations. The link comes from the connector's `POST /api/mint_link/:resource_id` (in tunnel mode, a per-recipient watermarked view), not from qURL `mint_link`, so uploaded files cannot be re-linked with `mint_link`; run the upload tool again. Upload links support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's clock, so a host clock that is off shortens or lengthens the link; a link whose returned expiry is already past by this host's clock is returned with `expires_at_already_past`), `one_time_use`, and `session_duration` (whole seconds, up to 24h); `access_policy` and `max_sessions` must be omitted or null; non-null values are rejected before the upload. If the connector ever mints more links than requested, the result reports how many extra in `unexpected_extra_link_count` and any IDs it returned in `unexpected_extra_qurl_ids` (at most 10); they may be live even when this host's clock suggests expiry, so tell the user. If minting fails after upload, the connector currently has no delete endpoint; the server logs the orphaned `resource_id` for operator cleanup and returns the mint failure. Upload links cannot yet be revoked from this server: `delete_qurl` on the upload's `resource_id` does not stop a connector-minted link (revocation needs the connector's `/api/revoke_links`), so prefer short expiries for sensitive files. Duration inputs accept whole days or weeks (`7d`, `1w`), or unsigned Go-unit sequences (`1h30m`, `1.5h`). Mixed day/week sequences (`1d12h`), leading signs, leading-dot fractions, and Greek mu (`μs`) are rejected; micro sign (`µs`) is accepted. HTTP upload attempts remain bounded by the per-IP and per-credential MCP rate limits; stdio operators should separately constrain autonomous retry loops. Upload validation binds the declared media type to the filename plus format start/end markers; it is not a malware scanner or full PDF/image decoder. For polyglot resistance, a PDF's final `%%EOF` marker must be followed only by ASCII whitespace; producer output with other trailing bytes is rejected even if a permissive PDF reader would accept it. JPEG validation checks framing and terminal markers rather than decoding image segments. The authenticated connector must independently decode or otherwise fully validate content before storage when semantic media validity matters. It must also preserve the declared safe media type and serve downloads with `X-Content-Type-Options: nosniff` rather than inferring an executable type. There is intentionally no application-level path allowlist: symlinks and time-of-check/time-of-use races make a lexical prefix check a misleading security boundary. Use a dedicated OS account, container, or read-only mount whose readable files are already limited to the intended sharing directory. The final path component is opened with `O_NOFOLLOW`; intermediate directory symlinks retain normal filesystem behavior under this trusted-local-user boundary.
+`upload_file_qurl` is intentionally stdio-only. It can read any supported
+PDF/image that the local MCP process user can access, so agents should invoke
+it only for a path the user explicitly selected for sharing. Do not expose it
+to untrusted prompts or autonomous agents: prompt injection could otherwise
+select another readable PDF/image on the host. Run stdio under an OS account
+whose filesystem access is limited to intended shareable content. HTTP mode
+never registers this host-file tool.
+The byte/text tools are also available in stdio so local clients can share
+in-chat attachments without first materializing them at a known host path.
+Connector upload and link minting are separate operations. The link comes from
+the connector's `POST /api/mint_link/:resource_id` (in tunnel mode, a
+per-recipient watermarked view), not from qURL `mint_link`, so uploaded files
+cannot be re-linked with `mint_link`; run the upload tool again. Upload links
+support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
+clock, so a host clock that is off shortens or lengthens the link; a link whose returned expiry
+is already past by this host's clock is returned with `expires_at_already_past`), `one_time_use`, and `session_duration` (whole seconds, up to 24h); `access_policy` and
+`max_sessions` must be omitted or null; non-null values are rejected before the upload. If the connector ever mints more
+links than requested, the result reports how many extra in
+`unexpected_extra_link_count` and any IDs it returned in
+`unexpected_extra_qurl_ids` (at most 10); they may be live even when this host's clock suggests expiry, so tell the user. If minting
+fails after upload, the connector currently has no delete endpoint; the server logs the orphaned
+`resource_id` for operator cleanup and returns the mint failure. Upload links
+cannot yet be revoked from this server: `delete_qurl` on the upload's
+`resource_id` does not stop a connector-minted link (revocation needs the
+connector's `/api/revoke_links`), so prefer short expiries for sensitive files.
+Duration inputs accept whole days or weeks (`7d`, `1w`), or unsigned Go-unit
+sequences (`1h30m`, `1.5h`). Mixed day/week sequences (`1d12h`), leading signs,
+leading-dot fractions, and Greek mu (`μs`) are rejected; micro sign (`µs`) is accepted.
+HTTP upload attempts remain bounded by the per-IP and per-credential MCP rate
+limits; stdio operators should separately constrain autonomous retry loops.
+Upload validation binds the declared media type to the filename plus format
+start/end markers; it is not a malware scanner or full PDF/image decoder.
+For polyglot resistance, a PDF's final `%%EOF` marker must be followed only by
+ASCII whitespace; producer output with other trailing bytes is rejected even
+if a permissive PDF reader would accept it. JPEG validation checks framing and
+terminal markers rather than decoding image segments. The authenticated
+connector must independently decode or otherwise fully validate content before
+storage when semantic media validity matters. It must also preserve the
+declared safe media type and serve downloads with `X-Content-Type-Options:
+nosniff` rather than inferring an executable type.
+There is intentionally no application-level path allowlist: symlinks and
+time-of-check/time-of-use races make a lexical prefix check a misleading
+security boundary. Use a dedicated OS account, container, or read-only mount
+whose readable files are already limited to the intended sharing directory.
+The final path component is opened with `O_NOFOLLOW`; intermediate directory
+symlinks retain normal filesystem behavior under this trusted-local-user
+boundary.
 
 ### MCP Resources
 
@@ -240,7 +390,9 @@ The qURL SDK reuses the same `Idempotency-Key` and request body when retrying PO
 npm install
 ```
 
-For a local stdio-only source install, use `npm install --omit=optional`; this omits the AWS SDK. HTTP deployments using the DynamoDB credential quota must use the ordinary install so the optional SDK is packaged.
+For a local stdio-only source install, use `npm install --omit=optional`; this
+omits the AWS SDK. HTTP deployments using the DynamoDB credential quota must use
+the ordinary install so the optional SDK is packaged.
 
 ### 2. Build
 
@@ -264,7 +416,11 @@ npm run start:http
 
 ## MCP Client Example
 
-If you want to use this server in `stdio` mode with a local MCP client, use the configuration from [Quick start](#quick-start-no-account-needed). Leave out `env` to work without an account through the local qURL CLI, or add `"env": { "QURL_API_KEY": "lv_live_xxx" }` to use the qURL API with an account key.
+If you want to use this server in `stdio` mode with a local MCP client, use
+the configuration from [Quick start](#quick-start-no-account-needed). Leave
+out `env` to work without an account through the local qURL CLI, or add
+`"env": { "QURL_API_KEY": "lv_live_xxx" }` to use the qURL API with an
+account key.
 
 ## Configuration Files
 
@@ -275,7 +431,8 @@ cp qurl-mcp.config.example.json qurl-mcp.config.json
 cp qurl-mcp.http.example.json qurl-mcp.http.json
 ```
 
-The local files are gitignored so credentials and machine-specific paths are not committed.
+The local files are gitignored so credentials and machine-specific paths are
+not committed.
 
 Their responsibilities are:
 
@@ -294,7 +451,10 @@ Their responsibilities are:
 | `defaultQurlApiUrl`       | Base URL of the qURL backend API                       |
 | `defaultQurlConnectorUrl` | Base URL of the upload connector                       |
 
-Shared settings have these environment overrides. Environment values take precedence over the shared config file. The process caches resolved shared settings but automatically invalidates that cache when the file metadata or any relevant environment value changes.
+Shared settings have these environment overrides. Environment values take
+precedence over the shared config file.
+The process caches resolved shared settings but automatically invalidates that
+cache when the file metadata or any relevant environment value changes.
 
 | Environment variable                   | Config field                   |
 | -------------------------------------- | ------------------------------ |
@@ -316,15 +476,54 @@ Shared settings have these environment overrides. Environment values take preced
 | `QURL_PUBLIC_VIDEO_TITLE`              | `publicVideo.title`            |
 | `QURL_PUBLIC_VIDEO_PAGE_PATH`          | `publicVideo.pagePath`         |
 
-`QURL_API_KEY` is intentionally environment-only and has no config-file field. Prefer `QURL_SMTP_PASSWORD` for the SMTP secret as well. If `smtp.password` is stored in the config file on a POSIX host, restrict that file to owner-only permissions (for example, `chmod 600`); startup warns when group/other read bits are present. This check is intentionally advisory so existing deployments do not fail after an upgrade, and it is skipped on Windows because POSIX mode bits are not available there. Email delivery itself is fail-closed unless at least one exact `smtp.allowedRecipients` entry or `smtp.allowedRecipientDomains` entry is configured; startup warns when complete SMTP credentials lack that policy.
+`QURL_API_KEY` is intentionally environment-only and has no config-file field.
+Prefer `QURL_SMTP_PASSWORD` for the SMTP secret as well. If `smtp.password` is
+stored in the config file on a POSIX host, restrict that file to owner-only
+permissions (for example, `chmod 600`); startup warns when group/other read bits
+are present. This check is intentionally advisory so existing deployments do
+not fail after an upgrade, and it is skipped on Windows because POSIX mode bits
+are not available there.
+Email delivery itself is fail-closed unless at least one exact
+`smtp.allowedRecipients` entry or `smtp.allowedRecipientDomains` entry is
+configured; startup warns when complete SMTP credentials lack that policy.
 
-Raising `maxUploadFileDataBytes` also raises the HTTP JSON parser's per-request memory ceiling to roughly 1.5 times that value (up to about 150 MB at the 100 MB maximum), before base64 decoding applies the exact byte cap. Until a session has completed a successful downstream qURL API call (a completed upload's link mint counts), its parser ceiling remains at the smaller 10 MB default upload setting; clients configured for a larger first upload must validate the session with a small qURL API call or a smaller upload first. Size the configured maximum and reverse-proxy concurrency limit together.
+Raising `maxUploadFileDataBytes` also raises the HTTP JSON parser's per-request
+memory ceiling to roughly 1.5 times that value (up to about 150 MB at the
+100 MB maximum), before base64 decoding applies the exact byte cap. Until a
+session has completed a successful downstream qURL API call (a completed upload's
+link mint counts), its parser ceiling remains at the smaller 10 MB default upload
+setting; clients configured for a larger first upload must validate the session
+with a small qURL API call or a smaller upload first.
+Size the configured maximum and reverse-proxy concurrency limit together.
 
-Set `QURL_API_KEY` in the environment for `stdio` mode to use the qURL API. Without it, `stdio` mode runs through the local qURL CLI and needs no account (see [Quick start](#quick-start-no-account-needed)). In HTTP mode, every client request supplies its own qURL API key as a bearer token.
+Set `QURL_API_KEY` in the environment for `stdio` mode to use the qURL API.
+Without it, `stdio` mode runs through the local qURL CLI and needs no account
+(see [Quick start](#quick-start-no-account-needed)). In HTTP mode, every
+client request supplies its own qURL API key as a bearer token.
 
-`defaultQurlApiUrl` and `QURL_API_URL` require HTTPS for non-loopback hosts because qURL API keys and data are bearer-sent to that destination. Plain HTTP is accepted only for literal loopback development endpoints. Upload connector URLs follow the same HTTPS-except-loopback rule. Loopback means `127.0.0.0/8` or `::1`; wildcard bind addresses such as `0.0.0.0` and `::` are intentionally not accepted as outbound HTTP targets. Connector destinations are trusted operator configuration rather than caller input; private addresses and DNS resolution are therefore permitted. Pin the connector hostname in deployment DNS and do not point it at metadata services. The caller's qURL bearer credential is forwarded to this host, so treat connector URL and DNS control as part of the credential trust boundary. Configure the connector service base URL, not an upload route: qurl-mcp appends `/api/upload` to ordinary base paths, accepts that exact endpoint suffix, and rejects ambiguous upload-like paths such as `/upload` or `/api/upload/v2`. The MCP server performs bounded file-framing checks, not full media parsing; the connector must independently revalidate uploaded content before storage or serving, and delivery must retain `nosniff` behavior as the authoritative type boundary.
+`defaultQurlApiUrl` and `QURL_API_URL` require HTTPS for non-loopback hosts
+because qURL API keys and data are bearer-sent to that destination. Plain HTTP
+is accepted only for literal loopback development endpoints. Upload connector
+URLs follow the same HTTPS-except-loopback rule.
+Loopback means `127.0.0.0/8` or `::1`; wildcard bind addresses such as
+`0.0.0.0` and `::` are intentionally not accepted as outbound HTTP targets.
+Connector destinations are trusted operator configuration rather than caller
+input; private addresses and DNS resolution are therefore permitted. Pin the
+connector hostname in deployment DNS and do not point it at metadata services.
+The caller's qURL bearer credential is forwarded to this host, so treat connector
+URL and DNS control as part of the credential trust boundary.
+Configure the connector service base URL, not an upload route: qurl-mcp appends
+`/api/upload` to ordinary base paths, accepts that exact endpoint suffix, and
+rejects ambiguous upload-like paths such as `/upload` or `/api/upload/v2`.
+The MCP server performs bounded file-framing checks, not full media parsing;
+the connector must independently revalidate uploaded content before storage or
+serving, and delivery must retain `nosniff` behavior as the authoritative type
+boundary.
 
-API and connector base URLs that contain embedded credentials, a query string, or a fragment are now rejected during startup. Deployments that previously used one of those unusual URL forms must move credentials to `QURL_API_KEY` and keep the configured service URL to its origin and optional path prefix.
+API and connector base URLs that contain embedded credentials, a query string,
+or a fragment are now rejected during startup. Deployments that previously used
+one of those unusual URL forms must move credentials to `QURL_API_KEY` and keep
+the configured service URL to its origin and optional path prefix.
 
 ### SMTP Settings
 
@@ -350,13 +549,63 @@ These settings are used when email delivery is requested by tools such as:
 - `upload_file_qurl`
 - `upload_file_data_qurl`
 
-If either recipient allowlist is configured, only an exact address or domain match is delivered. If both are empty, the message and hourly caps still apply. Domain entries are exact: `example.com` does not implicitly allow `mail.example.com`; list each permitted subdomain explicitly. Addresses and domains are normalized to lowercase NFC/IDNA ASCII form and a trailing DNS root dot is removed before comparison and delivery. Each recipient allowlist is limited to 1,000 configured entries. The per-message recipient cap applies to the complete unique requested fan-out before allowlist filtering, so blocked addresses cannot be used to submit an oversized batch. In HTTP mode, any caller with a valid qURL API key can request a server-side SMTP delivery. Configure `allowedRecipients` or `allowedRecipientDomains` before enabling SMTP on an Internet-facing HTTP deployment; empty allowlists permit delivery to any syntactically valid address subject to the quotas. The SMTP transport uses bounded connection/socket timeouts and is closed after each delivery batch. Failed SMTP attempts still consume quota—including when a transient outage results in zero delivered messages—so repeated failures cannot bypass the abuse limit. Each delivery request also has a 60-second aggregate deadline. Recipients not started before that deadline are reported as skipped; provider-side queues are the supported path for larger or slower fan-out. Transport encryption is mandatory: `smtp.secure: true` uses implicit TLS, while `smtp.secure: false` requires a successful STARTTLS upgrade. Port 465 is reserved for implicit TLS and therefore requires `smtp.secure: true`. Hourly quota state is maintained per server process: it resets on restart and is not shared across replicas. Operators running multiple instances should enforce a corresponding aggregate limit at the SMTP provider or gateway. The in-process quota is therefore an abuse backstop, not a durable global safety boundary; restart/scale-out fail-open behavior must be covered by that provider-side limit. Tracking fails closed for new principals after 10,000 principals are retained in one process; existing principals continue to use their current buckets until expired entries are pruned. Restrict qURL API-key issuance and monitor new-principal quota-cap rejections: cycling many valid keys can deliberately hold that shared table at capacity for up to one quota window. The quota uses a fixed one-hour window that starts with the first attempted delivery after the prior window expires. As with any fixed window, traffic immediately before and after a boundary can total nearly twice the configured hourly value; use a provider-side sliding or rolling limit when that boundary burst must be prevented across replicas.
+If either recipient allowlist is configured, only an exact address or domain
+match is delivered. If both are empty, the message and hourly caps still apply.
+Domain entries are exact: `example.com` does not implicitly allow
+`mail.example.com`; list each permitted subdomain explicitly.
+Addresses and domains are normalized to lowercase NFC/IDNA ASCII form and a
+trailing DNS root dot is removed before comparison and delivery.
+Each recipient allowlist is limited to 1,000 configured entries. The
+per-message recipient cap applies to the complete unique requested fan-out
+before allowlist filtering, so blocked addresses cannot be used to submit an
+oversized batch.
+In HTTP mode, any caller with a valid qURL API key can request a server-side
+SMTP delivery. Configure `allowedRecipients` or `allowedRecipientDomains`
+before enabling SMTP on an Internet-facing HTTP deployment; empty allowlists
+permit delivery to any syntactically valid address subject to the quotas.
+The SMTP transport uses bounded connection/socket timeouts and is closed after
+each delivery batch. Failed SMTP attempts still consume quota—including when a
+transient outage results in zero delivered messages—so repeated failures cannot
+bypass the abuse limit.
+Each delivery request also has a 60-second aggregate deadline. Recipients not
+started before that deadline are reported as skipped; provider-side queues are
+the supported path for larger or slower fan-out.
+Transport encryption is mandatory: `smtp.secure: true` uses implicit TLS,
+while `smtp.secure: false` requires a successful STARTTLS upgrade. Port 465 is
+reserved for implicit TLS and therefore requires `smtp.secure: true`.
+Hourly quota state is maintained per server process: it resets on restart and
+is not shared across replicas. Operators running multiple instances should
+enforce a corresponding aggregate limit at the SMTP provider or gateway.
+The in-process quota is therefore an abuse backstop, not a durable global
+safety boundary; restart/scale-out fail-open behavior must be covered by that
+provider-side limit.
+Tracking fails closed for new principals after 10,000 principals are retained
+in one process; existing principals continue to use their current buckets until
+expired entries are pruned.
+Restrict qURL API-key issuance and monitor new-principal quota-cap rejections:
+cycling many valid keys can deliberately hold that shared table at capacity for
+up to one quota window.
+The quota uses a fixed one-hour window that starts with the first attempted
+delivery after the prior window expires.
+As with any fixed window, traffic immediately before and after a boundary can
+total nearly twice the configured hourly value; use a provider-side sliding or
+rolling limit when that boundary burst must be prevented across replicas.
 
-HTTP SMTP delivery is restricted to the operator credential configured in `QURL_API_KEY`. A different customer's valid qURL key does not authorize use of the operator's SMTP account. Without that explicit operator key, HTTP email delivery is disabled. Stdio retains its local operator trust model. Recipient allowlists and quotas apply in both modes.
+HTTP SMTP delivery is restricted to the operator credential configured in
+`QURL_API_KEY`. A different customer's
+valid qURL key does not authorize use of the operator's SMTP account. Without
+that explicit operator key, HTTP email delivery is disabled. Stdio retains its
+local operator trust model. Recipient allowlists and quotas apply in both modes.
 
-Generated qURL links are included in the plain-text email body. Restrict recipients with the SMTP allowlists and configure transport encryption at the SMTP server/provider when link confidentiality matters.
+Generated qURL links are included in the plain-text email body. Restrict
+recipients with the SMTP allowlists and configure transport encryption at the
+SMTP server/provider when link confidentiality matters.
 
-Prefer environment variables for SMTP credentials and policy: `QURL_SMTP_USERNAME`, `QURL_SMTP_PASSWORD`, `QURL_SMTP_FROM_EMAIL`, `QURL_SMTP_ALLOWED_RECIPIENTS`, `QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS`, `QURL_SMTP_MAX_RECIPIENTS_PER_MESSAGE`, and `QURL_SMTP_MAX_RECIPIENTS_PER_HOUR`.
+Prefer environment variables for SMTP credentials and policy:
+`QURL_SMTP_USERNAME`, `QURL_SMTP_PASSWORD`, `QURL_SMTP_FROM_EMAIL`,
+`QURL_SMTP_ALLOWED_RECIPIENTS`, `QURL_SMTP_ALLOWED_RECIPIENT_DOMAINS`,
+`QURL_SMTP_MAX_RECIPIENTS_PER_MESSAGE`, and
+`QURL_SMTP_MAX_RECIPIENTS_PER_HOUR`.
 
 ### Public Video Page Settings
 
@@ -371,11 +620,18 @@ When configured, the HTTP server additionally exposes:
 - a public video playback page
 - a streaming endpoint for the MP4 file
 
-`publicVideo.filePath` is trusted operator configuration. The final component must be a non-symlink regular `.mp4` file; intermediate directory symlinks keep normal filesystem resolution and must therefore remain under operator control. Startup probes this optional asset and warns when it is missing, empty, or not regular, but intentionally keeps the MCP service and `/healthz` available. The video-file route still fails closed with `404` until the asset is corrected.
+`publicVideo.filePath` is trusted operator configuration. The final component
+must be a non-symlink regular `.mp4` file; intermediate directory symlinks keep
+normal filesystem resolution and must therefore remain under operator control.
+Startup probes this optional asset and warns when it is missing, empty, or not
+regular, but intentionally keeps the MCP service and `/healthz` available. The
+video-file route still fails closed with `404` until the asset is corrected.
 
 ## qurl-mcp.http.json Reference
 
-Use [`qurl-mcp.http.example.json`](qurl-mcp.http.example.json) for local, stateful development. [`qurl-mcp.http.stateless.example.json`](qurl-mcp.http.stateless.example.json) shows every store and metric field required by a deployed stateless service.
+Use [`qurl-mcp.http.example.json`](qurl-mcp.http.example.json) for local,
+stateful development. [`qurl-mcp.http.stateless.example.json`](qurl-mcp.http.stateless.example.json)
+shows every store and metric field required by a deployed stateless service.
 
 | Field                          | Purpose                                                                             |
 | ------------------------------ | ----------------------------------------------------------------------------------- |
@@ -427,30 +683,212 @@ HTTP fields have matching environment overrides:
 | `MCP_PUBLIC_FILE_RATE_LIMIT_PER_MINUTE` | `publicFileRateLimitPerMinute`            |
 | `MCP_MAX_UPLOAD_FILE_DATA_BYTES`        | `maxUploadFileDataBytes` (shared)         |
 
-The listener defaults to `127.0.0.1`. A non-loopback `host` is rejected unless `allowedHosts` is explicitly configured. Set `trustProxyHops` (or `MCP_TRUST_PROXY_HOPS`) to the exact number of trusted proxy hops; leave it at `0` for direct connections so forwarded IP headers cannot spoof rate-limit keys. The Host allowlist is limited to 1,000 entries so request-time validation stays bounded even under pathological operator configuration. `/mcp` applies the configured request allowance independently to both the client IP and the SHA-256 digest of the authenticated bearer. The memory store is process-local; the DynamoDB store uses an atomic fixed-window counter keyed by credential digest and UTC minute. It never stores the bearer. As with any fixed window, requests around a minute boundary can total nearly twice the configured allowance. The table contract is a string partition key named `rate_key`; the atomic update writes a numeric `request_count` counter and a numeric `expires_at` TTL timestamp. Enable DynamoDB TTL on `expires_at` so expired rows do not accumulate; TTL only schedules asynchronous cleanup, and the minute in the key—not physical deletion—resets the active window. The task role requires `dynamodb:DescribeTable` for startup and `dynamodb:UpdateItem` on the request path. Use on-demand capacity or provision enough write capacity for the expected fleet rate; throttling fails closed with `503` and never falls back to memory. The client uses standard retry mode with at most two attempts, a one-second connection timeout, and a two-second request timeout that throws; these explicit bounds limit how long a request holds a concurrency permit during a partial store failure. The optional AWS SDK dependency is top-level exact-version pinned, while the committed package lock fixes its transitive `@aws-sdk/*` and `@smithy/*` graph. Any SDK bump must update the lockfile and keep the real-`NodeHttpHandler` timeout-materialization regression test green. The dependency is loaded only when the DynamoDB store is selected, so stdio-only consumers may install with `--omit=optional`. Deployed HTTP images must include optional dependencies; startup fails before listening if the SDK is absent or exposes an incompatible runtime surface. The client uses the standard `AWS_REGION` and credential provider chain; ECS deployments normally obtain both from the task environment and task role. Reverse-proxy deployments must set the correct hop count or all callers behind the proxy will share the proxy's single IP bucket. Only the DynamoDB credential quota is fleet-wide: the IP limiter is process-local, so its effective fleet allowance multiplies with task count and must be backed by a shared edge limit. The managed deployment in qurl-integrations-infra PR #1305 enforces both a per-source-IP WAF limit and a lower aggregate `/mcp` fleet cap, with live headroom proof tracked in issue #1306. The credential bucket also prevents one key from bypassing the request allowance by rotating source IPs, while `maxSessionsPerCredential` prevents it from occupying the full session pool. Each distinct bearer value retains one credential-bucket entry for the current one-minute window. The IP limiter runs first, so token rotation from one source cannot create entries faster than `mcpRateLimitPerMinute`; hostile distributed traffic still requires the documented shared edge limit. The IP bucket is the primary in-process control against arbitrary bearer rotation because distinct unvalidated bearer strings necessarily occupy distinct credential buckets. In stateful mode, budget pending-session parser memory as `maxUnvalidatedSessions` times roughly 1.5 times the smaller of `maxUploadFileDataBytes` and 10 MB (plus about 64 KiB per request). At the defaults, the theoretical concurrent ceiling is about 1.5 GiB. Lower `maxUnvalidatedSessions` and the shared edge concurrency limit together when the deployment has a smaller memory budget. Bearer credentials are conclusively validated by the first successful downstream qURL API call. Until then, sessions use the smaller pending-session cap and one-minute validation deadline, so arbitrary non-empty bearer strings cannot occupy the full session pool for the normal 15-minute TTL. A client that performs only MCP introspection remains pending by design; after deadline eviction it must re-initialize before its next request. The session caps and validation deadline are configurable for clients with longer introspection-to-tool-call gaps. The deadline is absolute and applies regardless of activity, including an open SSE stream or a long-running first tool call. Validated clients that disconnect without sending `DELETE /mcp` retain their bounded session slot for a 30-second reconnect grace period. A reconnect clears that deadline; otherwise the session is reaped without waiting for the longer idle TTL. Size `maxSessions` and the idle TTL for clients that remain connected but do not perform explicit session teardown. Validated sessions also expire at `sessionAbsoluteTtlMs` (24 hours by default), even during an active SSE stream or tool request. This prevents keepalives from pinning a global or per-credential session slot indefinitely. The first downstream qURL operation must therefore complete before that deadline; an unusually slow first API call may be interrupted and the client must re-initialize. This fail-closed behavior prevents an invalid credential from extending its pending slot with a deliberately long-running request.
+The listener defaults to `127.0.0.1`. A non-loopback `host` is rejected unless
+`allowedHosts` is explicitly configured. Set `trustProxyHops` (or
+`MCP_TRUST_PROXY_HOPS`) to the exact number of trusted proxy hops; leave it at
+`0` for direct connections so forwarded IP headers cannot spoof rate-limit keys.
+The Host allowlist is limited to 1,000 entries so request-time validation stays
+bounded even under pathological operator configuration.
+`/mcp` applies the configured request allowance independently to both the
+client IP and the SHA-256 digest of the authenticated bearer. The memory store
+is process-local; the DynamoDB store uses an atomic fixed-window counter keyed
+by credential digest and UTC minute. It never stores the bearer. As with any
+fixed window, requests around a minute boundary can total nearly twice the
+configured allowance. The table contract is a string partition key named
+`rate_key`; the atomic update writes a numeric `request_count` counter and a
+numeric `expires_at` TTL timestamp. Enable DynamoDB TTL on `expires_at` so
+expired rows do not accumulate; TTL only schedules asynchronous cleanup, and
+the minute in the key—not physical deletion—resets the active window. The task
+role requires `dynamodb:DescribeTable` for startup and `dynamodb:UpdateItem` on
+the request path. Use on-demand capacity or provision enough write capacity for
+the expected fleet rate; throttling fails closed with `503` and never falls
+back to memory. The client uses standard retry mode with at most two attempts,
+a one-second connection timeout, and a two-second request timeout that throws;
+these explicit bounds limit how long a request holds a concurrency permit
+during a partial store failure. The optional AWS SDK dependency is top-level
+exact-version pinned, while the committed package lock fixes its transitive
+`@aws-sdk/*` and `@smithy/*` graph. Any SDK bump must update the lockfile and
+keep the real-`NodeHttpHandler` timeout-materialization regression test green.
+The dependency is loaded only when the DynamoDB store is selected, so
+stdio-only consumers may install with `--omit=optional`. Deployed HTTP images
+must include optional dependencies; startup fails before listening if the SDK
+is absent or exposes an incompatible runtime surface. The client uses the
+standard `AWS_REGION` and credential provider chain; ECS deployments
+normally obtain both from the task environment and task role. Reverse-proxy
+deployments must set the correct hop count or all callers behind the proxy will
+share the proxy's single IP bucket. Only the DynamoDB credential quota is
+fleet-wide: the IP limiter is process-local, so its effective fleet allowance
+multiplies with task count and must be backed by a shared edge limit. The
+managed deployment in qurl-integrations-infra PR #1305 enforces both a
+per-source-IP WAF limit and a lower aggregate `/mcp` fleet cap, with live
+headroom proof tracked in issue #1306. The credential bucket also prevents one
+key from bypassing the request allowance by rotating source IPs, while
+`maxSessionsPerCredential` prevents it from occupying the full session pool.
+Each distinct bearer value retains one credential-bucket entry for the current
+one-minute window. The IP limiter runs first, so token rotation from one source
+cannot create entries faster than `mcpRateLimitPerMinute`; hostile distributed
+traffic still requires the documented shared edge limit. The IP bucket is the
+primary in-process control against arbitrary bearer rotation because distinct
+unvalidated bearer strings necessarily occupy distinct credential buckets.
+In stateful mode, budget pending-session parser memory as
+`maxUnvalidatedSessions` times roughly
+1.5 times the smaller of `maxUploadFileDataBytes` and 10 MB (plus about 64 KiB
+per request). At the defaults, the theoretical concurrent ceiling is about
+1.5 GiB. Lower `maxUnvalidatedSessions` and the shared edge concurrency limit
+together when the deployment has a smaller memory budget.
+Bearer credentials are conclusively validated by the first successful
+downstream qURL API call. Until then, sessions use the smaller pending-session
+cap and one-minute validation deadline, so arbitrary non-empty bearer strings
+cannot occupy the full session pool for the normal 15-minute TTL. A client that
+performs only MCP introspection remains pending by design; after deadline
+eviction it must re-initialize before its next request. The session caps and
+validation deadline are configurable for clients with longer
+introspection-to-tool-call gaps. The deadline is absolute and applies regardless
+of activity, including an open SSE stream or a long-running first tool call.
+Validated clients that disconnect without sending `DELETE /mcp` retain their
+bounded session slot for a 30-second reconnect grace period. A reconnect clears
+that deadline; otherwise the session is reaped without waiting for the longer
+idle TTL. Size `maxSessions` and the idle TTL for clients that remain connected
+but do not perform explicit session teardown.
+Validated sessions also expire at `sessionAbsoluteTtlMs` (24 hours by default),
+even during an active SSE stream or tool request. This prevents keepalives from
+pinning a global or per-credential session slot indefinitely.
+The first downstream qURL operation must therefore complete before that
+deadline; an unusually slow first API call may be interrupted and the client
+must re-initialize. This fail-closed behavior prevents an invalid credential
+from extending its pending slot with a deliberately long-running request.
 
-At the unvalidated-session cap, a new initialization replaces the oldest idle unvalidated session, so junk handshakes cannot reserve every slot for the full validation TTL. Validated sessions and active requests are never evicted; pending initializations and asynchronous teardown remain bounded. Sustained traffic can still churn unvalidated sessions, so public deployments should use stateless mode and edge admission controls.
+At the unvalidated-session cap, a new initialization replaces the oldest idle
+unvalidated session, so junk handshakes cannot reserve every slot for the full
+validation TTL. Validated sessions and active requests are never evicted;
+pending initializations and asynchronous teardown remain bounded. Sustained
+traffic can still churn unvalidated sessions, so public deployments should use
+stateless mode and edge admission controls.
 
-Accepting a non-empty bearer during MCP initialization is intentional: it keeps protocol introspection available before the first qURL operation, while the global session cap, per-credential session cap, pending-session cap, absolute deadline, and request rate limit bound invalid-key slot usage. The MCP middleware does not validate the key itself; only a successful downstream qURL API response promotes the session. Downstream errors, including non-2xx responses that appear authenticated, do not promote it because an intermediary may have generated them before the qURL API authenticated the bearer. Promotion therefore assumes the configured HTTPS qURL API endpoint and every trusted intermediary neither cache nor synthesize authenticated success responses. Reverse proxies in that path must forward authorization and disable response caching for qURL API traffic. Consequently, any caller with a non-empty bearer can enumerate the public tool/resource/prompt catalog and briefly hold bounded pending-session state. On hostile networks, place non-loopback deployments behind an identity-aware proxy that preserves the caller's qURL bearer credential for `/mcp` authorization. Initialization and catalog listing return server-owned static metadata only; they do not invoke tool/resource/prompt handlers, read host files, contact the qURL API or connector, or send email. Handler calls rely on the configured qURL API to authenticate the forwarded bearer before returning data or applying an operation. The configured connector is a second credential authority: it must authenticate the forwarded qURL bearer before accepting or storing upload bytes. Deploying an unauthenticated connector is unsupported because it would allow an unvalidated MCP caller to create connector-side state.
+Accepting a non-empty bearer during MCP initialization is intentional: it keeps
+protocol introspection available before the first qURL operation, while the
+global session cap, per-credential session cap, pending-session cap, absolute
+deadline, and request rate limit bound invalid-key slot usage. The MCP
+middleware does not validate the key itself; only a successful downstream qURL
+API response promotes the session.
+Downstream errors, including non-2xx responses that appear authenticated, do
+not promote it because an intermediary may have generated them before the qURL
+API authenticated the bearer.
+Promotion therefore assumes the configured HTTPS qURL API endpoint and every
+trusted intermediary neither cache nor synthesize authenticated success
+responses. Reverse proxies in that path must forward authorization and disable
+response caching for qURL API traffic.
+Consequently, any caller with a non-empty bearer can enumerate the public
+tool/resource/prompt catalog and briefly hold bounded pending-session state. On
+hostile networks, place non-loopback deployments behind an identity-aware proxy
+that preserves the caller's qURL bearer credential for `/mcp` authorization.
+Initialization and catalog listing return server-owned static metadata only;
+they do not invoke tool/resource/prompt handlers, read host files, contact the
+qURL API or connector, or send email. Handler calls rely on the configured qURL
+API to authenticate the forwarded bearer before returning data or applying an
+operation. The configured connector is a second credential authority: it must
+authenticate the forwarded qURL bearer before accepting or storing upload bytes.
+Deploying an unauthenticated connector is unsupported because it would allow an
+unvalidated MCP caller to create connector-side state.
 
-Stateful mode is the compatibility default and retains the existing MCP session registry, GET SSE, explicit DELETE behavior, and process-local credential quota charging for all three MCP methods. Stateless mode creates and closes a server and transport for each POST, ignores `mcp-session-id`, and returns JSON-RPC-shaped `405` responses for GET and DELETE. It is the required mode behind a load balancer or autoscaling service because no request depends on process-local affinity. The concurrency permit is acquired before JSON parsing and released on every response/error/disconnect path. Stateless mode uses the configured `maxUploadFileDataBytes` parser ceiling directly because the pre-parse concurrency permit provides its memory-amplification bound. Budget roughly `maxConcurrentRequests` times (1.5 times `maxUploadFileDataBytes` plus 64 KiB) per process; the default concurrency at the 100 MB upload ceiling is approximately 3 GiB before downstream work. Stateless startup rejects configurations whose conservative parser budget exceeds 4 GiB. Lower either setting further when the ECS task has a smaller memory limit. In contrast, stateful sessions above the default ceiling must first complete a successful downstream qURL API call. On hostile networks, an authenticated edge request-size limit no larger than the configured parser ceiling is a deployment requirement: the permit bounds aggregate memory, but a non-empty bearer is not authoritatively validated until the parsed operation reaches the downstream qURL API.
+Stateful mode is the compatibility default and retains the existing MCP session
+registry, GET SSE, explicit DELETE behavior, and process-local credential quota
+charging for all three MCP methods. Stateless mode creates and closes a server
+and transport for each POST, ignores `mcp-session-id`, and
+returns JSON-RPC-shaped `405` responses for GET and DELETE. It is the required
+mode behind a load balancer or autoscaling service because no request depends
+on process-local affinity. The concurrency permit is acquired before JSON
+parsing and released on every response/error/disconnect path. Stateless mode
+uses the configured `maxUploadFileDataBytes` parser ceiling directly because
+the pre-parse concurrency permit provides its memory-amplification bound.
+Budget roughly `maxConcurrentRequests` times (1.5 times
+`maxUploadFileDataBytes` plus 64 KiB) per process; the default concurrency at
+the 100 MB upload ceiling is approximately 3 GiB before downstream work.
+Stateless startup rejects configurations whose conservative parser budget
+exceeds 4 GiB. Lower either setting further when the ECS task has a smaller
+memory limit. In contrast, stateful sessions above the default ceiling must
+first complete a successful downstream qURL API call.
+On hostile networks, an authenticated edge request-size limit no larger than
+the configured parser ceiling is a deployment requirement: the permit bounds
+aggregate memory, but a non-empty bearer is not authoritatively validated until
+the parsed operation reaches the downstream qURL API.
 
-The stateless listener bounds header receipt at 15 seconds and both complete request receipt and idle socket lifetime at 120 seconds. A concurrency permit spans parsing through response completion, so stalled clients cannot retain the entire permit pool indefinitely. A tool call that produces no socket traffic for 120 seconds is intentionally aborted; integrations needing longer silent operations must move that work behind an asynchronous API rather than raising this fleet-wide retention bound.
+The stateless listener bounds header receipt at 15 seconds and both complete
+request receipt and idle socket lifetime at 120 seconds. A concurrency permit
+spans parsing through response completion, so stalled clients cannot retain the
+entire permit pool indefinitely. A tool call that produces no socket traffic
+for 120 seconds is intentionally aborted; integrations needing longer silent
+operations must move that work behind an asynchronous API rather than raising
+this fleet-wide retention bound.
 
-Deployed (non-loopback) stateless mode requires the DynamoDB credential store and all three stable metric identity fields. It emits a 30-second EMF heartbeat: `McpConcurrencyUtilization` is the peak permit utilization observed during the interval at request admission and heartbeat (including requests that start and finish between heartbeats), while `McpConcurrencyRejected` and `McpRateLimitStoreErrors` are snapshot-and-zero interval deltas that include explicit zeros. Session caps and email recipient quotas remain in-memory; the DynamoDB credential quota is fleet-wide and counts every authenticated HTTP POST, including initialization, discovery, and tool calls. Size that quota for the expected complete request pattern rather than tool calls alone. The permit also spans the bounded DynamoDB increment: during a store brownout, each admitted request may retain one permit for roughly four seconds (two two-second attempts) before failing closed, while excess requests receive a fast concurrency `503`. The fixed-window counter increments every attempt, including attempts already above the credential limit; edge rate limits and DynamoDB write/throttle alarms must therefore bound abusive write amplification. Deployment owners must make both alarms and an over-limit write-amplification probe hard promotion gates rather than treating them as optional observability. The managed deployment in [qurl-integrations-infra#1305](https://github.com/layervai/qurl-integrations-infra/pull/1305) provisions those alarms, with live proof tracked in its rollout ledger and issue #1306 before promotion. Direct `createHttpRuntime` embedders that inject a credential-store implementation must still declare `credentialRateLimitStore: "dynamodb"` for non-loopback stateless mode. The generic injection interface cannot prove a custom backend is shared across replicas, so injection is deliberately not an escape hatch from the deployed contract. Metric identity fields are rejected in stateful mode so the concurrency gauge cannot silently report a misleading zero. Each stateless POST owns a fresh MCP server and transport so no request can inherit another credential's handler state. Completed-response teardown is tracked asynchronously. Admission stops when that backlog reaches `maxConcurrentRequests`; requests already in flight may then finish, so the backlog can transiently approach twice that count but remains bounded. While the admission guard is closed, new requests fail with `503` and increment `McpConcurrencyRejected` instead of growing teardown memory without bound. That counter intentionally represents admission failure from either active request saturation or teardown backpressure. Autoscaling must use `McpConcurrencyUtilization` alone; the rejection counter remains page-worthy, and low utilization alongside rejections identifies teardown lag. Pooling these objects would weaken request isolation and is deliberately not a performance optimization without measured registration pressure. `/healthz` and the public video-file endpoint each use their own `publicFileRateLimitPerMinute` bucket, isolated from legal/video-page traffic and from each other. Keep load-balancer, liveness-probe, and expected video range-request frequency below that per-source-IP allowance (300 requests/minute by default), or raise it for unusually aggressive clients.
+Deployed (non-loopback) stateless mode requires the DynamoDB credential store
+and all three stable metric identity fields. It emits a 30-second EMF heartbeat:
+`McpConcurrencyUtilization` is the peak permit utilization observed during the
+interval at request admission and heartbeat (including requests that start and
+finish between heartbeats), while
+`McpConcurrencyRejected` and `McpRateLimitStoreErrors` are snapshot-and-zero
+interval deltas that include explicit zeros. Session caps and email recipient
+quotas remain in-memory; the DynamoDB credential quota is fleet-wide and counts
+every authenticated HTTP POST, including initialization, discovery, and tool
+calls. Size that quota for the expected complete request pattern rather than
+tool calls alone. The permit also spans the bounded DynamoDB increment: during
+a store brownout, each admitted request may retain one permit for roughly four
+seconds (two two-second attempts) before failing closed, while excess requests
+receive a fast concurrency `503`. The fixed-window counter increments every
+attempt, including
+attempts already above the credential limit; edge rate limits and DynamoDB
+write/throttle alarms must therefore bound abusive write amplification.
+Deployment owners must make both alarms and an over-limit write-amplification
+probe hard promotion gates rather than treating them as optional observability.
+The managed deployment in
+[qurl-integrations-infra#1305](https://github.com/layervai/qurl-integrations-infra/pull/1305)
+provisions those alarms, with live proof tracked in its rollout ledger and
+issue #1306 before promotion.
+Direct `createHttpRuntime` embedders that inject a credential-store
+implementation must still declare `credentialRateLimitStore: "dynamodb"` for
+non-loopback stateless mode. The generic injection interface cannot prove a
+custom backend is shared across replicas, so injection is deliberately not an
+escape hatch from the deployed contract.
+Metric identity fields are rejected in stateful mode so the concurrency gauge
+cannot silently report a misleading zero.
+Each stateless POST owns a fresh MCP server and transport so no request can
+inherit another credential's handler state. Completed-response teardown is
+tracked asynchronously. Admission stops when that backlog reaches
+`maxConcurrentRequests`; requests already in flight may then finish, so the
+backlog can transiently approach twice that count but remains bounded. While
+the admission guard is closed, new requests fail with `503` and increment
+`McpConcurrencyRejected` instead of growing teardown memory without bound.
+That counter intentionally represents admission failure from either active
+request saturation or teardown backpressure. Autoscaling must use
+`McpConcurrencyUtilization` alone; the rejection counter remains page-worthy,
+and low utilization alongside rejections identifies teardown lag.
+Pooling these objects would weaken request isolation and is deliberately not a
+performance optimization without measured registration pressure.
+`/healthz` and the public video-file endpoint each use their own
+`publicFileRateLimitPerMinute` bucket, isolated from legal/video-page traffic
+and from each other. Keep load-balancer, liveness-probe, and expected video
+range-request frequency below that per-source-IP allowance (300
+requests/minute by default), or raise it for unusually aggressive clients.
 
 ## Configuration Priority
 
-By default, configuration is loaded from the two local JSON files above. If a file is absent, built-in defaults and environment variables are used. Relative config paths—including the defaults—are resolved from the process working directory. Set the explicit path variables below when a supervisor, `npx`, or an MCP host launches the server from a different directory.
+By default, configuration is loaded from the two local JSON files above. If a
+file is absent, built-in defaults and environment variables are used.
+Relative config paths—including the defaults—are resolved from the process
+working directory. Set the explicit path variables below when a supervisor,
+`npx`, or an MCP host launches the server from a different directory.
 
 The following environment variables independently override the config file paths:
 
 - `QURL_MCP_CONFIG`
 - `QURL_MCP_HTTP_CONFIG`
 
-`QURL_MCP_HTTP_CONFIG` never replaces the shared runtime config path. This keeps listener settings from silently shadowing SMTP, connector, or API settings.
+`QURL_MCP_HTTP_CONFIG` never replaces the shared runtime config path. This keeps
+listener settings from silently shadowing SMTP, connector, or API settings.
 
-`server.json` and `smithery.yaml` describe the published stdio transport, so they include shared upload/SMTP settings but intentionally omit HTTP-only listener variables such as `QURL_MCP_HTTP_CONFIG` and `MCP_MAX_SESSIONS`.
+`server.json` and `smithery.yaml` describe the published stdio transport, so
+they include shared upload/SMTP settings but intentionally omit HTTP-only
+listener variables such as `QURL_MCP_HTTP_CONFIG` and `MCP_MAX_SESSIONS`.
 
 Do not commit API keys, SMTP credentials, or private file-system paths.
 
@@ -467,15 +905,47 @@ After starting in `http` mode, the common routes are:
 | `publicVideo.pagePath`         | Public video playback page   |
 | `publicVideo.pagePath + /file` | MP4 streaming endpoint       |
 
-`/healthz` is intentionally unauthenticated and Host-unvalidated for every caller, exposes only `{ "ok": true }`, and uses the configured public-route request limit in a separate bucket so health probes cannot consume the legal/video route allowance. A `429` from this route means the probe source exceeded `publicFileRateLimitPerMinute`, not that the application failed its liveness check; keep probe frequency below that limit. It is registered before Host validation because ALB target probes use the task IP and port as Host; public MCP and browser routes remain Host-validated.
+`/healthz` is intentionally unauthenticated and Host-unvalidated for every
+caller, exposes only `{ "ok": true }`, and uses the configured public-route
+request limit in a separate bucket so health probes cannot consume the
+legal/video route allowance. A `429` from this route
+means the probe source exceeded `publicFileRateLimitPerMinute`, not that the
+application failed its liveness check; keep probe frequency below that limit.
+It is registered before Host validation because ALB target probes use the task
+IP and port as Host; public MCP and browser routes remain Host-validated.
 
 ## HTTP Authentication
 
-The `/mcp` endpoint requires `Authorization: Bearer <qURL API key>` on every request. In stateful mode the bearer token is bound to the resulting MCP session, so a session ID cannot be reused with a different credential. In stateless mode the bearer remains request-scoped and is discarded when the response closes.
+The `/mcp` endpoint requires `Authorization: Bearer <qURL API key>` on every
+request. In stateful mode the bearer token is bound to the resulting MCP
+session, so a session ID cannot be reused with a different credential. In
+stateless mode the bearer remains request-scoped and is discarded when the
+response closes.
 
-**Operator authentication boundary:** initialization accepts any non-empty bearer token and allows the public tools/resources/prompts catalog to be read before authoritative validation by the first downstream qURL API call. That catalog is assembled from static schemas and descriptions and does not include bearer tokens, SMTP credentials, or other operator configuration. Unvalidated-session caps, a short validation deadline, and request rate limits bound that pre-validation state; the supplied token is forwarded only to the configured qURL API and, for upload tools, the configured qURL Connector. Introspection-only sessions therefore remain unvalidated and are closed at `unvalidatedSessionTtlMs`; clients can re-initialize if they need a longer-lived session. A session is promoted only after a successful qURL API call or a deliverable upload-link mint through the configured connector (which forwards the bearer to the qURL API)—rejected or rate-limited calls do not prove the credential valid. The connector is therefore part of this trust boundary: point `QURL_CONNECTOR_URL` only at a connector that authenticates the bearer. Its upload error text (bounded to 1 KiB, control characters flattened) and the links it mints are returned to the agent, and minted links may be emailed. Disconnected sessions remain registered for a 30-second SSE reconnect grace period, while `maxSessions` and `maxSessionsPerCredential` bound that allowance under churn.
+**Operator authentication boundary:** initialization accepts any non-empty
+bearer token and allows the public tools/resources/prompts catalog to be read
+before authoritative validation by the first downstream qURL API call.
+That catalog is assembled from static schemas and descriptions and does not
+include bearer tokens, SMTP credentials, or other operator configuration.
+Unvalidated-session caps, a short validation deadline, and request rate limits
+bound that pre-validation state; the supplied token is forwarded only to the
+configured qURL API and, for upload tools, the configured qURL Connector.
+Introspection-only sessions therefore remain unvalidated and are closed at
+`unvalidatedSessionTtlMs`; clients can re-initialize if they need a longer-lived
+session. A session is promoted only after a successful qURL API call or a
+deliverable upload-link mint through the configured connector (which forwards the
+bearer to the qURL API)—rejected or rate-limited calls do not prove the credential
+valid. The connector is therefore part of this trust boundary: point
+`QURL_CONNECTOR_URL` only at a connector that authenticates the bearer. Its
+upload error text (bounded to 1 KiB, control characters flattened) and the links
+it mints are returned to the agent, and minted links may be emailed. Disconnected sessions
+remain registered for a 30-second SSE reconnect grace period, while
+`maxSessions` and `maxSessionsPerCredential` bound that allowance under churn.
 
-Requests without an `Origin` header are accepted for non-browser MCP clients. When `Origin` is present, it must match the origin of `baseUrl`; malformed or cross-origin values are rejected on `/mcp`. Public health, legal, and configured video routes do not use browser-origin state and are not gated by this check.
+Requests without an `Origin` header are accepted for non-browser MCP clients.
+When `Origin` is present, it must match the origin of `baseUrl`; malformed or
+cross-origin values are rejected on `/mcp`. Public health, legal, and configured
+video routes do not use browser-origin state and are not gated by this check.
 
 Configure remote MCP clients with:
 
@@ -485,7 +955,8 @@ Configure remote MCP clients with:
 | Authentication | Bearer token                      |
 | Token          | The caller's qURL API key         |
 
-If a client only supports OAuth discovery, place an OAuth-compatible gateway in front of this server rather than exposing `/mcp` without authentication.
+If a client only supports OAuth discovery, place an OAuth-compatible gateway
+in front of this server rather than exposing `/mcp` without authentication.
 
 ## How to Verify Deployment
 
@@ -496,7 +967,9 @@ Start with:
 - `/healthz`
 - `/mcp`
 
-LayerV legal documents are disabled by default. Only LayerV-operated services should set `MCP_SERVE_LAYERV_LEGAL_PAGES=true` (or `serveLayerVLegalPages: true` in the HTTP config). Self-hosted operators must publish their own policies.
+LayerV legal documents are disabled by default. Only LayerV-operated services
+should set `MCP_SERVE_LAYERV_LEGAL_PAGES=true` (or `serveLayerVLegalPages: true`
+in the HTTP config). Self-hosted operators must publish their own policies.
 
 ### Public Page Checks
 
@@ -531,7 +1004,11 @@ If you deploy with Docker, make sure the container can still access the correct 
 
 Run the HTTP listener locally in Docker:
 
-The image defaults to the stdio entry point and the HTTP server defaults to container-local loopback. HTTP deployments must override the command and bind to `0.0.0.0` with an explicit Host allowlist and HTTPS public origin. This example publishes only to host loopback; put a TLS reverse proxy in front of it for the configured `https://mcp.example.com` origin:
+The image defaults to the stdio entry point and the HTTP server defaults to
+container-local loopback. HTTP deployments must override the command and bind
+to `0.0.0.0` with an explicit Host allowlist and HTTPS public origin. This
+example publishes only to host loopback; put a TLS reverse proxy in front of
+it for the configured `https://mcp.example.com` origin:
 
 ```bash
 docker run --rm -p 127.0.0.1:3000:3000 \
@@ -541,7 +1018,10 @@ docker run --rm -p 127.0.0.1:3000:3000 \
   qurl-mcp node dist/http.js
 ```
 
-For a single trusted production reverse proxy, set `MCP_TRUST_PROXY_HOPS=1`, use the public HTTPS origin in `MCP_BASE_URL`, and set `MCP_ALLOWED_HOSTS` to the public hostname. Do not expose the container's listener directly when proxy trust is enabled.
+For a single trusted production reverse proxy, set
+`MCP_TRUST_PROXY_HOPS=1`, use the public HTTPS origin in `MCP_BASE_URL`, and
+set `MCP_ALLOWED_HOSTS` to the public hostname. Do not expose the container's
+listener directly when proxy trust is enabled.
 
 ## Common Commands
 
@@ -571,7 +1051,12 @@ For a single trusted production reverse proxy, set `MCP_TRUST_PROXY_HOPS=1`, use
 
 ## Third-Party Assets
 
-Text-to-PDF generation bundles the regular-weight Noto Sans SC font as TrueType (about 10 MB) for offline multilingual glyph coverage. The static font retains all characters from the original variable font; PDFKit embeds only the glyphs used by each document. No download or additional runtime dependency is needed. Its SIL Open Font License and copyright notice are included in `assets/fonts/OFL.txt`; conversion details are in `assets/fonts/README.md`.
+Text-to-PDF generation bundles the regular-weight Noto Sans SC font as TrueType
+(about 10 MB) for offline multilingual glyph coverage. The static font retains
+all characters from the original variable font; PDFKit embeds only the glyphs
+used by each document. No download or additional runtime dependency is needed.
+Its SIL Open Font License and copyright notice are included in
+`assets/fonts/OFL.txt`; conversion details are in `assets/fonts/README.md`.
 
 ## License
 
