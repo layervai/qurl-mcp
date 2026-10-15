@@ -2,8 +2,10 @@
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
-Give an AI agent tools to create and manage temporary qURL™ access links
-through the Model Context Protocol. The `@layervai/qurl-mcp` package runs as
+Give an AI agent tools to share localhost web apps, private APIs, and selected
+files through expiring [qURL™ by LayerV](https://layerv.ai/qurl/) access links.
+This repository implements the Model Context Protocol server for that workflow.
+The `@layervai/qurl-mcp` package runs as
 a local stdio server or an authenticated remote HTTP server and connects to
 the LayerV qURL API.
 
@@ -14,7 +16,96 @@ to publish a local app first; creating a link does not start a connector or
 restrict an existing public URL. Uploads use a separate connector lifecycle;
 see [upload tools](#upload-tools) for their supported options and limits.
 
+[Local app sharing](#let-an-ai-agent-share-a-localhost-preview) ·
+[File sharing](#let-an-ai-agent-share-a-pdf-or-image) ·
+[Sharing questions](#mcp-sharing-questions) · [Private links](https://qurl.link/)
+
 > **⚠️ Renamed from `@layerv/qurl-mcp` in v0.4.0.** The old package is deprecated and will not receive further updates. If you're using `@layerv/qurl-mcp@0.3.x`, swap the scope in your MCP client config — same binary, same API key, no other changes.
+
+## Let an AI agent share a localhost preview
+
+Use this workflow when an agent needs to give a reviewer access to a development
+preview or internal API. A tool that creates a link does not start the app on
+your laptop.
+
+1. Keep the local app running and publish it with the
+   [qURL CLI](https://github.com/layervai/qurl-integrations#share-a-localhost-web-app).
+   Save the returned CRID.
+2. Configure a supported [MCP client](#mcp-client-example) and a credential
+   authorized for the operation and resource. This source version exposes
+   `share_by_crid`, which requires `qurl:resolve`. Knowing a CRID does not give
+   an agent permission to request a link for a private resource.
+3. Ask the agent to call `share_by_crid` with the published CRID and a requested
+   lifetime. The following is a tool argument object, not a complete MCP message:
+
+   ```json
+   {
+     "crid": "REPLACE_WITH_PUBLISHED_CRID",
+     "ttl": "5m"
+   }
+   ```
+
+4. Share the full returned link through your intended private channel and
+   report the expiry returned by the service. Do not assume the requested TTL
+   was granted unchanged. Keep the publishing host and app available.
+
+Check that your installed release exposes this tool. For resources already
+managed through the API, see `mint_link` and the other
+[link-management tools](#qurl-management-tools). Tool availability and resource
+identifiers matter; an uploaded-file identifier cannot be substituted into
+the same workflow.
+
+## Let an AI agent share a PDF or image
+
+For example, give a reviewer a short-lived link to a selected PDF report.
+Configure the upload Connector as described under [configuration files](#configuration-files),
+then choose the tool for the MCP transport:
+
+| File location | Tool | Important requirement |
+| --- | --- | --- |
+| A PDF or supported raster image on the local MCP server host | `upload_file_qurl` | Available in stdio mode; the host process must be allowed to read the selected file. |
+| PDF or image bytes supplied to an HTTP or stdio MCP client | `upload_file_data_qurl` | Supply the supported file as base64 data with the correct filename and media type. |
+| Text to share as a generated PDF | `upload_text_qurl` | Uses the configured upload service, rather than publishing a local app. |
+
+A stdio tool argument example:
+
+```json
+{
+  "file_path": "/absolute/path/to/review.pdf",
+  "expires_in": "5m",
+  "one_time_use": true
+}
+```
+
+Pass these arguments to `upload_file_qurl` only for a file the user selected.
+The tool uploads to the configured file service and returns a new access link.
+Use the confirmed expiry in its response. Opening a single-use link to test it
+can consume it before the recipient opens it.
+
+Upload links cannot currently be revoked through this MCP server, and `mint_link`
+cannot create another link for an uploaded file. See [upload tools](#upload-tools)
+for the supported formats, size limits, response fields, and cleanup limitations.
+
+## MCP sharing questions
+
+### Is this a public tunnel to my localhost app?
+
+This server manages qURL operations. The CLI or another configured runtime
+publishes and serves the local app. Use the
+[localhost-sharing comparison](https://github.com/layervai/qurl-integrations#qurl-and-ngrok-for-localhost-sharing)
+when choosing between resource access links and a public endpoint workflow.
+
+### Does every AI client support the same tools?
+
+No. Configure the client's supported transport and check the installed server's
+tool list. A remote HTTP server cannot use `upload_file_qurl` to read a file
+from the client's laptop; use the file-data tool for a supported attachment.
+
+### Can I use an app link and an uploaded-file link interchangeably?
+
+No. App resource management and uploaded-file link minting use different
+lifecycles. Follow the tool that issued the link, including its revocation limits.
+Your local app's own login continues to apply when the link opens it.
 
 ## Overview
 
