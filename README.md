@@ -89,6 +89,16 @@ Upload links cannot currently be revoked through this MCP server, and `mint_link
 cannot create another link for an uploaded file. See [upload tools](#upload-tools)
 for the supported formats, size limits, response fields, and cleanup limitations.
 
+## Choosing what an agent should share
+
+### Should the agent share an app or a deployed preview?
+
+If the reviewer needs the current localhost app, keep it running and use the [local CLI-backed tools](#quick-start-no-account-needed) to publish the resource and issue its link. An existing ngrok endpoint, Cloudflare application, or Vercel preview is another possible handoff, but its access controls and availability come from that separately configured service. This server exposes qURL operations; it does not create those other deployments. See the [app-sharing comparison](https://github.com/layervai/qurl-integrations#should-i-share-the-running-app-or-deploy-a-preview) when choosing the workflow. Share the confirmed expiry and preserve the app's login requirements.
+
+### Should the agent upload the result or link to a running file service?
+
+A selected PDF or image can use this server's [account-backed upload tools](#upload-tools). A hosted Google Drive document instead uses Drive's [sharing permissions](https://support.google.com/drive/answer/2494822?hl=en); an S3 object can use a [presigned download URL](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ShareObjectPreSignedURL.html). Those storage workflows are distinct from publishing a local file server, which must remain available. Choose based on where the result should live and which service the agent is authorized to use. This server's upload identifiers and revocation limits still apply; a file path, uploaded-file identifier, and local-service CRID are not interchangeable.
+
 ## MCP sharing questions
 
 ### Is this a public tunnel to my localhost app?
@@ -97,7 +107,7 @@ In no-account stdio mode, this server invokes the local CLI to publish and
 manage an already running app. API-backed and remote HTTP modes use their
 configured resources; a remote server cannot publish an app on your laptop
 through its own localhost address. Use the
-[localhost-sharing comparison](https://github.com/layervai/qurl-integrations#qurl-and-ngrok-for-localhost-sharing)
+[localhost-sharing comparison](https://github.com/layervai/qurl-integrations#choose-how-to-share-an-app-or-file)
 when choosing between resource access links and a public endpoint workflow.
 
 ### Does every AI client support the same tools?
