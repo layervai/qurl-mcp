@@ -5,15 +5,15 @@
 Give an AI agent tools to share localhost web apps, private APIs, and selected
 files through expiring [qURL™ by LayerV](https://layerv.ai/qurl/) access links.
 This repository implements the Model Context Protocol server for that workflow.
-The `@layervai/qurl-mcp` package runs as
-a local stdio server or an authenticated remote HTTP server and connects to
-the LayerV qURL API.
+The `@layervai/qurl-mcp` package runs as a local stdio server backed by the
+qURL CLI or API, or as an authenticated remote HTTP server backed by the API.
 
-Start with the [MCP client configuration](#mcp-client-example), then choose
-the [link-management tools](#qurl-management-tools) for your task. Use the
-[qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli)
-to publish a local app first; creating a link does not start a connector or
-restrict an existing public URL. Uploads use a separate connector lifecycle;
+Start with the [no-account local quickstart](#quick-start-no-account-needed)
+or [account-backed client configuration](#mcp-client-example), then choose
+the tools for your task. In local mode, `publish_crid` runs the installed
+CLI to publish an app that is already running; `share_by_crid` issues its
+access link. Creating a link alone does not publish an app or restrict an
+existing public URL. Uploads require the account-backed tool set and use a separate connector lifecycle;
 see [upload tools](#upload-tools) for their supported options and limits.
 
 [Local app sharing](#let-an-ai-agent-share-a-localhost-preview) ·
@@ -28,13 +28,14 @@ Use this workflow when an agent needs to give a reviewer access to a development
 preview or internal API. A tool that creates a link does not start the app on
 your laptop.
 
-1. Keep the local app running and publish it with the
-   [qURL CLI](https://github.com/layervai/qurl-integrations#share-a-localhost-web-app).
-   Save the returned CRID.
-2. Configure a supported [MCP client](#mcp-client-example) and a credential
-   authorized for the operation and resource. This source version exposes
-   `share_by_crid`, which requires `qurl:resolve`. Knowing a CRID does not give
-   an agent permission to request a link for a private resource.
+1. Keep the local app running. Configure a local stdio MCP client using the
+   [no-account quickstart](#quick-start-no-account-needed), with the qURL CLI
+   installed on the same host and no `QURL_API_KEY` set.
+2. Ask the agent to call `publish_crid` with the app's root loopback URL, such
+   as `http://127.0.0.1:3000`, and save the returned CRID. Alternatively, publish
+   it directly with the [CLI](https://github.com/layervai/qurl-integrations#share-a-localhost-web-app).
+   Local tools use that machine's device identity; a CRID does not grant another
+   device authority over the resource.
 3. Ask the agent to call `share_by_crid` with the published CRID and a requested
    lifetime. The following is a tool argument object, not a complete MCP message:
 
@@ -49,8 +50,9 @@ your laptop.
    report the expiry returned by the service. Do not assume the requested TTL
    was granted unchanged. Keep the publishing host and app available.
 
-Check that your installed release exposes this tool. For resources already
-managed through the API, see `mint_link` and the other
+Check that your installed release exposes these tools. In account-backed mode,
+`share_by_crid` instead uses the API credential and requires `qurl:resolve` and
+resource authorization. For resources already managed through the API, see `mint_link` and the other
 [link-management tools](#qurl-management-tools). Tool availability and resource
 identifiers matter; an uploaded-file identifier cannot be substituted into
 the same workflow.
@@ -58,8 +60,9 @@ the same workflow.
 ## Let an AI agent share a PDF or image
 
 For example, give a reviewer a short-lived link to a selected PDF report.
-Configure the upload Connector as described under [configuration files](#configuration-files),
-then choose the tool for the MCP transport:
+Use account-backed stdio mode (`QURL_API_KEY` set) or authenticated HTTP mode,
+then configure the upload Connector under [configuration files](#configuration-files).
+Upload tools are not listed in no-account local mode. Choose the tool for the transport:
 
 | File location | Tool | Important requirement |
 | --- | --- | --- |
@@ -90,8 +93,10 @@ for the supported formats, size limits, response fields, and cleanup limitations
 
 ### Is this a public tunnel to my localhost app?
 
-This server manages qURL operations. The CLI or another configured runtime
-publishes and serves the local app. Use the
+In no-account stdio mode, this server invokes the local CLI to publish and
+manage an already running app. API-backed and remote HTTP modes use their
+configured resources; a remote server cannot publish an app on your laptop
+through its own localhost address. Use the
 [localhost-sharing comparison](https://github.com/layervai/qurl-integrations#qurl-and-ngrok-for-localhost-sharing)
 when choosing between resource access links and a public endpoint workflow.
 
