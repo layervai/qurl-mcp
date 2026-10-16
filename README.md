@@ -31,7 +31,7 @@ your laptop.
 1. Keep the local app running. Configure a local stdio MCP client using the
    [no-account quickstart](#quick-start-no-account-needed), with the qURL CLI
    installed on the same host and no `QURL_API_KEY` set.
-2. Ask the agent to call `publish_crid` with the app's root loopback URL, such
+2. Ask the agent to call `publish_crid` with `app_name` (a short public name, without secrets or recipient details) and the app's root loopback URL, such
    as `http://127.0.0.1:3000`, and save the returned CRID. Alternatively, publish
    it directly with the [CLI](https://github.com/layervai/qurl-integrations#share-a-localhost-web-app).
    Local tools use that machine's device identity; a CRID does not grant another
@@ -257,7 +257,11 @@ email_capture, review, or contract access. `manage_crid_access` changes the
 policy with its current version, sends invitations, lists grants, approves
 or denies requests, and removes access. The tools return resource-scoped
 receipts and omit invitation secrets and bearer links. Local apps use the
-qURL CLI on the publisher machine.
+qURL CLI on the publisher machine. In local mode, `app_name` sets and confirms
+the public preview name through `qurl preview set` (requires a CLI with that command).
+If naming fails, the tool returns an error with the published CRID and recovery
+instructions. It does not delete or republish the resource. Older callers may
+omit `app_name`; agents should always provide it for a complete preview.
 
 For example, an assistant can turn “share this with ana@example.com, and
 allow no requests” into an invite_only resource and an authorized invitation.

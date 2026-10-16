@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   localCliToolFactories,
   localDeleteCridTool,
@@ -10,7 +10,7 @@ import {
   localShareByCridTool,
   type LocalCliToolFactory,
 } from "../../tools/local-cli.js";
-import { QURL_CLI_MISSING_MESSAGE, QurlCli } from "../../qurl-cli.js";
+import { QURL_CLI_MISSING_MESSAGE, QurlCli, QurlCliError } from "../../qurl-cli.js";
 import { makeFakeQurl, SAMPLE_CRID, type FakeQurl, type FakeReply } from "../fake-qurl.js";
 
 const CRID = SAMPLE_CRID;
@@ -78,6 +78,68 @@ describe("CLI-backed tools", () => {
         publisher,
       });
     });
+
+    it("sets and confirms the public name with the exact CRID and one safe argument", async () => {
+      const name = "TipSplit --public $(ignored)";
+      const runJson = vi
+        .fn()
+        .mockResolvedValueOnce(samplePublish)
+        .mockResolvedValueOnce({ name, unexpected_secret_field: "dropped" });
+      const tool = localPublishCridTool({ runJson });
+      const result = await tool.handler({ target_url: "http://127.0.0.1:3000", app_name: name });
+      expect(runJson.mock.calls.map((call) => call[0])).toEqual([
+        ["publish", "http://127.0.0.1:3000"],
+        ["preview", "set", CRID, `--name=${name}`],
+      ]);
+      expect(result.isError).toBeUndefined();
+      expect(result.structuredContent).toMatchObject({ crid: CRID, app_name: name });
+      expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
+      expect(result.content[0].text).not.toContain("unexpected_secret_field");
+    });
+
+    it("does not pass an invalid returned CRID to another command", async () => {
+      const runJson = vi.fn().mockResolvedValue({ ...samplePublish, crid: "--description=wrong" });
+      const result = await localPublishCridTool({ runJson }).handler({
+        target_url: "http://127.0.0.1:3000",
+        app_name: "TipSplit",
+      });
+      expect(result.isError).toBe(true);
+      expect(runJson).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([{}, { name: "Wrong name" }, new QurlCliError("cli_failed", "Upgrade the CLI")])(
+      "keeps the published resource and reports unconfirmed naming: %j",
+      async (reply) => {
+        const runJson = vi.fn().mockResolvedValueOnce(samplePublish);
+        if (reply instanceof Error) runJson.mockRejectedValueOnce(reply);
+        else runJson.mockResolvedValueOnce(reply);
+        const result = await localPublishCridTool({ runJson }).handler({
+          target_url: "http://127.0.0.1:3000",
+          app_name: "TipSplit",
+        });
+        expect(result.isError).toBe(true);
+        expect(result.structuredContent).toMatchObject({
+          crid: CRID,
+          resource_url: samplePublish.resource_url,
+        });
+        expect(result.structuredContent?.app_name).toBeUndefined();
+        expect(result.structuredContent?.warning).toContain("Keep this CRID; do not delete it");
+        expect(runJson).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each([" ", "x".repeat(101), "name\nsecret"])(
+      "rejects invalid public names before publication",
+      async (app_name) => {
+        const runJson = vi.fn();
+        const result = await localPublishCridTool({ runJson }).handler({
+          target_url: "http://127.0.0.1:3000",
+          app_name,
+        });
+        expect(result.isError).toBe(true);
+        expect(runJson).not.toHaveBeenCalled();
+      },
+    );
 
     it("maps allow_requests, description and alias to flags", async () => {
       await call(

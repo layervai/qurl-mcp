@@ -4,7 +4,7 @@ import { toStructuredContent, zodErrorToToolResult, type ToolAnnotations } from 
 import { normalizeCRID, parseTTLSeconds } from "./share-by-crid.js";
 
 /**
- * Tools for the no-account stdio mode. Each one runs one `qurl` CLI command
+ * Tools for the no-account stdio mode. Each one runs `qurl` CLI commands
  * with an argument array and returns the fields of its JSON document that are
  * listed in the tool's output schema; anything else the CLI prints is dropped.
  *
@@ -148,6 +148,13 @@ const publishInput = z
       .describe(
         "What to publish: a local app as http://127.0.0.1:PORT, http://localhost:PORT, or http://[::1]:PORT (no path), or a remote http(s) URL. A local app must already be running.",
       ),
+    app_name: plainText(100)
+      .trim()
+      .min(1)
+      .optional()
+      .describe(
+        "Public app name shown before access. Always provide a short name; use the requested name or choose a neutral one. Keep secrets and recipient details out.",
+      ),
     allow_requests: z
       .boolean()
       .optional()
@@ -173,6 +180,7 @@ const publishInput = z
   .strict();
 
 const publishOutput = z.object({
+  app_name: z.string().optional(),
   crid: z
     .string()
     .describe("The resource's permanent ID. Safe to share; grants no access by itself"),
@@ -202,6 +210,7 @@ export function localPublishCridTool(cli: IQurlCli): LocalCliTool {
       "Publish a local app or a URL as a private qURL resource with the qURL CLI on this machine, and return its CRID. No account is needed. " +
       "For a local app pass its loopback address, such as http://127.0.0.1:3000; the CLI starts its background service, waits until the app is served, and the share then survives sleep and restarts. " +
       "The resource is private: only this machine and the people the publisher allows can open it; there is no public option. " +
+      "Always supply app_name: use the user’s app name or choose a short neutral one. This name is public; keep secrets and recipient details out. The tool sets and checks it before returning success. " +
       "Publishing the same target again returns the same CRID (found_existing true); never delete and republish to refresh. " +
       "With allow_requests, people ask for access at resource_url and give the publisher a six-digit code; approve it with manage_crid_requests. " +
       "Make an access link with share_by_crid. Publishing does not close other routes to the app. Confirm with the user before publishing a remote URL on their behalf.",
@@ -246,6 +255,37 @@ export function localPublishCridTool(cli: IQurlCli): LocalCliTool {
           "This target was already published as public and stays public. To make it private, delete it with delete_crid and publish again; the new resource gets a new CRID.";
       } else if (data.private === false) {
         data.warning = "The CLI reports this resource as public. Tell the user.";
+      }
+      if (input.app_name !== undefined) {
+        try {
+          if (!CRID_PATTERN.test(data.crid)) {
+            throw new QurlCliError(
+              "cli_bad_output",
+              "The CLI returned an invalid CRID; inspect list_crids before retrying.",
+            );
+          }
+          const preview = cliDocument(
+            z.object({ name: z.string() }),
+            await cli.runJson(["preview", "set", data.crid, `--name=${input.app_name}`]),
+            "preview set",
+          );
+          if (preview.name !== input.app_name) {
+            throw new QurlCliError(
+              "cli_bad_output",
+              "The CLI did not confirm the requested public app name.",
+            );
+          }
+          data.app_name = preview.name;
+        } catch (error) {
+          if (!(error instanceof QurlCliError)) throw error;
+          data.warning = [
+            data.warning,
+            `The resource was published, but its public app name is unconfirmed. Keep this CRID; do not delete it. Correct or upgrade the CLI and repeat publish_crid with the same target_url and app_name to retry naming. ${error.message}`,
+          ]
+            .filter(Boolean)
+            .join(" ");
+          return { ...dataResult(data), isError: true };
+        }
       }
       return dataResult(data);
     }),
