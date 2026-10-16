@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.0...qurl-mcp-v0.7.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* **local:** set and confirm public app names when publishing ([#318](https://github.com/layervai/qurl-mcp/issues/318)) ([f5c18d6](https://github.com/layervai/qurl-mcp/commit/f5c18d6b66178c3102ce38b3ac933de87004aebd))
+
 ## [0.7.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.6.0...qurl-mcp-v0.7.0) (2026-10-14)
 
 
