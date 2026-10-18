@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.1...qurl-mcp-v0.7.2) (2026-10-18)
+
+
+### Bug Fixes
+
+* **tools:** accept verified email grant receipts ([#324](https://github.com/layervai/qurl-mcp/issues/324)) ([369c1c7](https://github.com/layervai/qurl-mcp/commit/369c1c7e302c692ee2b2d8de9d5ee97984fbfa64))
+
 ## [0.7.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.0...qurl-mcp-v0.7.1) (2026-10-18)
 
 
