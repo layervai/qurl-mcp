@@ -56,6 +56,7 @@ describe("consumer access publisher tools", () => {
       action: "approve",
       resource_id: resource.crid,
       id: "new",
+      // @ts-expect-error Email credentials must come from consumer mailbox proof.
       approval: { expected_version: 0, credential_kind: "email" },
     });
     expect(result.isError).toBe(true);
