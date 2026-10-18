@@ -151,7 +151,6 @@ const publishInput = z
     app_name: plainText(100)
       .trim()
       .min(1)
-      .optional()
       .describe(
         "Public app name shown before access. Always provide a short name; use the requested name or choose a neutral one. Keep secrets and recipient details out.",
       ),
@@ -193,7 +192,9 @@ const publishOutput = z.object({
   resource_url: z
     .string()
     .optional()
-    .describe("Address where people ask for access; safe to send to anyone for a private resource"),
+    .describe(
+      "Permanent browser address. Include it in your answer, including for invitation-only shares; recipients still need their emailed invitation.",
+    ),
   consumer_access: consumerAccess.optional(),
   found_existing: z.boolean().optional(),
   created_at: z.string().optional(),
@@ -211,6 +212,7 @@ export function localPublishCridTool(cli: IQurlCli): LocalCliTool {
       "For a local app pass its loopback address, such as http://127.0.0.1:3000; the CLI starts its background service, waits until the app is served, and the share then survives sleep and restarts. " +
       "The resource is private: only this machine and the people the publisher allows can open it; there is no public option. " +
       "Always supply app_name: use the user’s app name or choose a short neutral one. This name is public; keep secrets and recipient details out. The tool sets and checks it before returning success. " +
+      "Include app_name and resource_url in your answer even when invitation emails are sent. " +
       "Publishing the same target again returns the same CRID (found_existing true); never delete and republish to refresh. " +
       "With allow_requests, people ask for access at resource_url and give the publisher a six-digit code; approve it with manage_crid_requests. " +
       "Make an access link with share_by_crid. Publishing does not close other routes to the app. Confirm with the user before publishing a remote URL on their behalf.",
