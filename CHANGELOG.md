@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.0...qurl-mcp-v0.7.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **deps:** repair vulnerable production lock entries ([#321](https://github.com/layervai/qurl-mcp/issues/321)) ([ee382fe](https://github.com/layervai/qurl-mcp/commit/ee382fe6eb1926b87e739fe3f0237d1f6dc3c6ea))
+* **deps:** update Nodemailer for parser and TLS fixes ([#320](https://github.com/layervai/qurl-mcp/issues/320)) ([9d6a20d](https://github.com/layervai/qurl-mcp/commit/9d6a20de16f19a99fc61b5b2d4fb8221c053d796))
+* **local:** set and confirm public app names when publishing ([#318](https://github.com/layervai/qurl-mcp/issues/318)) ([f5c18d6](https://github.com/layervai/qurl-mcp/commit/f5c18d6b66178c3102ce38b3ac933de87004aebd))
+
 ## [0.7.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.6.0...qurl-mcp-v0.7.0) (2026-10-14)
 
 
