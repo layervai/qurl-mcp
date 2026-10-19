@@ -42,6 +42,10 @@ runs:
       shell: bash
       run: mcp-publisher validate
 
+    - name: Wait for exact npm release
+      shell: bash
+      run: node scripts/wait-for-npm-release.mjs
+
     - name: Authenticate with GitHub OIDC
       shell: bash
       run: mcp-publisher login github-oidc

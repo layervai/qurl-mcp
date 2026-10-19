@@ -2,8 +2,6 @@ startCommand:
   type: stdio
   configSchema:
     type: object
-    required:
-      - qurlApiKey
     properties:
       qurlApiKey:
         type: string
@@ -13,8 +11,9 @@ startCommand:
         # form Smithery is most likely to honor.
         format: password
         description: |
-          API key for the qURL API with qurl:read, qurl:write, and/or qurl:resolve scopes.
-          Obtain from https://layerv.ai.
+          Optional. Without it, the tools run through the local qURL CLI (qurl), which
+          needs no account. With it, the tools use the qURL API: a key with qurl:read,
+          qurl:write, and/or qurl:resolve scopes from https://layerv.ai.
       qurlApiUrl:
         type: string
         description: |

@@ -40,7 +40,7 @@ const grant = z.object({
   id: z.string(),
   status: z.string().min(1).max(64),
   version,
-  credential_kind: z.enum(["passkey", "device"]).optional(),
+  credential_kind: z.enum(["passkey", "device", "email"]).optional(),
   credential_id: z.string().optional(),
   credential_public_key_b64: z.string().optional(),
   email: z.string().optional(),

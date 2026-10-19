@@ -13,10 +13,6 @@ import type { EmailDeliveryRecipientResult, EmailDeliveryResult } from "../email
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters } from "../text.js";
 
-// Nodemailer v9 does not publish bundled declarations. @types/nodemailer v8
-// is the current DefinitelyTyped line for TypeScript 6 and covers the
-// createTransport/sendMail surface used here.
-
 export interface EmailMessageInput {
   to: string[];
   subject: string;

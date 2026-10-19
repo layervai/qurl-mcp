@@ -8,20 +8,20 @@
     "url": "https://github.com/layervai/qurl-mcp",
     "source": "github"
   },
-  "version": "0.5.0",
+  "version": "0.7.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@layervai/qurl-mcp",
-      "version": "0.5.0",
+      "version": "0.7.2",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "QURL_API_KEY",
-          "description": "API key for the qURL API with qurl:read, qurl:write, and/or qurl:resolve scopes. Obtain from https://layerv.ai.",
-          "isRequired": true,
+          "description": "Optional. Without it, the tools run through the local qURL CLI (qurl), which needs no account. With it, the tools use the qURL API: a key with qurl:read, qurl:write, and/or qurl:resolve scopes from https://layerv.ai.",
+          "isRequired": false,
           "isSecret": true,
           "format": "string"
         },

@@ -1,6 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
 import type { IQURLClient } from "./client.js";
+import { cliCallContext, type CancelSignal, type IQurlCli } from "./qurl-cli.js";
+import { localCliToolFactories } from "./tools/local-cli.js";
 import { publishCridTool, manageCridAccessTool } from "./tools/consumer-access.js";
 import { createQurlTool } from "./tools/create-qurl.js";
 import { resolveQurlTool } from "./tools/resolve-qurl.js";
@@ -88,6 +90,45 @@ export function getToolFactoriesForMode(mode: ServerMode): ToolFactory[] {
   return mode === "http"
     ? toolFactories.filter((factory) => factory !== uploadFileQurlTool)
     : toolFactories;
+}
+
+/** Told to the client, so the agent can tell the user which identity it uses. */
+export const LOCAL_CLI_INSTRUCTIONS =
+  "This qURL server runs without a LayerV account: QURL_API_KEY is not set, so every tool runs the qURL CLI " +
+  "(qurl) installed on this machine, and resources belong to this machine's qURL identity. If the user expected " +
+  "to work under their LayerV account, tell them that QURL_API_KEY is not set in this server's environment. " +
+  "Resources are private; approve a waiting request only with the six-digit code the person who asked gives the user.";
+
+/**
+ * Server for stdio without QURL_API_KEY: every tool runs the locally
+ * installed qURL CLI, which publishes without an account. Only tools that
+ * work this way are registered. The account-key tools, the link resources,
+ * and the prompts that drive them are not listed at all, so an agent never
+ * plans around a tool that can only fail here.
+ */
+export function createLocalCliServer(cli: IQurlCli, version: string): McpServer {
+  const server = new McpServer({ name: "qurl", version }, { instructions: LOCAL_CLI_INSTRUCTIONS });
+  for (const factory of localCliToolFactories) {
+    const tool = factory(cli);
+    server.registerTool(
+      tool.name,
+      {
+        title: tool.title,
+        description: tool.description,
+        // The whole object, not its shape: the SDK rebuilds a shape as a
+        // loose object and drops unknown keys, so a call with an argument
+        // these tools do not have (say public: true) would run without it
+        // instead of being refused.
+        inputSchema: tool.inputSchema,
+        outputSchema: tool.outputSchema,
+        annotations: tool.annotations,
+      },
+      // The request's abort signal reaches every qurl run of this call.
+      (input: unknown, extra: { signal?: CancelSignal }) =>
+        cliCallContext.run({ signal: extra.signal }, () => tool.handler(input)),
+    );
+  }
+  return server;
 }
 
 export function createServer(
