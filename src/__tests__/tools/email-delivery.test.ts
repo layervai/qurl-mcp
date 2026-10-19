@@ -26,7 +26,6 @@ describe("maybeDeliverToolEmail", () => {
         contentType: "application/pdf",
         qurlLink: "https://qurl.link/example",
         expiresAt: "2026-07-11T00:00:00Z",
-        qurlSite: "https://example.qurl.site",
         label: "Example",
         extraLines: ["Payload Type: markdown"],
       }),
@@ -36,7 +35,6 @@ describe("maybeDeliverToolEmail", () => {
       "Content Type: application/pdf",
       "Secure Link: https://qurl.link/example",
       "Expires At: 2026-07-11T00:00:00Z",
-      "qURL Site: https://example.qurl.site",
       "Label: Example",
       "Payload Type: markdown",
     ]);

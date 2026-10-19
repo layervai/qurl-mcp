@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { IQURLClient, UpdateQURLInput, UpdateResourceInput } from "../client.js";
+import { durationSchema, MAX_EXPIRY_MS, MIN_EXPIRY_MS } from "./duration.js";
 import {
   resourceIdSchema,
   toStructuredContent,
@@ -23,11 +24,11 @@ const tagSchema = z
 
 export const updateQurlBaseSchema = z.object({
   resource_id: resourceIdSchema("update"),
-  extend_by: z
-    .string()
-    .min(1)
+  extend_by: durationSchema(MIN_EXPIRY_MS, MAX_EXPIRY_MS, "1m to 30d")
     .optional()
-    .describe('Duration to extend by (e.g., "24h", "7d"). Mutually exclusive with expires_at.'),
+    .describe(
+      'Duration to extend by (e.g., "24h", "7d"; 1m to 30d per call; use expires_at for longer). Mutually exclusive with expires_at.',
+    ),
   expires_at: z
     .string()
     .datetime({ offset: true })
@@ -99,13 +100,13 @@ export function updateQurlTool(
     name: "update_qurl",
     title: "Update qURL",
     description:
-      "Update a qURL's expiration, tags, description, custom domain, or proxy host-header behavior. The richer alternative to `extend_qurl` — use `update_qurl` whenever you need anything beyond a relative time push. " +
+      "Update a qURL resource's expiration ceiling, tags, description, custom domain, or proxy host-header behavior. " +
+      "`extend_by`/`expires_at` here move the resource's own expiry, which does not keep an individual link open longer; use `extend_qurl` or `update_qurl_token` to change a link's expiry. " +
       "Accepts resource public keys, CRIDs, legacy `r_` IDs, and `q_` display IDs for expiration, tags, and description updates (q_ is auto-resolved); custom domain and preserve_host updates require a resource identifier (public key, CRID, or legacy `r_` ID) because the qURL API now serves them from `PATCH /v1/resources/{id}`. " +
       "**Constraints:** `extend_by` and `expires_at` are mutually exclusive; `custom_domain`/`preserve_host` cannot be combined with expiration changes in one call; at least one update field (`extend_by`, `expires_at`, `tags`, `description`, `custom_domain`, `preserve_host`) must be set. " +
       '**Clearing fields:** pass `description: ""`, `tags: []`, or `custom_domain: ""` to clear those fields explicitly. ' +
-      "Use `extend_qurl` when the only change is a relative time push. " +
       "Use `delete_qurl` when you want to revoke entirely. " +
-      "**Errors:** if the input fails schema refinements (both extend_by + expires_at, or no fields set), the handler returns an `isError: true` content block before any API call. Other API errors throw with the API's `code`/`statusCode`. " +
+      "**Errors:** a malformed or out-of-range `extend_by` is rejected by input validation; if the input fails schema refinements (both extend_by + expires_at, or no fields set), the handler returns an `isError: true` content block. Both happen before any API call. Other API errors throw with the API's `code`/`statusCode`. " +
       "Returns the updated resource (same shape as `get_qurl`).",
     // Base shape for MCP tool registration; refinements run in the handler
     inputSchema: updateQurlBaseSchema,

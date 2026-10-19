@@ -171,6 +171,17 @@ describe("updateQurlTool", () => {
       expect(result.success).toBe(false);
     });
 
+    it("bounds extend_by to 1m-30d like the service", () => {
+      for (const extend_by of ["30s", "31d", "3 hours"]) {
+        expect(
+          updateQurlSchema.safeParse({ resource_id: validResourceId, extend_by }).success,
+        ).toBe(false);
+      }
+      expect(
+        updateQurlSchema.safeParse({ resource_id: validResourceId, extend_by: "30d" }).success,
+      ).toBe(true);
+    });
+
     it("rejects non-string extend_by", () => {
       const result = updateQurlSchema.safeParse({
         resource_id: validResourceId,

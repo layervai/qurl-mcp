@@ -2,7 +2,12 @@ import { copyFileSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { makeMockClient } from "../helpers.js";
+import {
+  connectorMintBody,
+  connectorMintedLink,
+  makeMockClient,
+  mockConnectorFetch,
+} from "../helpers.js";
 import {
   uploadTextQurlSchema,
   uploadTextQurlTool as uploadTextQurlToolFactory,
@@ -100,32 +105,12 @@ describe("uploadTextQurlTool", () => {
   });
 
   describe("handler", () => {
-    it("renders a PDF, uploads it, mints a qURL, and returns a structured result", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
-
-      const mintLink = vi.fn().mockResolvedValue({
-        data: {
-          qurl_id: "q_123456789ab",
-          qurl_link: "https://qurl.link/#at_upload_text",
-          expires_at: "2026-06-23T00:00:00Z",
-          type: "transit",
-        },
-      });
-      const getQURL = vi.fn().mockResolvedValue({
-        data: {
-          resource_id: "r_upload12345",
-          status: "active",
-          created_at: "2026-06-22T00:00:00Z",
-          expires_at: "2026-06-23T00:00:00Z",
-          qurl_site: "https://r_upload12345.qurl.site",
-        },
-      });
-      const tool = uploadTextQurlTool(makeMockClient({ mintLink, getQURL }));
+    it("renders a PDF, uploads it, mints the link through the connector, and returns a structured result", async () => {
+      // The fixture confirms a different expiry than requested: the clamp log path.
+      const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      const fetchMock = mockConnectorFetch();
+      globalThis.fetch = fetchMock;
+      const tool = uploadTextQurlTool(makeMockClient());
 
       const result = await tool.handler({
         type: "markdown",
@@ -134,13 +119,11 @@ describe("uploadTextQurlTool", () => {
         label: "Text Share",
         expires_in: "2h",
         one_time_use: false,
-        max_sessions: 3,
         session_duration: "1h",
-        access_policy: { geo_denylist: ["US"] },
       });
 
-      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
-      const [uploadUrl, uploadInit] = vi.mocked(globalThis.fetch).mock.calls[0]!;
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const [uploadUrl, uploadInit] = fetchMock.mock.calls[0]!;
       expect(uploadUrl).toBe("https://connector.test/api/upload");
       expect(uploadInit?.headers).toEqual(
         expect.objectContaining({
@@ -158,55 +141,35 @@ describe("uploadTextQurlTool", () => {
         fileName: "hello.json",
         title: "Text Share",
       });
-      expect(mintLink).toHaveBeenCalledWith(
-        "r_upload12345",
-        expect.objectContaining({
-          label: "Text Share",
-          expires_in: "2h",
-          one_time_use: false,
-          max_sessions: 3,
-          session_duration: "1h",
-          access_policy: { geo_denylist: ["US"] },
-        }),
-      );
-      expect(getQURL).toHaveBeenCalledWith("r_upload12345");
+      const mint = connectorMintBody(fetchMock);
+      expect(mint.url).toBe("https://connector.test/api/mint_link/r_upload12345");
+      expect(mint.body).toEqual({
+        n: 1,
+        one_time_use: false,
+        expires_at: expect.any(String),
+        session_duration: "3600s",
+      });
 
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed).toEqual(
-        expect.objectContaining({
-          resource_id: "r_upload12345",
-          qurl_id: "q_123456789ab",
-          qurl_link: "https://qurl.link/#at_upload_text",
-          qurl_site: "https://r_upload12345.qurl.site",
-          content_type: "application/pdf",
-          file_name: "hello.pdf",
-          size_bytes: fixtureSize,
-        }),
-      );
+      expect(parsed).toEqual({
+        resource_id: "r_upload12345",
+        ...connectorMintedLink,
+        // The connector echoes the requested expiry: the normal, flag-free shape.
+        expires_at: mint.body.expires_at,
+        requested_expires_at: mint.body.expires_at,
+        content_type: "application/pdf",
+        file_name: "hello.pdf",
+        size_bytes: fixtureSize,
+      });
       expect(cleanupSpy).toHaveBeenCalledOnce();
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
+      expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     });
 
     it("defaults file_name to content.pdf", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+      globalThis.fetch = mockConnectorFetch();
 
-      const tool = uploadTextQurlTool(
-        makeMockClient({
-          mintLink: vi.fn().mockResolvedValue({
-            data: {
-              qurl_id: "q_123456789ab",
-              qurl_link: "https://qurl.link/#at_upload_text",
-              expires_at: "2026-06-23T00:00:00Z",
-            },
-          }),
-          getQURL: vi.fn().mockRejectedValue(new Error("insufficient_scope")),
-        }),
-      );
+      const tool = uploadTextQurlTool(makeMockClient());
 
       const result = await tool.handler({
         type: "markdown",
@@ -216,7 +179,6 @@ describe("uploadTextQurlTool", () => {
       const parsed = JSON.parse(result.content[0].text);
       expect(parsed.content_type).toBe("application/pdf");
       expect(parsed.file_name).toBe("content.pdf");
-      expect(parsed.qurl_site).toBeUndefined();
       expect(createTextPdfTempFile).toHaveBeenCalledWith({
         content: "# Hello",
         fileName: "content.pdf",
@@ -226,12 +188,7 @@ describe("uploadTextQurlTool", () => {
     });
 
     it("emails the generated text link when email_delivery is provided", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+      globalThis.fetch = mockConnectorFetch();
       vi.mocked(sendEmailMessage).mockResolvedValue({
         attempted: true,
         enabled: true,
@@ -243,27 +200,7 @@ describe("uploadTextQurlTool", () => {
         ],
       });
 
-      const tool = uploadTextQurlTool(
-        makeMockClient({
-          mintLink: vi.fn().mockResolvedValue({
-            data: {
-              qurl_id: "q_123456789ab",
-              qurl_link: "https://qurl.link/#at_upload_text",
-              expires_at: "2026-06-23T00:00:00Z",
-              type: "transit",
-            },
-          }),
-          getQURL: vi.fn().mockResolvedValue({
-            data: {
-              resource_id: "r_upload12345",
-              status: "active",
-              created_at: "2026-06-22T00:00:00Z",
-              expires_at: "2026-06-23T00:00:00Z",
-              qurl_site: "https://r_upload12345.qurl.site",
-            },
-          }),
-        }),
-      );
+      const tool = uploadTextQurlTool(makeMockClient());
 
       const result = await tool.handler({
         type: "markdown",
@@ -281,26 +218,10 @@ describe("uploadTextQurlTool", () => {
     });
 
     it("still returns success when temp cleanup fails after a successful upload", async () => {
-      globalThis.fetch = vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      );
+      globalThis.fetch = mockConnectorFetch();
       cleanupSpy.mockRejectedValueOnce(new Error("cleanup failed"));
 
-      const tool = uploadTextQurlTool(
-        makeMockClient({
-          mintLink: vi.fn().mockResolvedValue({
-            data: {
-              qurl_id: "q_123456789ab",
-              qurl_link: "https://qurl.link/#at_upload_text",
-              expires_at: "2026-06-23T00:00:00Z",
-            },
-          }),
-          getQURL: vi.fn().mockRejectedValue(new Error("insufficient_scope")),
-        }),
-      );
+      const tool = uploadTextQurlTool(makeMockClient());
 
       const result = await tool.handler({
         type: "markdown",
@@ -308,7 +229,7 @@ describe("uploadTextQurlTool", () => {
       });
 
       const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.qurl_id).toBe("q_123456789ab");
+      expect(parsed.qurl_id).toBe(connectorMintedLink.qurl_id);
       expect(parsed.file_name).toBe("content.pdf");
       expect(cleanupSpy).toHaveBeenCalledOnce();
     });
@@ -357,7 +278,7 @@ describe("uploadTextQurlTool", () => {
       ).rejects.toMatchObject({
         statusCode: 400,
         code: "connector_upload_failed",
-        message: "upload rejected",
+        message: 'Connector reported (HTTP 400): "upload rejected"',
       });
       expect(cleanupSpy).toHaveBeenCalledOnce();
     });

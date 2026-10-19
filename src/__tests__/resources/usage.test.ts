@@ -13,13 +13,19 @@ const sampleQuota: QuotaOutput = {
     list_per_minute: 120,
     resolve_per_minute: 300,
     max_active_qurls: 1000,
-    max_tokens_per_qurl: 50,
+    max_active_resources: 1000,
+    max_qurls: -1,
+    max_data_transfer_bytes: 10737418240,
     max_expiry_seconds: 2592000,
   },
   usage: {
     qurls_created: 150,
     active_qurls: 45,
-    active_qurls_percent: 0.45,
+    active_resources: 45,
+    active_resources_percent: 4.5,
+    data_transfer_bytes: 1024,
+    data_transfer_available: true,
+    active_qurls_percent: 4.5,
     total_accesses: 1250,
   },
 };
@@ -79,8 +85,9 @@ describe("usageResource", () => {
       const parsed = JSON.parse(result.contents[0].text);
 
       expect(parsed.plan).toBe("growth");
-      expect(parsed.rate_limits.max_active_qurls).toBe(1000);
-      expect(parsed.usage.active_qurls).toBe(45);
+      expect(parsed.rate_limits).toEqual(sampleQuota.rate_limits);
+      expect(parsed.rate_limits).not.toHaveProperty("max_tokens_per_qurl");
+      expect(parsed.usage).toEqual(sampleQuota.usage);
     });
 
     it("returns the data object directly, not the wrapper", async () => {

@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.7.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.1...qurl-mcp-v0.7.2) (2026-10-18)
+
+
+### Bug Fixes
+
+* **tools:** accept verified email grant receipts ([#324](https://github.com/layervai/qurl-mcp/issues/324)) ([369c1c7](https://github.com/layervai/qurl-mcp/commit/369c1c7e302c692ee2b2d8de9d5ee97984fbfa64))
+
+## [0.7.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.0...qurl-mcp-v0.7.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **deps:** repair vulnerable production lock entries ([#321](https://github.com/layervai/qurl-mcp/issues/321)) ([ee382fe](https://github.com/layervai/qurl-mcp/commit/ee382fe6eb1926b87e739fe3f0237d1f6dc3c6ea))
+* **deps:** update Nodemailer for parser and TLS fixes ([#320](https://github.com/layervai/qurl-mcp/issues/320)) ([9d6a20d](https://github.com/layervai/qurl-mcp/commit/9d6a20de16f19a99fc61b5b2d4fb8221c053d796))
+* **local:** set and confirm public app names when publishing ([#318](https://github.com/layervai/qurl-mcp/issues/318)) ([f5c18d6](https://github.com/layervai/qurl-mcp/commit/f5c18d6b66178c3102ce38b3ac933de87004aebd))
+
+## [0.7.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.6.0...qurl-mcp-v0.7.0) (2026-10-14)
+
+
+### Features
+
+* **tools:** run stdio without an account through the local qURL CLI ([#316](https://github.com/layervai/qurl-mcp/issues/316)) ([5c90e0c](https://github.com/layervai/qurl-mcp/commit/5c90e0ccaedaea6207961a7e431560a29e7bdebf))
+
+## [0.6.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.5.0...qurl-mcp-v0.6.0) (2026-10-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** Node.js 22.12 or later is required by SDK 3.0.0; Node.js 20 is no longer supported. Add private CRID publishing and access tools ([#313](https://github.com/layervai/qurl-mcp/issues/313)).
+* align MCP quota contract with unlimited resource links ([#289](https://github.com/layervai/qurl-mcp/issues/289))
+* **tools:** extend_qurl now extends the link, not the resource, and requires qurl:read in addition to qurl:write (a write-only key now fails before any change). Upload tools mint links through the connector's /api/mint_link (links cannot be revoked from this server yet, #281), reject access_policy and max_sessions (uploaded files can no longer carry an access policy or session cap in any connector mode, including legacy ones where minting on the upload resource used to apply them), bound expires_in to 1m-30d (default 24h) and session_duration to whole seconds from 1s-24h, make qurl_id optional in the result (omitted when the connector reports none), and drop qurl_site/branded_domain/type from it. update_qurl and update_qurl_token bound extend_by locally (create_qurl and mint_link keep API-side duration validation, #282). Duration inputs accept unsigned Go-unit sequences or whole days/weeks and reject leading signs, leading-dot fractions, and Greek mu. IQURLClient.extendQURL is removed; use updateQurlToken.
+
+### Features
+
+* **tools:** add CRID-based qURL link sharing ([#272](https://github.com/layervai/qurl-mcp/issues/272)) ([3f7a020](https://github.com/layervai/qurl-mcp/commit/3f7a020d15f82d7042ed5a74dc09ea0bca045b8c))
+* **tools:** add private CRID publishing and access tools ([#313](https://github.com/layervai/qurl-mcp/issues/313)) ([a56cb18](https://github.com/layervai/qurl-mcp/commit/a56cb18afc063a0883db979f72220c36db566d1d))
+
+
+### Bug Fixes
+
+* align MCP quota contract with unlimited resource links ([#289](https://github.com/layervai/qurl-mcp/issues/289)) ([425d3d9](https://github.com/layervai/qurl-mcp/commit/425d3d94765e5a2a0f6d8db67217b76e73c6d0ae))
+* **tools:** mint upload links through the connector and extend the link, not the resource ([0717190](https://github.com/layervai/qurl-mcp/commit/071719055425d0cdd686b3a098603e39987df27b))
+
 ## [0.5.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.4.1...qurl-mcp-v0.5.0) (2026-09-19)
 
 

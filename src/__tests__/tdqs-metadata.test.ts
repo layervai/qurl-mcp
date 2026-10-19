@@ -5,11 +5,13 @@ import type { IQURLClient } from "../client.js";
 import { toolFactories } from "../server.js";
 import {
   makeMockClient,
+  mockConnectorFetch,
   readApiSpec,
   sampleAccessToken,
   sampleBatchCreateOutput,
   sampleCreateQURLData,
   sampleMintLinkOutput,
+  sampleShareCRIDOutput,
   sampleQURL,
   sampleResolveOutput,
   sampleSession,
@@ -258,46 +260,13 @@ describe("TDQS tool metadata coverage", () => {
     // file and this test forces a description update at the same time.
     const spec = readApiSpec();
 
-    it("create_qurl description matches the spec's expires_in default", () => {
-      // The spec has two `expires_in: type: string` blocks (CreateQurlRequest
-      // and MintLinkRequest) — only the create-side declares a `Default:`
-      // inside its own description (MintLink puts the 24h default in the
-      // parent schema description, not the property's). Iterate every match
-      // and pick the block that carries `Default:`; relying on source
-      // order would silently pick the wrong block if the schemas ever
-      // swap positions.
-      //
-      // Indent matcher is `[ ]{12,}` (description-body depth) rather than
-      // `\s+` so the captured block stops at the next outdented line —
-      // sibling property values (`example:`) sit at 10 spaces, sibling
-      // properties (`one_time_use:`) at 8 — both correctly excluded.
-      const blocks = [
-        ...spec.matchAll(
-          /expires_in:\s*\n\s*type:\s*string\s*\n\s*description:\s*\|\s*\n((?:[ ]{12,}[^\n]+\n)+)/g,
-        ),
-      ];
-      expect(
-        blocks.length,
-        "no `expires_in:` block in api-spec/qurls.yaml matched the structural pattern " +
-          "(`type: string` immediately, then `description: |`). If the spec was reordered, " +
-          "added `nullable:`, switched to a quoted scalar, or moved to a $ref, loosen the regex to match.",
-      ).toBeGreaterThan(0);
-      const blockWithDefault = blocks.find((m) => /Default:\s*\d+\s*[a-z]+/.test(m[1]));
-      expect(
-        blockWithDefault,
-        "no expires_in description block in api-spec/qurls.yaml carries a `Default: …` line",
-      ).toBeDefined();
-      const specDefault = blockWithDefault![1].match(/Default:\s*(\d+\s*[a-z]+)/)![1].trim();
-      const description = tools.find((t) => t.name === "create_qurl")!.description;
-      // Require the bolded form (`**24h**`) used in the Behavior beat,
-      // not just the unbolded literal. Bare `24h` also appears in the
-      // `Example:` line, so plain .toContain would silently pass if the
-      // spec moved to e.g. 48h while the example still read '24h'.
-      const claim = `**${specDefault}**`;
-      expect(
-        description,
-        `create_qurl Behavior beat must mention the spec's expires_in default as '${claim}'`,
-      ).toContain(claim);
+    it("create_qurl does not promise a fixed API expiration default", () => {
+      const createSchema = spec.split("    CreateQurlRequest:\n")[1]?.split(/\n {4}\S/)[0];
+      expect(createSchema).toContain("Set this field explicitly for a predictable lifetime");
+      const description = tools.find((tool) => tool.name === "create_qurl")!.description;
+      expect(description).toContain("Set `expires_in` explicitly");
+      expect(description).toContain("Read `expires_at` in the response");
+      expect(description).not.toMatch(/defaults? to \*\*\d+[smhdw]\*\*/i);
     });
   });
 
@@ -345,6 +314,25 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
   const uploadFixturePath = resolvePath("src/__tests__/fixtures/sample.pdf");
   const uploadFixtureBase64 = readFileSync(uploadFixturePath).toString("base64");
   const cases: Record<string, Case> = {
+    publish_crid: {
+      input: { target_url: "https://example.com", policy: { mode: "invite_only", version: 1 } },
+      clientOverrides: {
+        protectUrl: vi.fn().mockResolvedValue({
+          details: {
+            resource_id: "r_test1234567",
+            crid: "a".repeat(60),
+            private: true,
+            consumer_access: { mode: "invite_only", version: 1 },
+          },
+        }),
+      },
+    },
+    manage_crid_access: {
+      input: { action: "list_grants", resource_id: "r_test1234567" },
+      clientOverrides: {
+        listConsumerGrants: vi.fn().mockResolvedValue({ grants: [], next_cursor: "" }),
+      },
+    },
     create_qurl: {
       input: { target_url: "https://example.com" },
       clientOverrides: {
@@ -374,7 +362,12 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
     },
     extend_qurl: {
       input: { resource_id: "r_test1234567", extend_by: "24h" },
-      clientOverrides: { extendQURL: vi.fn().mockResolvedValue({ data: qurlFixture }) },
+      clientOverrides: {
+        getQURL: vi.fn().mockResolvedValue({
+          data: { ...qurlFixture, qurls: [sampleAccessToken({ status: "active" })] },
+        }),
+        updateQurlToken: vi.fn().mockResolvedValue({ data: sampleAccessToken() }),
+      },
     },
     update_qurl: {
       input: { resource_id: "r_test1234567", extend_by: "24h" },
@@ -384,6 +377,12 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       input: { resource_id: "r_test1234567" },
       clientOverrides: {
         mintLink: vi.fn().mockResolvedValue({ data: sampleMintLinkOutput() }),
+      },
+    },
+    share_by_crid: {
+      input: { crid: "crid_test" },
+      clientOverrides: {
+        shareByCRID: vi.fn().mockResolvedValue({ data: sampleShareCRIDOutput() }),
       },
     },
     batch_create_qurls: {
@@ -426,32 +425,14 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
         file_name: "sample.pdf",
         content_type: "application/pdf",
       },
-      clientOverrides: {
-        mintLink: vi.fn().mockResolvedValue({
-          data: sampleMintLinkOutput({
-            qurl_id: "q_123456789ab",
-            qurl_link: "https://qurl.link/#at_upload_data",
-          }),
-        }),
-        getQURL: vi.fn().mockResolvedValue({
-          data: sampleQURL({
-            resource_id: "r_upload12345",
-            qurl_site: "https://r_upload12345.qurl.site",
-          }),
-        }),
-      },
+      clientOverrides: {},
       setup: () => {
         const originalApiKey = process.env.QURL_API_KEY;
         const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
         const originalFetch = globalThis.fetch;
         process.env.QURL_API_KEY = "lv_live_test";
         process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        );
+        globalThis.fetch = mockConnectorFetch();
         return () => {
           process.env.QURL_API_KEY = originalApiKey;
           process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
@@ -465,32 +446,14 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
         content: "hello from qurl",
         file_name: "sample.txt",
       },
-      clientOverrides: {
-        mintLink: vi.fn().mockResolvedValue({
-          data: sampleMintLinkOutput({
-            qurl_id: "q_123456789ab",
-            qurl_link: "https://qurl.link/#at_upload_text",
-          }),
-        }),
-        getQURL: vi.fn().mockResolvedValue({
-          data: sampleQURL({
-            resource_id: "r_upload12345",
-            qurl_site: "https://r_upload12345.qurl.site",
-          }),
-        }),
-      },
+      clientOverrides: {},
       setup: () => {
         const originalApiKey = process.env.QURL_API_KEY;
         const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
         const originalFetch = globalThis.fetch;
         process.env.QURL_API_KEY = "lv_live_test";
         process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        );
+        globalThis.fetch = mockConnectorFetch();
         return () => {
           process.env.QURL_API_KEY = originalApiKey;
           process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
@@ -500,32 +463,14 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
     },
     upload_file_qurl: {
       input: { file_path: uploadFixturePath },
-      clientOverrides: {
-        mintLink: vi.fn().mockResolvedValue({
-          data: sampleMintLinkOutput({
-            qurl_id: "q_123456789ab",
-            qurl_link: "https://qurl.link/#at_upload",
-          }),
-        }),
-        getQURL: vi.fn().mockResolvedValue({
-          data: sampleQURL({
-            resource_id: "r_upload12345",
-            qurl_site: "https://r_upload12345.qurl.site",
-          }),
-        }),
-      },
+      clientOverrides: {},
       setup: () => {
         const originalApiKey = process.env.QURL_API_KEY;
         const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
         const originalFetch = globalThis.fetch;
         process.env.QURL_API_KEY = "lv_live_test";
         process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ resource_id: "r_upload12345" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        );
+        globalThis.fetch = mockConnectorFetch();
         return () => {
           process.env.QURL_API_KEY = originalApiKey;
           process.env.QURL_CONNECTOR_URL = originalConnectorUrl;

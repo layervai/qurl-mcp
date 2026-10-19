@@ -12,6 +12,7 @@
 import { QURLClient as SDKQURLClient, QURLError } from "@layervai/qurl";
 import { markRequestCredentialValidated } from "./auth/request-context.js";
 import type {
+  ConsumerAccessPolicy,
   QURL as SDKQURL,
   Resource as SDKResource,
   UpdateResourceQurlInput as SDKUpdateResourceQurlInput,
@@ -57,6 +58,9 @@ export interface SessionData {
 }
 
 export interface QURL {
+  crid?: string;
+  private?: boolean;
+  consumer_access?: { mode: string; version?: number; contract_id?: string };
   resource_id: string;
   qurl_site?: string;
   // Connector-owned resources intentionally omit target_url from management
@@ -146,14 +150,12 @@ export interface UpdateQURLInput {
 }
 
 export interface UpdateResourceInput {
+  consumer_access?: ConsumerAccessPolicy;
+  expected_consumer_access_version?: number;
   tags?: string[];
   description?: string;
   custom_domain?: string;
   preserve_host?: boolean;
-}
-
-export interface ExtendQURLInput {
-  extend_by: string;
 }
 
 export interface ResolveInput {
@@ -215,12 +217,18 @@ export interface QuotaOutput {
     list_per_minute: number;
     resolve_per_minute: number;
     max_active_qurls: number;
-    max_tokens_per_qurl: number;
+    max_active_resources?: number;
+    max_qurls?: number;
+    max_data_transfer_bytes?: number;
     max_expiry_seconds: number;
   };
   usage: {
     qurls_created: number;
     active_qurls: number;
+    active_resources?: number;
+    active_resources_percent?: number | null;
+    data_transfer_bytes?: number;
+    data_transfer_available?: boolean;
     active_qurls_percent: number | null;
     total_accesses: number;
   };
@@ -232,6 +240,21 @@ export interface MintLinkOutput {
   branded_domain?: string;
   expires_at: string;
   type?: string;
+}
+
+/**
+ * Response returned by the CRID share endpoint. Unlike `mint_link`, this
+ * operation identifies the resource with its integration CRID and the API
+ * returns the wire field `qurl`.
+ */
+export interface ShareCRIDOutput {
+  qurl: string;
+  qurl_id?: string;
+  crid?: string;
+  type: string;
+  expires_at?: string;
+  expires_in_seconds: number;
+  single_use: boolean;
 }
 
 // Discriminated on `success` so consumers narrowing on the boolean get
@@ -288,6 +311,33 @@ export interface SessionTerminateOutput {
 // --- Client interface ---
 
 export interface IQURLClient {
+  protectUrl(
+    ...args: Parameters<SDKQURLClient["protectUrl"]>
+  ): ReturnType<SDKQURLClient["protectUrl"]>;
+  inviteConsumer(
+    ...args: Parameters<SDKQURLClient["inviteConsumer"]>
+  ): ReturnType<SDKQURLClient["inviteConsumer"]>;
+  listConsumerInvitations(
+    ...args: Parameters<SDKQURLClient["listConsumerInvitations"]>
+  ): ReturnType<SDKQURLClient["listConsumerInvitations"]>;
+  resendConsumerInvitation(
+    ...args: Parameters<SDKQURLClient["resendConsumerInvitation"]>
+  ): ReturnType<SDKQURLClient["resendConsumerInvitation"]>;
+  revokeConsumerInvitation(
+    ...args: Parameters<SDKQURLClient["revokeConsumerInvitation"]>
+  ): ReturnType<SDKQURLClient["revokeConsumerInvitation"]>;
+  listConsumerGrants(
+    ...args: Parameters<SDKQURLClient["listConsumerGrants"]>
+  ): ReturnType<SDKQURLClient["listConsumerGrants"]>;
+  approveConsumerGrant(
+    ...args: Parameters<SDKQURLClient["approveConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["approveConsumerGrant"]>;
+  denyConsumerGrant(
+    ...args: Parameters<SDKQURLClient["denyConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["denyConsumerGrant"]>;
+  revokeConsumerGrant(
+    ...args: Parameters<SDKQURLClient["revokeConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["revokeConsumerGrant"]>;
   /**
    * Create a new qURL. Returns `CreateQURLData` — the ephemeral create-time
    * shape that carries `qurl_link` (shown only once) and `qurl_id`. This is
@@ -304,10 +354,11 @@ export interface IQURLClient {
   deleteQURL(id: string): Promise<void>;
   updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }>;
   updateResource(id: string, input: UpdateResourceInput): Promise<{ data: QURL }>;
-  extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }>;
   resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }>;
   getQuota(): Promise<{ data: QuotaOutput }>;
   mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }>;
+  /** Mint a temporary qURL link for a resource identified by CRID. */
+  shareByCRID(crid: string, ttlSeconds?: number): Promise<{ data: ShareCRIDOutput }>;
   batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput>;
   revokeQurlToken(resourceId: string, qurlId: string): Promise<void>;
   updateQurlToken(
@@ -405,6 +456,16 @@ function mapResource(raw: SDKQURL | SDKResource): QURL {
   return mapped as unknown as QURL;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 // --- Client implementation ---
 
 /**
@@ -480,6 +541,60 @@ export class QURLClient implements IQURLClient {
   // The tools additionally validate every `structuredContent` against their
   // zod `outputSchema`, so any residual response drift surfaces at runtime.
 
+  async protectUrl(
+    ...args: Parameters<SDKQURLClient["protectUrl"]>
+  ): ReturnType<SDKQURLClient["protectUrl"]> {
+    return this.call((sdk) => sdk.protectUrl(...args));
+  }
+
+  async inviteConsumer(
+    ...args: Parameters<SDKQURLClient["inviteConsumer"]>
+  ): ReturnType<SDKQURLClient["inviteConsumer"]> {
+    return this.call((sdk) => sdk.inviteConsumer(...args));
+  }
+
+  async listConsumerInvitations(
+    ...args: Parameters<SDKQURLClient["listConsumerInvitations"]>
+  ): ReturnType<SDKQURLClient["listConsumerInvitations"]> {
+    return this.call((sdk) => sdk.listConsumerInvitations(...args));
+  }
+
+  async resendConsumerInvitation(
+    ...args: Parameters<SDKQURLClient["resendConsumerInvitation"]>
+  ): ReturnType<SDKQURLClient["resendConsumerInvitation"]> {
+    return this.call((sdk) => sdk.resendConsumerInvitation(...args));
+  }
+
+  async revokeConsumerInvitation(
+    ...args: Parameters<SDKQURLClient["revokeConsumerInvitation"]>
+  ): ReturnType<SDKQURLClient["revokeConsumerInvitation"]> {
+    return this.call((sdk) => sdk.revokeConsumerInvitation(...args));
+  }
+
+  async listConsumerGrants(
+    ...args: Parameters<SDKQURLClient["listConsumerGrants"]>
+  ): ReturnType<SDKQURLClient["listConsumerGrants"]> {
+    return this.call((sdk) => sdk.listConsumerGrants(...args));
+  }
+
+  async approveConsumerGrant(
+    ...args: Parameters<SDKQURLClient["approveConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["approveConsumerGrant"]> {
+    return this.call((sdk) => sdk.approveConsumerGrant(...args));
+  }
+
+  async denyConsumerGrant(
+    ...args: Parameters<SDKQURLClient["denyConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["denyConsumerGrant"]> {
+    return this.call((sdk) => sdk.denyConsumerGrant(...args));
+  }
+
+  async revokeConsumerGrant(
+    ...args: Parameters<SDKQURLClient["revokeConsumerGrant"]>
+  ): ReturnType<SDKQURLClient["revokeConsumerGrant"]> {
+    return this.call((sdk) => sdk.revokeConsumerGrant(...args));
+  }
+
   async createQURL(input: CreateQURLInput): Promise<{ data: CreateQURLData }> {
     return this.call(async (sdk) => ({ data: (await sdk.create(input)) as CreateQURLData }));
   }
@@ -502,8 +617,8 @@ export class QURLClient implements IQURLClient {
   }
 
   async deleteQURL(id: string): Promise<void> {
-    // Preserve the legacy endpoint while bypassing its SDK prefix guard for modern IDs.
-    await this.call((sdk) => (id.startsWith("r_") ? sdk.delete(id) : sdk.deleteResource(id)));
+    // Keep the routes used by callers migrating from legacy IDs to CRIDs.
+    await this.call((sdk) => sdk.deleteResourceByIdentifier(id));
   }
 
   async updateQURL(id: string, input: UpdateQURLInput): Promise<{ data: QURL }> {
@@ -512,10 +627,6 @@ export class QURLClient implements IQURLClient {
 
   async updateResource(id: string, input: UpdateResourceInput): Promise<{ data: QURL }> {
     return this.call(async (sdk) => ({ data: mapResource(await sdk.updateResource(id, input)) }));
-  }
-
-  async extendQURL(id: string, input: ExtendQURLInput): Promise<{ data: QURL }> {
-    return this.call(async (sdk) => ({ data: mapResource(await sdk.extend(id, input)) }));
   }
 
   async resolveQURL(input: ResolveInput): Promise<{ data: ResolveOutput }> {
@@ -528,6 +639,100 @@ export class QURLClient implements IQURLClient {
 
   async mintLink(id: string, input?: MintLinkInput): Promise<{ data: MintLinkOutput }> {
     return this.call(async (sdk) => ({ data: (await sdk.mintLink(id, input)) as MintLinkOutput }));
+  }
+
+  /**
+   * Mint a temporary access link for a resource identified by CRID.
+   *
+   * The published JavaScript SDK does not currently expose the service's
+   * CRID share route, so this small call uses the same API origin and bearer
+   * credential directly. The endpoint requires a JSON object body even when
+   * no options are supplied.
+   */
+  async shareByCRID(crid: string, ttlSeconds?: number): Promise<{ data: ShareCRIDOutput }> {
+    if (!this.apiKey) {
+      throw new QURLAPIError(0, "missing_api_key", MISSING_API_KEY_MESSAGE);
+    }
+
+    // The published SDK has no share method or public request API. Do not
+    // retry this mint here: a lost response may already have created a link.
+    try {
+      const response = await fetch(
+        `${this.baseURL}/v1/resources/${encodeURIComponent(crid)}/share`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(ttlSeconds === undefined ? {} : { ttl_seconds: ttlSeconds }),
+          signal: globalThis.AbortSignal.timeout(30_000),
+        },
+      );
+
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch (err) {
+        if (!(err instanceof SyntaxError)) throw err;
+        throw new QURLAPIError(
+          response.status,
+          "unexpected_response",
+          "qURL API returned invalid JSON",
+        );
+      }
+
+      const envelope = asRecord(payload);
+      if (!response.ok) {
+        const error = asRecord(envelope?.error);
+        const code = asString(error?.code) ?? asString(envelope?.code) ?? "api_error";
+        const message =
+          asString(error?.detail) ??
+          asString(error?.message) ??
+          asString(error?.title) ??
+          `qURL API request failed with status ${response.status}`;
+        const meta = asRecord(envelope?.meta);
+        throw new QURLAPIError(
+          response.status,
+          code,
+          message,
+          asString(error?.type),
+          asString(error?.instance),
+          asString(meta?.request_id) ?? asString(envelope?.request_id),
+        );
+      }
+
+      const data = asRecord(envelope?.data);
+      if (
+        !data ||
+        typeof data.qurl !== "string" ||
+        (data.qurl_id !== undefined && typeof data.qurl_id !== "string") ||
+        (data.crid !== undefined && typeof data.crid !== "string") ||
+        typeof data.type !== "string" ||
+        (data.expires_at !== undefined && typeof data.expires_at !== "string") ||
+        typeof data.expires_in_seconds !== "number" ||
+        typeof data.single_use !== "boolean"
+      ) {
+        throw new QURLAPIError(
+          response.status,
+          "unexpected_response",
+          "qURL API returned an invalid share response",
+        );
+      }
+
+      markRequestCredentialValidated();
+      return { data: data as unknown as ShareCRIDOutput };
+    } catch (err) {
+      if (err instanceof QURLAPIError) throw err;
+      const timeout =
+        err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError");
+      throw new QURLAPIError(
+        0,
+        timeout ? "timeout" : "network_error",
+        timeout ? "qURL API request timed out" : "qURL API network request failed",
+      );
+    }
   }
 
   async batchCreate(input: BatchCreateInput): Promise<BatchCreateOutput> {

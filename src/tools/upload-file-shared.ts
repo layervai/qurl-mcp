@@ -4,17 +4,26 @@ import {
   getRequestMaxUploadFileDataBytes,
   getRequestQurlApiKey,
   getRequestQurlConnectorUrl,
+  markRequestCredentialValidated,
 } from "../auth/request-context.js";
-import {
-  MISSING_API_KEY_MESSAGE,
-  QURLAPIError,
-  type IQURLClient,
-  type MintLinkInput,
-} from "../client.js";
-import { loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
+import { MISSING_API_KEY_MESSAGE, QURLAPIError } from "../client.js";
+import { isLoopbackHostname, loadRuntimeConfig, normalizeServiceBaseUrl } from "../config.js";
 import { formatErrorForLog } from "../logging.js";
 import { flattenControlCharacters, isControlCodePoint } from "../text.js";
 import { RESOURCE_ID_PATTERN } from "./_shared.js";
+import {
+  MAX_EXPIRY_MS,
+  MAX_SESSION_MS,
+  MIN_EXPIRY_MS,
+  MIN_SESSION_MS,
+  parseDurationMs,
+} from "./duration.js";
+import { DEFAULT_UPLOAD_EXPIRES_IN, type UploadMintOptionsInput } from "./upload-mint-options.js";
+
+export type UploadMintOptions = Pick<
+  UploadMintOptionsInput,
+  "expires_in" | "one_time_use" | "session_duration"
+>;
 
 export const supportedMimeTypes = [
   "application/pdf",
@@ -71,7 +80,8 @@ export function getConnectorConfig(allowServerApiKeyFallback = false): Connector
   }
 
   // Validate operator configuration during preflight, before callers decode
-  // or read a potentially large upload payload.
+  // or read a potentially large upload payload. getConnectorUploadUrl already
+  // guarantees the /api/upload suffix the mint route derives from.
   const uploadUrl = getConnectorUploadUrl(connectorURL);
 
   return { apiKey, uploadUrl };
@@ -204,7 +214,10 @@ function parseJsonBody(raw: string): unknown {
   }
 }
 
-function extractConnectorError(parsed: unknown): {
+function extractConnectorError(
+  parsed: unknown,
+  defaultCode: string,
+): {
   code: string;
   detail?: string;
   type?: string;
@@ -221,13 +234,17 @@ function extractConnectorError(parsed: unknown): {
     return typeof value === "string" ? value : undefined;
   };
   return {
-    code:
-      stringField(nestedError, "code") ?? stringField(body, "code") ?? "connector_upload_failed",
+    code: stringField(nestedError, "code") ?? stringField(body, "code") ?? defaultCode,
     detail:
       stringField(nestedError, "detail") ??
       stringField(nestedError, "message") ??
       stringField(body, "detail") ??
-      stringField(body, "message"),
+      stringField(body, "message") ??
+      // The connector's gin handlers answer {"error": "<text>"}. On the upload
+      // path this bounded, flattened text reaches the caller on purpose (the
+      // operator-run connector's reason, e.g. a size limit); the mint path keeps
+      // it in the operator log because its caller message is rebuilt.
+      stringField(body, "error"),
     type: stringField(nestedError, "type"),
     instance: stringField(nestedError, "instance"),
   };
@@ -236,15 +253,23 @@ function extractConnectorError(parsed: unknown): {
 /**
  * Throw a QURLAPIError from a failed connector response.
  */
-function throwConnectorError(response: Response, parsed: unknown, requestId?: string): never {
-  const { code, detail, type, instance } = extractConnectorError(parsed);
-  const safeDetail = detail
-    ? flattenControlCharacters(detail).replace(/\s+/g, " ").trim().slice(0, 1024)
-    : undefined;
+function throwConnectorError(
+  response: Response,
+  parsed: unknown,
+  requestId?: string,
+  defaultCode = "connector_upload_failed",
+): never {
+  const { code, detail, type, instance } = extractConnectorError(parsed, defaultCode);
+  const safeDetail = detail ? sanitizeConnectorDetail(detail) : undefined;
   throw new QURLAPIError(
     response.status,
-    code,
-    safeDetail || `Connector upload failed with HTTP ${response.status}`,
+    // Namespaced so a connector cannot pose as a local condition (e.g. its own
+    // "missing_api_key" being rendered as this server's missing-key guidance).
+    code.startsWith("connector_") ? code : `connector_${code}`,
+    // Quoted and attributed: this text is third-party data in the caller's context.
+    safeDetail
+      ? `Connector reported (HTTP ${response.status}): "${safeDetail}"`
+      : `Connector request failed with HTTP ${response.status}`,
     type,
     instance,
     requestId,
@@ -289,8 +314,9 @@ async function readConnectorResponseBody(response: Response): Promise<string> {
     totalBytes += value.byteLength;
     if (totalBytes > 64 * 1024) {
       await reader.cancel();
+      // Keep an error status (e.g. a proxy's HTML 502) so it is still reported.
       throw new QURLAPIError(
-        0,
+        response.ok ? 0 : response.status,
         "connector_response_too_large",
         "Connector response exceeded the 64 KiB limit.",
       );
@@ -349,72 +375,366 @@ async function processConnectorResponse(response: Response): Promise<ConnectorUp
   return { resource_id: resourceId };
 }
 
+// getConnectorUploadUrl guarantees the /api/upload suffix; the mint route is
+// its sibling. Fail loudly rather than POST a mint body at the upload route.
+function assertConnectorMintable(uploadUrl: string): void {
+  if (!new URL(uploadUrl).pathname.endsWith("/api/upload")) {
+    throw new QURLAPIError(
+      0,
+      "invalid_connector_url",
+      "Connector upload URL must end with /api/upload.",
+    );
+  }
+}
+
+function connectorMintUrl(uploadUrl: string, resourceId: string): string {
+  assertConnectorMintable(uploadUrl);
+  const url = new URL(uploadUrl);
+  url.pathname = `${url.pathname.slice(0, -"/api/upload".length)}/api/mint_link/${encodeURIComponent(resourceId)}`;
+  return url.toString();
+}
+
+const MAX_LINK_LENGTH = 8192;
+
+// Why a minted link cannot be returned, or undefined when it can. The link
+// carries an access token and may be emailed, so never plain HTTP, except from
+// a loopback development connector: the same exception the connector URL
+// itself gets in normalizeServiceBaseUrl. The host is deliberately not pinned:
+// connector-minted links are served from the qURL link domain, not the
+// connector's own host, and the operator-configured connector is already
+// trusted with the file and the bearer.
+function linkProblem(entry: Record<string, unknown>, connectorIsLoopback: boolean) {
+  const value = entry.qurl_link;
+  if (typeof value !== "string") return "no usable link";
+  if (value.length > MAX_LINK_LENGTH) return "an oversized link";
+  // The URL parser silently strips tab/CR/LF, so control characters are
+  // refused here rather than returned inside a link that parsed cleanly.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(value)) return "a link with control characters";
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return "an unparsable link";
+  }
+  const deliverable =
+    url.protocol === "https:" ||
+    (url.protocol === "http:" && connectorIsLoopback && isLoopbackHostname(url.hostname));
+  if (!deliverable) {
+    return url.protocol === "http:" ? "a non-HTTPS link" : "a non-HTTP(S) link";
+  }
+  // An expiry already past by this host's clock is not refused: if this clock
+  // runs ahead, the link is still good, and refusing would discard the only
+  // handle to a file that cannot be deleted. It is returned with a flag.
+  return undefined;
+}
+
+type MintedLink = { qurl_id?: string; qurl_link: string; expires_at?: unknown };
+
+// Every link in a mint response is live and cannot be revoked from this server,
+// so operator logs name all of them (bounded and flattened; the IDs are untrusted).
+// Operator-log only (never the caller), so the cap is generous: these links
+// are live and unrevocable here, and the log is where cleanup starts.
+const LOGGED_LINK_LIMIT = 100;
+
+function sanitizeConnectorDetail(detail: string): string {
+  // Slice first: flattening the whole (up to 64 KiB) body only to keep 1 KiB is waste.
+  return flattenControlCharacters(detail.slice(0, 4096)).replace(/\s+/g, " ").trim().slice(0, 1024);
+}
+
+function describeLinks(links: unknown): string {
+  if (!Array.isArray(links) || links.length === 0) return "none";
+  const shown = links
+    .slice(0, LOGGED_LINK_LIMIT)
+    .map((entry: unknown) => {
+      const id = (entry as { qurl_id?: unknown } | null)?.qurl_id;
+      return typeof id === "string"
+        ? flattenControlCharacters(id.slice(0, 256)).slice(0, 64)
+        : "(no qurl_id)";
+    })
+    .join(", ");
+  return links.length > LOGGED_LINK_LIMIT
+    ? `${shown} (+${links.length - LOGGED_LINK_LIMIT} more)`
+    : shown;
+}
+
+function reportedLinkIds(links: unknown): string[] {
+  return (Array.isArray(links) ? links : [])
+    .map((entry: unknown) => (entry as { qurl_id?: unknown } | null)?.qurl_id)
+    .filter((id): id is string => typeof id === "string" && id.length > 0)
+    .map((id) => flattenControlCharacters(id.slice(0, 256)).slice(0, 64));
+}
+
+/** The single link the connector minted, or why its response is unusable. */
+function isPastExpiry(expiresAt: unknown): boolean {
+  return typeof expiresAt === "string" && Date.parse(expiresAt) <= Date.now();
+}
+
+// Clock skew can make a live link look expired. Count every link-shaped entry.
+function isPossiblyLiveLink(entry: unknown): boolean {
+  const link = entry as { qurl_link?: unknown; qurl_id?: unknown } | null;
+  const parsable = (value: unknown) =>
+    typeof value === "string" && value.length <= MAX_LINK_LENGTH && URL.canParse(value);
+  // Real evidence of a minted token: a non-empty ID, or a link that parses.
+  const hasId = typeof link?.qurl_id === "string" && link.qurl_id.length > 0;
+  return hasId || parsable(link?.qurl_link);
+}
+
+function mintedLinkFrom(
+  parsed: unknown,
+  connectorUploadUrl: string,
+):
+  | { link: MintedLink; others: unknown[]; extraCount: number; extraQurlIds: string[] }
+  | { problem: string } {
+  const links = (parsed as { links?: unknown } | undefined)?.links;
+  const entries = (Array.isArray(links) ? links : []).map(
+    (entry: unknown) =>
+      (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>,
+  );
+  // Use the first deliverable link rather than strictly index 0: a malformed
+  // first entry must not discard a good one, since the file cannot be re-linked.
+  // The qurl_id is informational here (it may belong to the connector's
+  // resource), so an unexpected or missing ID does not make a working link unusable.
+  const connectorIsLoopback = isLoopbackHostname(new URL(connectorUploadUrl).hostname);
+  const reasonFor = (entry: Record<string, unknown>) => linkProblem(entry, connectorIsLoopback);
+  const problems = entries.map(reasonFor);
+  // Prefer a deliverable link that is not already past; fall back to any.
+  const firstDeliverable = problems.indexOf(undefined);
+  const unexpired = entries.findIndex(
+    (entry, i) => problems[i] === undefined && !isPastExpiry(entry.expires_at),
+  );
+  const index = unexpired === -1 ? firstDeliverable : unexpired;
+  if (index === -1) {
+    const reasons = [...new Set(problems)].join(", ");
+    const reason = reasons || "no usable link";
+    return {
+      problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
+    };
+  }
+  const chosen = entries[index];
+  // Count all possibly live extras; the local clock cannot prove expiry.
+  const others = entries.filter((entry, other) => other !== index && isPossiblyLiveLink(entry));
+  return {
+    link: {
+      // Untrusted: bounded and flattened before it reaches the caller or email.
+      ...(typeof chosen.qurl_id === "string" && chosen.qurl_id
+        ? { qurl_id: flattenControlCharacters(chosen.qurl_id).slice(0, 64) }
+        : {}),
+      qurl_link: chosen.qurl_link as string,
+      expires_at: chosen.expires_at,
+    },
+    others,
+    extraCount: others.length,
+    extraQurlIds: reportedLinkIds(others).slice(0, 10),
+  };
+}
+
+/**
+ * Contract: qurl-s3-connector internal/handler/handler.go MintLink (route in
+ * main.go's uploader mode) takes { n, one_time_use, expires_at, session_duration }
+ * and passes one_time_use and session_duration to qurl-service's mint in both
+ * legacy and render-at-mint modes. Drift is tracked with #282.
+ *
+ * Mint the recipient link through the connector's `/api/mint_link`, the only
+ * link the connector serves for an upload. The upload resource's own target is
+ * not a viewable page in the connector's tunnel mode (its per-upload qURL is
+ * never shared there), so minting on it with qurl-service yields a link that
+ * opens to a 404.
+ */
 export async function mintUploadedFile(
-  client: IQURLClient,
+  connectorConfig: ConnectorConfig,
   resourceId: string,
   file: { name: string; contentType: string; sizeBytes: number },
-  input: MintLinkInput,
+  input: UploadMintOptions,
 ) {
-  let minted: Awaited<ReturnType<IQURLClient["mintLink"]>>;
+  let requestedExpiresAt: string | undefined;
+  let requestSent = false;
+  let minted: MintedLink;
+  let extraCount = 0;
+  let liveQurlIds: string[] = [];
+  let liveLinkCount = 0;
+  let extraQurlIds: string[] = [];
   try {
-    minted = await client.mintLink(resourceId, {
-      label: input.label,
-      expires_in: input.expires_in,
+    // Upload links cannot be revoked from here (#281), so never leave the
+    // lifetime to the connector's default: 24h, as create_qurl's API default.
+    const expiresIn = input.expires_in || DEFAULT_UPLOAD_EXPIRES_IN;
+    const expiresInMs = parseDurationMs(expiresIn);
+    if (expiresInMs === undefined || expiresInMs < MIN_EXPIRY_MS || expiresInMs > MAX_EXPIRY_MS) {
+      throw new QURLAPIError(0, "invalid_expires_in", `Unsupported duration: ${expiresIn}`);
+    }
+    // The connector requires whole seconds in Go duration syntax (no d/w units).
+    // Check direct callers too, then normalize accepted day/week input below.
+    const sessionMs = input.session_duration ? parseDurationMs(input.session_duration) : undefined;
+    if (
+      input.session_duration &&
+      (sessionMs === undefined ||
+        sessionMs < MIN_SESSION_MS ||
+        sessionMs > MAX_SESSION_MS ||
+        sessionMs % 1000 !== 0)
+    ) {
+      throw new QURLAPIError(
+        0,
+        "invalid_session_duration",
+        `Unsupported duration: ${input.session_duration}`,
+      );
+    }
+    // The connector's mint contract takes an absolute expires_at, so the
+    // relative expires_in is anchored to this host's clock.
+    requestedExpiresAt = new Date(Date.now() + expiresInMs).toISOString();
+    const body = {
+      n: 1,
       one_time_use: input.one_time_use ?? true,
-      max_sessions: input.max_sessions,
-      session_duration: input.session_duration,
-      access_policy: input.access_policy,
+      expires_at: requestedExpiresAt,
+      ...(sessionMs !== undefined ? { session_duration: `${sessionMs / 1000}s` } : {}),
+    };
+    const mintUrl = connectorMintUrl(connectorConfig.uploadUrl, resourceId);
+    requestSent = true;
+    const response = await fetchConnector(mintUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${connectorConfig.apiKey}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     });
+    const requestId = response.headers.get("x-request-id") ?? undefined;
+    const raw = await readConnectorResponseBody(response);
+    const contentType = response.headers.get("content-type")?.toLowerCase();
+    const unexpected = (message: string) =>
+      new QURLAPIError(0, "unexpected_response", message, undefined, undefined, requestId);
+    // Same predicate as processConnectorResponse: a missing Content-Type is tolerated.
+    if (response.ok && contentType && !contentType.includes("json")) {
+      throw unexpected("Connector mint returned a non-JSON response.");
+    }
+    const parsed = parseJsonBody(raw);
+    // Any link in a failed response is live and unrevocable here; report it.
+    const responseLinks = (parsed as { links?: unknown } | undefined)?.links;
+    // Counted apart from IDs (a live link may come back without a qurl_id),
+    // and both over live entries only, so the IDs never outnumber the count.
+    const liveEntries = (Array.isArray(responseLinks) ? responseLinks : []).filter(
+      isPossiblyLiveLink,
+    );
+    liveQurlIds = reportedLinkIds(liveEntries).slice(0, 10);
+    liveLinkCount = liveEntries.length;
+    if (!response.ok) throwConnectorError(response, parsed, requestId, "connector_mint_failed");
+    if ((parsed as { success?: unknown } | undefined)?.success === false) {
+      const { detail } = extractConnectorError(parsed, "connector_mint_failed");
+      const reason = detail ? `: ${sanitizeConnectorDetail(detail)}` : "";
+      throw unexpected(`Connector mint reported failure${reason}.`);
+    }
+    const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
+    if ("problem" in result) throw unexpected(result.problem);
+    // A deliverable mint means qurl-service accepted the forwarded bearer via
+    // the operator-configured connector: the same evidence, under the same
+    // trust assumption, as a successful direct API call (see QURLClient.call).
+    // The connector checks a non-empty caller bearer against qurl-service
+    // before minting (ConfirmResourceAccess in tunnel mode, the caller's own
+    // mint in legacy mode). The upload alone does not promote: it is the mint
+    // that provably reaches qURL.
+    markRequestCredentialValidated();
+    if (result.extraCount > 0) {
+      // n: 1 was requested; extra links are live, so report them, not just log.
+      console.error(
+        `Connector returned ${result.extraCount} additional possibly live links for ${resourceId}; returning one ` +
+          `(links: ${describeLinks([result.link, ...result.others])})`,
+      );
+    }
+    minted = result.link;
+    extraCount = result.extraCount;
+    extraQurlIds = result.extraQurlIds;
   } catch (error) {
-    // The connector API currently exposes upload but no delete endpoint. Keep
-    // the mint error primary and log the orphan resource for operator cleanup.
+    if ((error as { neverConnected?: boolean } | null)?.neverConnected) requestSent = false;
+    // The connector API exposes upload but no delete endpoint. Keep the mint
+    // error primary and log the orphan resource for operator cleanup.
     console.error(
-      `Connector resource ${resourceId} remains after link minting failed (${formatErrorForLog(error)})`,
+      `Connector resource ${resourceId} remains after link minting failed ` +
+        `(requested expires_at=${requestedExpiresAt ?? "connector default"}; ${formatErrorForLog(error)})`,
     );
     throw new QURLAPIError(
       error instanceof QURLAPIError ? error.statusCode : 0,
       "upload_mint_failed",
-      `Upload succeeded but link creation failed. Resource ID: ${resourceId}. ` +
-        "Use mint_link with this resource_id to retry; do not upload the file again. " +
-        "A failed request may already have minted a token; inspect get_qurl before retrying.",
+      `Upload succeeded but link creation failed` +
+        (error instanceof QURLAPIError && error.statusCode > 0
+          ? ` (connector responded HTTP ${error.statusCode})`
+          : "") +
+        `. Resource ID: ${resourceId}. ` +
+        "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
+        "do not retry automatically, since each retry stores another copy; tell the user and ask." +
+        (liveLinkCount > 0
+          ? ` The connector reported ${liveLinkCount} possibly live link(s) this server refused to return` +
+            (liveQurlIds.length > 0
+              ? `: ${liveQurlIds.join(", ")}` +
+                (liveLinkCount > liveQurlIds.length ? " (IDs listed may be incomplete)" : "")
+              : " (the connector reported no IDs for them)") +
+            "; tell the user."
+          : requestSent
+            ? " If the request failed after reaching the connector, a link may already have been minted; check the connector before sharing a replacement."
+            : ""),
     );
   }
 
-  let qurlSite: string | undefined;
-  try {
-    qurlSite = (await client.getQURL(resourceId)).data.qurl_site;
-  } catch (error) {
-    // Non-fatal: qurl_site is optional metadata. Log for debugging but don't fail the upload.
+  // Normalized so the reported (and emailed) expiry is always ISO 8601 or absent.
+  const confirmedExpiresAt =
+    typeof minted.expires_at === "string" && !Number.isNaN(Date.parse(minted.expires_at))
+      ? new Date(minted.expires_at).toISOString()
+      : undefined;
+  // Small fixed tolerance for the connector's whole-second rounding and the
+  // round trip; any real clamp, even of a 1m link, is flagged.
+  const driftMs = confirmedExpiresAt
+    ? Date.parse(confirmedExpiresAt) - Date.parse(requestedExpiresAt)
+    : 0;
+  const driftsFromRequest = Math.abs(driftMs) > 5_000;
+  // The dangerous direction for a link that cannot be revoked here: it lives longer.
+  const outlivesRequest = driftMs > 5_000;
+  if (driftsFromRequest) {
+    // A clamp or host clock skew changed the link's lifetime; make it visible.
     console.error(
-      `Failed to fetch qurl_site for resource ${resourceId} (${formatErrorForLog(error)})`,
+      `Connector link ${minted.qurl_id ?? "(no qurl_id)"} expires at ${confirmedExpiresAt}, not the requested ${requestedExpiresAt}`,
     );
   }
 
   return {
     resource_id: resourceId,
-    qurl_id: minted.data.qurl_id,
-    qurl_link: minted.data.qurl_link,
-    qurl_site: qurlSite,
-    expires_at: minted.data.expires_at,
+    ...(minted.qurl_id ? { qurl_id: minted.qurl_id } : {}),
+    qurl_link: minted.qurl_link,
+    // Only a connector-confirmed expiry is reported as expires_at; the request
+    // may have been clamped, and expires_at reaches recipients in email.
+    ...(confirmedExpiresAt ? { expires_at: confirmedExpiresAt } : {}),
+    requested_expires_at: requestedExpiresAt,
+    ...(driftsFromRequest ? { expires_at_differs_from_request: true } : {}),
+    ...(outlivesRequest ? { expires_at_later_than_requested: true } : {}),
+    ...(isPastExpiry(confirmedExpiresAt) ? { expires_at_already_past: true } : {}),
+    ...(!confirmedExpiresAt ? { expires_at_unconfirmed: true } : {}),
+    ...(extraCount > 0
+      ? {
+          unexpected_extra_link_count: extraCount,
+          ...(extraQurlIds.length > 0 ? { unexpected_extra_qurl_ids: extraQurlIds } : {}),
+        }
+      : {}),
     file_name: file.name,
     content_type: file.contentType,
     size_bytes: file.sizeBytes,
-    branded_domain: minted.data.branded_domain,
-    type: minted.data.type,
   };
 }
+
+// Failures that prove no request reached the connector (the name or the
+// connection never resolved), unlike a reset or timeout, which is ambiguous.
+const NEVER_CONNECTED_CODES = new Set(["ENOTFOUND", "EAI_AGAIN", "ECONNREFUSED"]);
 
 function connectorTransportError(error: unknown): QURLAPIError {
   const code =
     error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name)
       ? "connector_timeout"
       : "connector_unreachable";
-  return new QURLAPIError(
-    0,
-    code,
-    code === "connector_timeout"
-      ? "Connector upload timed out."
-      : "Connector upload request failed.",
+  const causeCode = ((error as { cause?: { code?: unknown } } | null)?.cause?.code ?? "") as string;
+  return Object.assign(
+    new QURLAPIError(
+      0,
+      code,
+      code === "connector_timeout" ? "Connector request timed out." : "Connector request failed.",
+    ),
+    { neverConnected: NEVER_CONNECTED_CODES.has(causeCode) },
   );
 }
 

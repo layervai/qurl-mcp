@@ -10,6 +10,7 @@ import type {
   QURL,
   ResolveOutput,
   SessionListOutput,
+  ShareCRIDOutput,
 } from "../client.js";
 import {
   accessTokenOutputSchema,
@@ -18,6 +19,7 @@ import {
   listQurlSessionsOutputSchema,
   listQurlsOutputSchema,
   mintLinkOutputSchema,
+  shareByCRIDOutputSchema,
   qurlSchema,
   resolveQurlOutputSchema,
   updateQurlTokenOutputSchema,
@@ -41,8 +43,29 @@ type KnownFields<T> = T extends (infer Item)[]
     : T;
 
 describe("output schema <-> client type alignment", () => {
+  it("shareByCRIDOutputSchema matches ShareCRIDOutput", () => {
+    expectTypeOf<
+      KnownFields<z.infer<typeof shareByCRIDOutputSchema>>
+    >().toEqualTypeOf<ShareCRIDOutput>();
+  });
   it("qurlSchema matches QURL", () => {
     expectTypeOf<KnownFields<z.infer<typeof qurlSchema>>>().toEqualTypeOf<QURL>();
+  });
+
+  it("retains private resource policy metadata", () => {
+    const resource = {
+      ...sampleQURL(),
+      crid: "resource-crid",
+      private: true,
+      consumer_access: { mode: "contract", version: 2, contract_id: "paid-access" },
+    };
+    expect(qurlSchema.parse(resource)).toEqual(resource);
+    expect(
+      qurlSchema.parse({
+        ...resource,
+        consumer_access: { mode: "future_mode", invitation_token: "must-not-leak" },
+      }).consumer_access,
+    ).toEqual({ mode: "future_mode" });
   });
 
   it("createQurlOutputSchema matches CreateQURLData", () => {

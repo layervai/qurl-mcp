@@ -7,6 +7,11 @@ import {
 } from "./_shared.js";
 import { deleteQurlOutputSchema } from "./output-schemas.js";
 
+// Upload links live on the connector's resource, so revoking this one leaves
+// them serving (#281). Said in the result, which agents relay to the user.
+const UPLOAD_LINKS_NOTE =
+  "Links minted by the upload tools are served by the file connector and are not affected.";
+
 export const deleteQurlSchema = z.object({
   resource_id: resourceOnlyIdSchema("revoke (all tokens; q_ display IDs are not accepted)"),
 });
@@ -21,8 +26,8 @@ export function deleteQurlTool(
     description:
       "Permanently revoke a qURL — the link and every access token under it stop working immediately. " +
       "**This action is irreversible.** Use this when you want to cut off access entirely (compromised link, departed user, end-of-engagement). " +
-      "Use `update_qurl` instead when you only need to shorten/extend the expiration, retag, or rename — those preserve the existing access tokens. " +
-      "Use `extend_qurl` when you only need to push the expiration out. " +
+      "It does not revoke links minted by the upload tools, which belong to the file connector; those cannot be revoked from this server. " +
+      "Use `update_qurl` instead when you only need to shorten the resource's expiration, retag, or rename, and `extend_qurl` to keep a link open longer — those preserve the existing access tokens. " +
       "**Idempotent:** the API returns 404 for re-deletes, never-existed IDs, and resources owned by another API key (ownership-mismatch is collapsed into 404 server-side to avoid existence disclosure); this tool swallows all three. " +
       "Branch on `was_already_revoked` to distinguish the no-op case from a successful revoke on this call. " +
       "When the ID came from user input and ownership matters, call `get_qurl` first — a 200 confirms ownership; a thrown 404 is equally ambiguous on that endpoint too. " +
@@ -73,7 +78,7 @@ export function deleteQurlTool(
         resource_id: input.resource_id,
         revoked: true as const,
         was_already_revoked: wasAlreadyRevoked,
-        message: `qURL ${input.resource_id} is revoked.`,
+        message: `qURL ${input.resource_id} is revoked. ${UPLOAD_LINKS_NOTE}`,
       };
       return {
         content: [

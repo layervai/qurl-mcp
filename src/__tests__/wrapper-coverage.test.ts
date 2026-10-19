@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it, expect, vi } from "vitest";
 import { MISSING_API_KEY_MESSAGE, QURLAPIError, type IQURLClient } from "../client.js";
+import { publishCridTool, manageCridAccessTool } from "../tools/consumer-access.js";
 import { batchCreateTool } from "../tools/batch-create.js";
 import { createQurlTool } from "../tools/create-qurl.js";
 import { deleteQurlTool } from "../tools/delete-qurl.js";
@@ -12,6 +13,7 @@ import { listQurlsTool } from "../tools/list-qurls.js";
 import { listQurlSessionsTool } from "../tools/list-qurl-sessions.js";
 import { mintLinkTool } from "../tools/mint-link.js";
 import { resolveQurlTool } from "../tools/resolve-qurl.js";
+import { shareByCRIDTool } from "../tools/share-by-crid.js";
 import { revokeQurlTokenTool } from "../tools/revoke-qurl-token.js";
 import { terminateQurlSessionsTool } from "../tools/terminate-qurl-sessions.js";
 import { updateQurlTool } from "../tools/update-qurl.js";
@@ -45,15 +47,25 @@ type ToolCase = {
     runtime: ToolRuntimeOptions,
   ) => { handler: (input: never) => Promise<unknown> };
   // Mock methods on the client to throw missing_api_key. Keyed so each
-  // tool only stubs the method it actually invokes (defensive against
-  // future delegation changes — extendQURL currently delegates to
-  // updateQURL, so the test stubs both).
+  // tool only stubs the method it actually invokes.
   stubs: Array<keyof IQURLClient>;
   // Minimal valid input that satisfies the handler's schema.
   input: unknown;
 };
 
 const toolCases: ToolCase[] = [
+  {
+    name: "publish_crid",
+    build: publishCridTool,
+    stubs: ["protectUrl"],
+    input: { target_url: "https://example.com", policy: { mode: "invite_only", version: 1 } },
+  },
+  {
+    name: "manage_crid_access",
+    build: manageCridAccessTool,
+    stubs: ["inviteConsumer"],
+    input: { action: "invite", resource_id: "r_test1234567", email: "ana@example.com" },
+  },
   {
     name: "create_qurl",
     build: createQurlTool,
@@ -86,10 +98,9 @@ const toolCases: ToolCase[] = [
   },
   {
     name: "extend_qurl",
-    // extendQURL delegates to updateQURL on the client — stub both so the
-    // assertion holds whether or not the delegation is preserved.
+    // extend_qurl reads the resource's links, then updates the link.
     build: extendQurlTool,
-    stubs: ["extendQURL", "updateQURL"],
+    stubs: ["getQURL", "updateQurlToken"],
     input: { resource_id: "r_test1234567", extend_by: "1h" },
   },
   {
@@ -103,6 +114,12 @@ const toolCases: ToolCase[] = [
     build: mintLinkTool,
     stubs: ["mintLink"],
     input: { resource_id: "r_test1234567" },
+  },
+  {
+    name: "share_by_crid",
+    build: shareByCRIDTool,
+    stubs: ["shareByCRID"],
+    input: { crid: "crid_test" },
   },
   {
     name: "batch_create_qurls",
