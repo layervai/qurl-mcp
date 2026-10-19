@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
 import { describe, expect, it } from "vitest";
 
-describe("Nodemailer v9 runtime compatibility", () => {
+describe("Nodemailer runtime compatibility", () => {
   it("constructs the SMTP transport options used by email delivery", () => {
     const options = {
       host: "127.0.0.1",

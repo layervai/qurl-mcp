@@ -14,6 +14,55 @@ const resource = {
   expires_at: "2026-10-12T00:00:00Z",
 };
 describe("consumer access publisher tools", () => {
+  it.each(["list_grants", "approve", "deny", "revoke_grant"] as const)(
+    "accepts an email-backed %s receipt without exposing added fields",
+    async (action) => {
+      const grant = {
+        id: "a".repeat(64),
+        status: action === "deny" ? "denied" : action === "revoke_grant" ? "revoked" : "active",
+        version: 2,
+        credential_kind: "email",
+        email: "ana@example.com",
+        email_verified_at: "2026-10-18T00:00:00Z",
+        email_access_token: "must-not-leak",
+      };
+      const client = makeMockClient({
+        listConsumerGrants: vi.fn().mockResolvedValue({ grants: [grant], has_more: false }),
+        approveConsumerGrant: vi.fn().mockResolvedValue(grant),
+        denyConsumerGrant: vi.fn().mockResolvedValue(grant),
+        revokeConsumerGrant: vi.fn().mockResolvedValue(grant),
+      });
+      const result = await manageCridAccessTool(client).handler({
+        action,
+        resource_id: resource.crid,
+        ...(action === "list_grants"
+          ? {}
+          : {
+              id: grant.id,
+              ...(action === "approve"
+                ? { approval: { expected_version: 1 } }
+                : { expected_version: 1 }),
+            }),
+      });
+      expect(result.isError).not.toBe(true);
+      expect(JSON.stringify(result)).toContain('"credential_kind":"email"');
+      expect(JSON.stringify(result)).not.toContain("must-not-leak");
+    },
+  );
+
+  it("does not let a publisher invent an email credential approval", async () => {
+    const client = makeMockClient();
+    const result = await manageCridAccessTool(client).handler({
+      action: "approve",
+      resource_id: resource.crid,
+      id: "new",
+      // @ts-expect-error Email credentials must come from consumer mailbox proof.
+      approval: { expected_version: 0, credential_kind: "email" },
+    });
+    expect(result.isError).toBe(true);
+    expect(client.approveConsumerGrant).not.toHaveBeenCalled();
+  });
+
   it("keeps a failed receipt recoverable without leaking response secrets", async () => {
     const client = makeMockClient({
       protectUrl: vi.fn().mockResolvedValue({

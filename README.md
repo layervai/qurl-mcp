@@ -1,14 +1,132 @@
-# @layervai/qurl-mcp
+# qURL MCP server for temporary access links
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
+Give an AI agent tools to share localhost web apps, private APIs, and selected
+files through expiring [qURL™ by LayerV](https://layerv.ai/qurl/) access links.
+This repository implements the Model Context Protocol server for that workflow.
+The `@layervai/qurl-mcp` package runs as a local stdio server backed by the
+qURL CLI or API, or as an authenticated remote HTTP server backed by the API.
+
+Start with the [no-account local quickstart](#quick-start-no-account-needed)
+or [account-backed client configuration](#mcp-client-example), then choose
+the tools for your task. In local mode, `publish_crid` runs the installed
+CLI to publish an app that is already running; `share_by_crid` issues its
+access link. Creating a link alone does not publish an app or restrict an
+existing public URL. Uploads require the account-backed tool set and use a separate connector lifecycle;
+see [upload tools](#upload-tools) for their supported options and limits.
+
+[Local app sharing](#let-an-ai-agent-share-a-localhost-preview) ·
+[File sharing](#let-an-ai-agent-share-a-pdf-or-image) ·
+[Sharing questions](#mcp-sharing-questions) · [Private links](https://qurl.link/)
+
 > **⚠️ Renamed from `@layerv/qurl-mcp` in v0.4.0.** The old package is deprecated and will not receive further updates. If you're using `@layerv/qurl-mcp@0.3.x`, swap the scope in your MCP client config — same binary, same API key, no other changes.
 
-> A qURL MCP Server that supports both local `stdio` mode and remote `HTTP` mode for creating, managing, resolving, and sharing secure access links.
+## Let an AI agent share a localhost preview
+
+Use this workflow when an agent needs to give a reviewer access to a development
+preview or internal API. A tool that creates a link does not start the app on
+your laptop.
+
+1. Keep the local app running. Configure a local stdio MCP client using the
+   [no-account quickstart](#quick-start-no-account-needed), with the qURL CLI
+   installed on the same host and no `QURL_API_KEY` set.
+2. Ask the agent to call `publish_crid` with `app_name` (a short public name, without secrets or recipient details) and the app's root loopback URL, such
+   as `http://127.0.0.1:3000`, and save the returned CRID. Alternatively, publish
+   it directly with the [CLI](https://github.com/layervai/qurl-integrations#share-a-localhost-web-app).
+   Local tools use that machine's device identity; a CRID does not grant another
+   device authority over the resource.
+3. Ask the agent to call `share_by_crid` with the published CRID and a requested
+   lifetime. The following is a tool argument object, not a complete MCP message:
+
+   ```json
+   {
+     "crid": "REPLACE_WITH_PUBLISHED_CRID",
+     "ttl": "5m"
+   }
+   ```
+
+4. Share the full returned link through your intended private channel and
+   report the expiry returned by the service. Do not assume the requested TTL
+   was granted unchanged. Keep the publishing host and app available.
+
+Check that your installed release exposes these tools. In account-backed mode,
+`share_by_crid` instead uses the API credential and requires `qurl:resolve` and
+resource authorization. For resources already managed through the API, see `mint_link` and the other
+[link-management tools](#qurl-management-tools). Tool availability and resource
+identifiers matter; an uploaded-file identifier cannot be substituted into
+the same workflow.
+
+## Let an AI agent share a PDF or image
+
+For example, give a reviewer a short-lived link to a selected PDF report.
+Use account-backed stdio mode (`QURL_API_KEY` set) or authenticated HTTP mode,
+then configure the upload Connector under [configuration files](#configuration-files).
+Upload tools are not listed in no-account local mode. Choose the tool for the transport:
+
+| File location | Tool | Important requirement |
+| --- | --- | --- |
+| A PDF or supported raster image on the local MCP server host | `upload_file_qurl` | Available in stdio mode; the host process must be allowed to read the selected file. |
+| PDF or image bytes supplied to an HTTP or stdio MCP client | `upload_file_data_qurl` | Supply the supported file as base64 data with the correct filename and media type. |
+| Text to share as a generated PDF | `upload_text_qurl` | Uses the configured upload service, rather than publishing a local app. |
+
+A stdio tool argument example:
+
+```json
+{
+  "file_path": "/absolute/path/to/review.pdf",
+  "expires_in": "5m",
+  "one_time_use": true
+}
+```
+
+Pass these arguments to `upload_file_qurl` only for a file the user selected.
+The tool uploads to the configured file service and returns a new access link.
+Use the confirmed expiry in its response. Opening a single-use link to test it
+can consume it before the recipient opens it.
+
+Upload links cannot currently be revoked through this MCP server, and `mint_link`
+cannot create another link for an uploaded file. See [upload tools](#upload-tools)
+for the supported formats, size limits, response fields, and cleanup limitations.
+
+## Choosing what an agent should share
+
+### Should the agent share an app or a deployed preview?
+
+If the reviewer needs the current localhost app, keep it running and use the [local CLI-backed tools](#quick-start-no-account-needed) to publish the resource and issue its link. An existing ngrok endpoint, Cloudflare application, or Vercel preview is another possible handoff, but its access controls and availability come from that separately configured service. This server exposes qURL operations; it does not create those other deployments. See the [app-sharing comparison](https://github.com/layervai/qurl-integrations#should-i-share-the-running-app-or-deploy-a-preview) when choosing the workflow. Share the confirmed expiry and preserve the app's login requirements.
+
+### Should the agent upload the result or link to a running file service?
+
+A selected PDF or image can use this server's [account-backed upload tools](#upload-tools). A hosted Google Drive document instead uses Drive's [sharing permissions](https://support.google.com/drive/answer/2494822?hl=en); an S3 object can use a [presigned download URL](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ShareObjectPreSignedURL.html). Those storage workflows are distinct from publishing a local file server, which must remain available. Choose based on where the result should live and which service the agent is authorized to use. This server's upload identifiers and revocation limits still apply; a file path, uploaded-file identifier, and local-service CRID are not interchangeable.
+
+## MCP sharing questions
+
+### Is this a public tunnel to my localhost app?
+
+In no-account stdio mode, this server invokes the local CLI to publish and
+manage an already running app. API-backed and remote HTTP modes use their
+configured resources; a remote server cannot publish an app on your laptop
+through its own localhost address. Use the
+[localhost-sharing comparison](https://github.com/layervai/qurl-integrations#choose-how-to-share-an-app-or-file)
+when choosing between resource access links and a public endpoint workflow.
+
+### Does every AI client support the same tools?
+
+No. Configure the client's supported transport and check the installed server's
+tool list. A remote HTTP server cannot use `upload_file_qurl` to read a file
+from the client's laptop; use the file-data tool for a supported attachment.
+
+### Can I use an app link and an uploaded-file link interchangeably?
+
+No. App resource management and uploaded-file link minting use different
+lifecycles. Follow the tool that issued the link, including its revocation limits.
+Your local app's own login continues to apply when the link opens it.
 
 ## Overview
 
-`qURL MCP` exposes qURL capabilities to MCP clients, GPTs, ChatGPT, and other remote integrations.
+The server exposes qURL operations as MCP tools for clients that support the
+configured transport. See the [LayerV MCP guide](https://layerv.ai/mcp/) for
+product setup and the tables below for the capabilities in this source version.
 
 It currently supports:
 
@@ -19,6 +137,117 @@ It currently supports:
 - optionally serving LayerV public legal pages
 - serving a configurable MP4 video playback page
 
+## Quick start: no account needed
+
+Share an app running on your machine, or a URL, privately from Claude
+Desktop, Claude Code, Cursor, Codex, or any local MCP client. You need no
+account and no API key: with no `QURL_API_KEY` set, the server drives the
+[qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli)
+installed on your machine, and the first publish creates this machine's
+identity by itself.
+
+**1. Install the qURL CLI** (macOS and Linux; Node.js 22.12 or later is
+needed for the MCP server):
+
+```bash
+(umask 022 && mkdir -p "$HOME/.local/bin" "$HOME/.local/state") && chmod go-w "$HOME/.local" "$HOME/.local/bin" "$HOME/.local/state" && curl -fsSL --proto '=https' https://raw.githubusercontent.com/layervai/qurl-integrations/main/scripts/install.sh | INSTALL_DIR="$HOME/.local/bin" sh
+```
+
+On Windows, download `qurl.exe` from the
+[latest release](https://github.com/layervai/qurl-integrations/releases/latest)
+and put its folder on `PATH`. The server finds `qurl` on `PATH`, and also in
+`~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin`, which many MCP
+clients leave off the `PATH` they give servers. If the CLI is missing, every
+tool answers with this install command instead of failing.
+
+**2. Add the server to your MCP client**, with no `env` block.
+
+Claude Desktop (`claude_desktop_config.json`) and Cursor (`~/.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "qurl": {
+      "command": "npx",
+      "args": ["-y", "@layervai/qurl-mcp"]
+    }
+  }
+}
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.qurl]
+command = "npx"
+args = ["-y", "@layervai/qurl-mcp"]
+```
+
+Claude Code:
+
+```bash
+claude mcp add qurl -- npx -y @layervai/qurl-mcp
+```
+
+**3. Ask for what you want**, for example "share the app on localhost:3000
+with my client". The agent publishes the app (it stays on your machine; the
+CLI's background service keeps the share running), and gives you a
+short-lived link for one person, or turns on access requests so people can
+ask for access.
+
+### Tools without an account
+
+| Tool                   | What it does                                                                 | CLI command                                              |
+| ---------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `publish_crid`         | Publish a local app or URL privately and return its CRID                     | `qurl publish <url> [--allow-requests] [--access <mode>]` |
+| `share_by_crid`        | Make a short-lived access link for a CRID this machine published             | `qurl share <CRID> [--ttl] [--session-duration]`        |
+| `list_crids`           | List this machine's published resources (read-only)                          | `qurl list --status active`                              |
+| `manage_crid_requests` | List, approve by code, or deny access requests; list or remove approved people; turn requests on or off | `qurl requests`, `qurl approve`, `qurl deny`, `qurl grants` |
+| `manage_crid_access`   | Private access policy, invitations, and consumer grants                      | `qurl access <action> <CRID>`                            |
+| `set_crid_sharing`     | Stop, start, or restart sharing a local app                                  | `qurl stop`, `qurl start`, `qurl restart`                |
+| `delete_crid`          | Delete a resource permanently                                                | `qurl delete <CRID> --yes`                               |
+
+The tools follow the same rules as the qURL agent skill
+(<https://layerv.ai/skills/qurl/SKILL.md>):
+
+- Everything is published private. These tools have no option to publish
+  publicly.
+- A pending access request is approved only with the six-digit code the
+  person gives you. No listing shows a code, and no tool approves by name:
+  anyone can type any name, and names come back as unverified data.
+- An access link is a bearer secret for one recipient. A CRID grants nothing
+  by itself and is safe to share.
+
+The server runs the CLI with an argument array (never a shell), with
+JSON output, closed stdin, a timeout, and bounded output, and it does not
+log what the CLI prints. The tools that need an account key (the qURL link,
+token, session, and upload tools, and the `qurl://` resources and prompts)
+are not listed in this mode.
+
+### With an account key
+
+Set `QURL_API_KEY` to a LayerV API key and the server uses the qURL API
+directly, with the full tool set described in the [feature map](#feature-map):
+
+```json
+{
+  "mcpServers": {
+    "qurl": {
+      "command": "npx",
+      "args": ["-y", "@layervai/qurl-mcp"],
+      "env": { "QURL_API_KEY": "lv_live_xxx" }
+    }
+  }
+}
+```
+
+### Remote HTTP server
+
+The HTTP transport (`qurl-mcp-http`) serves remote agent runtimes. It is
+account-based: every request carries the caller's qURL API key as a bearer
+token, and it never runs a local CLI. See [HTTP Authentication](#http-authentication)
+and the [LayerV MCP guide](https://layerv.ai/mcp/).
+
 ## Private consumer access
 
 Node.js 22.12 or later is required by the shared qURL SDK.
@@ -28,7 +257,11 @@ email_capture, review, or contract access. `manage_crid_access` changes the
 policy with its current version, sends invitations, lists grants, approves
 or denies requests, and removes access. The tools return resource-scoped
 receipts and omit invitation secrets and bearer links. Local apps use the
-qURL CLI on the publisher machine.
+qURL CLI on the publisher machine. In local mode, `app_name` sets and confirms
+the public preview name through `qurl preview set` (requires a CLI with that command).
+If naming fails, the tool returns an error with the published CRID and recovery
+instructions. It does not delete or republish the resource. Older callers may
+omit `app_name`; agents should always provide it for a complete preview.
 
 For example, an assistant can turn “share this with ana@example.com, and
 allow no requests” into an invite_only resource and an authorized invitation.
@@ -197,19 +430,11 @@ npm run start:http
 
 ## MCP Client Example
 
-If you want to use this server in `stdio` mode with a local MCP client:
-
-```json
-{
-  "mcpServers": {
-    "qurl": {
-      "command": "npx",
-      "args": ["@layervai/qurl-mcp"],
-      "env": { "QURL_API_KEY": "lv_live_xxx" }
-    }
-  }
-}
-```
+If you want to use this server in `stdio` mode with a local MCP client, use
+the configuration from [Quick start](#quick-start-no-account-needed). Leave
+out `env` to work without an account through the local qURL CLI, or add
+`"env": { "QURL_API_KEY": "lv_live_xxx" }` to use the qURL API with an
+account key.
 
 ## Configuration Files
 
@@ -285,7 +510,9 @@ setting; clients configured for a larger first upload must validate the session
 with a small qURL API call or a smaller upload first.
 Size the configured maximum and reverse-proxy concurrency limit together.
 
-Set `QURL_API_KEY` in the environment for `stdio` mode. In HTTP mode, every
+Set `QURL_API_KEY` in the environment for `stdio` mode to use the qURL API.
+Without it, `stdio` mode runs through the local qURL CLI and needs no account
+(see [Quick start](#quick-start-no-account-needed)). In HTTP mode, every
 client request supplies its own qURL API key as a bearer token.
 
 `defaultQurlApiUrl` and `QURL_API_URL` require HTTPS for non-loopback hosts

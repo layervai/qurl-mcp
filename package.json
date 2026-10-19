@@ -1,6 +1,6 @@
 {
   "name": "@layervai/qurl-mcp",
-  "version": "0.5.0",
+  "version": "0.7.2",
   "description": "MCP server for qURL™ — secure link management for AI agents. Quantum URL is how you enter the hidden layer of the internet.",
   "mcpName": "io.github.layervai/qurl-mcp",
   "type": "module",
@@ -42,23 +42,23 @@
     "@modelcontextprotocol/sdk": "^1.24.0",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
-    "nodemailer": "^9.0.1",
+    "nodemailer": "10.1.0",
     "pdfkit": "^0.20.2",
     "zod": "^4.4.3"
   },
   "optionalDependencies": {
-    "@aws-sdk/client-dynamodb": "3.1131.0"
+    "@aws-sdk/client-dynamodb": "3.1149.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.27.0",
-    "@smithy/types": "4.18.0",
+    "@smithy/types": "4.19.0",
     "@types/express": "^5.0.6",
-    "@types/node": "26.5.1",
+    "@types/node": "26.6.5",
     "@types/nodemailer": "^8.0.1",
     "@types/pdfkit": "^0.17.6",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.32.1",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "5.0.3",
     "eslint": "^10.2.1",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
