@@ -11,6 +11,10 @@ updates:
     commit-message:
       prefix: "chore(deps)"
     groups:
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
       mcp-sdk:
         patterns:
           - "@modelcontextprotocol/*"
