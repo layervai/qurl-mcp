@@ -22,7 +22,8 @@ LABEL org.opencontainers.image.source="https://github.com/layervai/qurl-mcp" \
 # triggers a graceful shutdown instead of relying on Node's default
 # PID-1 signal handling. Alternative is `docker run --init …`, but
 # baking it in keeps the image self-contained.
-RUN apk add --no-cache tini
+RUN apk add --no-cache tini \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 WORKDIR /app
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
