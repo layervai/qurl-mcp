@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.8.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.2...qurl-mcp-v0.8.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** require public app names for local publishing ([#326](https://github.com/layervai/qurl-mcp/issues/326))
+
+### Features
+
+* **tools:** require public app names for local publishing ([#326](https://github.com/layervai/qurl-mcp/issues/326)) ([aec8d86](https://github.com/layervai/qurl-mcp/commit/aec8d8637b618cfd37fe3bcfab5839aa8cffc768))
+
+
+### Bug Fixes
+
+* **docker:** remove npm build tools from runtime image ([#339](https://github.com/layervai/qurl-mcp/issues/339)) ([31e9eae](https://github.com/layervai/qurl-mcp/commit/31e9eae58a5056c3bf9054a361fee7246ee00a05))
+
 ## [0.7.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.1...qurl-mcp-v0.7.2) (2026-10-18)
 
 
