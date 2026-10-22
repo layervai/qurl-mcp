@@ -106,6 +106,7 @@ describe("createLocalCliServer", () => {
     const mcp = await connect(
       fake.cli({
         stdout: {
+          name: "TipSplit",
           private: true,
           crid: SAMPLE_CRID,
           resource_id: "pubkey",
@@ -119,13 +120,14 @@ describe("createLocalCliServer", () => {
 
     const result = await mcp.callTool({
       name: "publish_crid",
-      arguments: { target_url: "http://localhost:5173" },
+      arguments: { target_url: "http://localhost:5173", app_name: "TipSplit" },
     });
 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toMatchObject({ crid: SAMPLE_CRID, private: true });
     expect(fake.calls().map((entry) => entry.argv)).toEqual([
       ["publish", "http://localhost:5173", "--output=json"],
+      ["preview", "set", SAMPLE_CRID, "--name=TipSplit", "--output=json"],
     ]);
   });
 

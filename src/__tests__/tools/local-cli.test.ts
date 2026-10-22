@@ -18,6 +18,7 @@ const DECISION = "a".repeat(64);
 const publisher = { verified: false };
 
 const samplePublish = {
+  name: "TipSplit",
   private: true,
   access_requests: true,
   resource_url: `https://qurl.link/${CRID}`,
@@ -43,7 +44,11 @@ describe("CLI-backed tools", () => {
 
   async function call(factory: LocalCliToolFactory, input: unknown, reply: FakeReply = {}) {
     const tool = factory(fake.cli(reply));
-    const result = await tool.handler(input);
+    const args =
+      factory === localPublishCridTool && typeof input === "object" && input !== null
+        ? { app_name: "TipSplit", ...input }
+        : input;
+    const result = await tool.handler(args);
     if (!result.isError) {
       // Every successful result must satisfy the advertised output schema.
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
@@ -57,6 +62,22 @@ describe("CLI-backed tools", () => {
   }
 
   describe("publish_crid", () => {
+    it("requires a public name in the advertised schema before publishing", () => {
+      const tool = localPublishCridTool({ runJson: vi.fn() });
+      expect(tool.inputSchema.safeParse({ target_url: "http://localhost:3000" }).success).toBe(
+        false,
+      );
+    });
+
+    it("refuses an omitted public name before running any CLI command", async () => {
+      const runJson = vi.fn().mockResolvedValue(samplePublish);
+      const result = await localPublishCridTool({ runJson }).handler({
+        target_url: "http://localhost:3000",
+      });
+      expect(result.isError).toBe(true);
+      expect(runJson).not.toHaveBeenCalled();
+    });
+
     it("publishes a local app privately with no extra flags", async () => {
       const result = await call(
         localPublishCridTool,
@@ -64,9 +85,13 @@ describe("CLI-backed tools", () => {
         { stdout: samplePublish },
       );
 
-      expect(argv()).toEqual([["publish", "http://127.0.0.1:3000", "--output=json"]]);
+      expect(argv()).toEqual([
+        ["publish", "http://127.0.0.1:3000", "--output=json"],
+        ["preview", "set", CRID, "--name=TipSplit", "--output=json"],
+      ]);
       expect(result.isError).toBeUndefined();
       expect(result.structuredContent).toEqual({
+        app_name: "TipSplit",
         private: true,
         access_requests: true,
         resource_url: `https://qurl.link/${CRID}`,
@@ -162,6 +187,7 @@ describe("CLI-backed tools", () => {
           "--alias=-handbook",
           "--output=json",
         ],
+        ["preview", "set", CRID, "--name=TipSplit", "--output=json"],
       ]);
     });
 
@@ -183,6 +209,7 @@ describe("CLI-backed tools", () => {
           "--contract=c-1",
           "--output=json",
         ],
+        ["preview", "set", CRID, "--name=TipSplit", "--output=json"],
       ]);
     });
 
