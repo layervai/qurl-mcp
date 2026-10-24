@@ -39,6 +39,10 @@ describe.each(["stdio", "http"] as const)("share_by_crid in %s mode", (mode) => 
       const description = tools.find((tool) => tool.name === "share_by_crid")?.description;
       expect(description).toContain("legacy resources without consumer_access");
       expect(description).toContain("use manage_crid_access");
+      expect(description).toContain(
+        "A resolve-only key can share a known legacy resource without that read",
+      );
+      expect(description).toContain("without the leading $ marker");
       const result = await client.callTool({
         name: "share_by_crid",
         arguments: { crid: "$crid_test", ttl: "1.001s999ms" },

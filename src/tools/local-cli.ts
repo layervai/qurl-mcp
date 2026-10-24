@@ -213,7 +213,7 @@ export function localPublishCridTool(cli: IQurlCli): LocalCliTool {
       "The resource is private: only this machine and the people the publisher allows can open it; there is no public option. " +
       "Always supply app_name: use the user’s app name or choose a short neutral one. This name is public; keep secrets and recipient details out. The tool sets and checks it before returning success. " +
       "Include app_name and resource_url in your answer even when invitation emails are sent. " +
-      "Publishing the same target again returns the same CRID (found_existing true); never delete and republish to refresh. " +
+      "Publishing the same target again returns the same CRID (found_existing true); never delete and republish to refresh. Passing policy or allow_requests for an existing target changes its policy and requires the user to authorize that change. " +
       "For legacy resources without consumer_access, allow_requests lets people ask at resource_url and give the publisher a six-digit code; approve it with manage_crid_requests. " +
       "Use share_by_crid only for legacy resources without consumer_access. For consumer_access policies, use resource_url and the policy's invitation or grant flow. " +
       "Publishing does not close other routes to the app. Confirm with the user before publishing a remote URL on their behalf.",
@@ -547,7 +547,7 @@ export function localShareByCridTool(cli: IQurlCli): LocalCliTool {
     name: "share_by_crid",
     title: "Share qURL by CRID",
     description:
-      "Only for legacy resources without consumer_access; use the policy's invitation or grant flow for consumer_access resources. " +
+      "Only for legacy resources without consumer_access; check list_crids first and use manage_crid_access and the policy's invitation or grant flow for consumer_access resources. " +
       "Make a short-lived access link for a CRID this machine published, with the qURL CLI. The CLI verifies the link against the CRID before returning it. " +
       "The link is a bearer secret: whoever has it can use it until it expires, so hand it only to the person it is for, show it once, and never put it in logs or public channels. " +
       "Links are one-time use by default for local apps; if single_use is not true, say the link is reusable instead of calling it one-time. Do not open the link to test it. " +
