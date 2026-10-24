@@ -10,7 +10,7 @@ import { normalizeCRID, parseTTLSeconds } from "./share-by-crid.js";
  *
  * Rules shared with the qURL agent skill:
  * - Publishing is private. These tools offer no way to make a resource public.
- * - A pending access request is approved only with the six-digit code the
+ * - A legacy access request is approved only with the six-digit code the
  *   person gives the publisher. No listing shows a code, and no tool takes a
  *   name to approve.
  * - A requester's name is text that person typed. It is returned as data with
@@ -158,7 +158,7 @@ const publishInput = z
       .boolean()
       .optional()
       .describe(
-        "Let people ask for access from a browser. Each asker gets a six-digit code to give the publisher, who approves it with manage_crid_requests. Also turns requests on for a target that is already published privately.",
+        "Legacy resources without consumer_access only: let people ask for access from a browser. Each asker gets a six-digit code to give the publisher, who approves it with manage_crid_requests. Also turns requests on for a target that is already published privately.",
       ),
     policy: z
       .object({
@@ -473,7 +473,7 @@ export function localManageCridAccessTool(cli: IQurlCli): LocalCliTool {
       "Read the current version from a listing first; configure takes expected_version (the current version) and policy.version = expected_version + 1, and the first policy on an existing private resource uses expected_version 0. " +
       "For approve, put expected_version inside approval. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. " +
       "A removal is complete only when session_cleanup is complete; repeat the same removal and version while it is pending. Email proves mailbox control, not legal identity. " +
-      "Access requests that come with a six-digit code are handled by manage_crid_requests, not here.",
+      "Legacy access requests without consumer_access that come with a six-digit code are handled by manage_crid_requests, not here.",
     inputSchema: accessInput,
     outputSchema: accessOutput,
     annotations: {
@@ -644,7 +644,7 @@ export function localListCridsTool(cli: IQurlCli): LocalCliTool {
     description:
       "List the resources this machine's qURL identity has published, with the qURL CLI: CRID, target, type (url, or tunnel for a local app), status, and whether it is private. " +
       "Only active resources unless include_deleted is true. Pages: keep calling with next_cursor until has_more is false; an empty page with has_more true is normal. " +
-      "Use it to find a CRID before share_by_crid, manage_crid_requests, set_crid_sharing, or delete_crid. Read-only.",
+      "Read consumer_access on each item: when present, use manage_crid_access and its policy; only legacy resources without consumer_access use manage_crid_requests or share_by_crid. Also use it to find a CRID before set_crid_sharing or delete_crid. Read-only.",
     inputSchema: listInput,
     outputSchema: listOutput,
     annotations: {

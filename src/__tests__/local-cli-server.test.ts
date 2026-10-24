@@ -59,9 +59,11 @@ describe("createLocalCliServer", () => {
     expect(instructions).toMatch(/publish_crid.*list_crids is empty/);
     expect(instructions).toMatch(/legacy resources without consumer_access.*six-digit code/);
     expect(instructions).toContain("Never ask consumers to forward email verification codes");
+    expect(instructions).toContain("the user authorizing that policy change");
+    expect(instructions).toContain("refers to account resources that are not listed");
 
     const { tools } = await mcp.listTools();
-    for (const name of ["publish_crid", "share_by_crid", "manage_crid_requests"]) {
+    for (const name of ["publish_crid", "share_by_crid", "manage_crid_requests", "list_crids"]) {
       expect(tools.find((tool) => tool.name === name)?.description).toContain(
         "legacy resources without consumer_access",
       );
