@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.0...qurl-mcp-v0.8.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **tools:** distinguish consumer policies from legacy MCP access ([#340](https://github.com/layervai/qurl-mcp/issues/340)) ([6af6dd9](https://github.com/layervai/qurl-mcp/commit/6af6dd9d78258e6cb1673b2c316d3669af1e75ce))
+
 ## [0.8.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.2...qurl-mcp-v0.8.0) (2026-10-22)
 
 
