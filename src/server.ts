@@ -95,9 +95,15 @@ export function getToolFactoriesForMode(mode: ServerMode): ToolFactory[] {
 /** Told to the client, so the agent can tell the user which identity it uses. */
 export const LOCAL_CLI_INSTRUCTIONS =
   "This qURL server runs without a LayerV account: QURL_API_KEY is not set, so every tool runs the qURL CLI " +
-  "(qurl) installed on this machine, and resources belong to this machine's qURL identity. If the user expected " +
-  "to work under their LayerV account, tell them that QURL_API_KEY is not set in this server's environment. " +
-  "Resources are private; approve a waiting request only with the six-digit code the person who asked gives the user.";
+  "(qurl) installed on this machine, and resources belong to this machine's qURL identity. Use publish_crid " +
+  "to share a new app even when list_crids is empty; no API key is needed. Mention the missing QURL_API_KEY " +
+  "if the user expects their LayerV account or refers to account resources that are not listed. Resources are private. " +
+  "For a new app shared with named email recipients, use invite_only and send invitations only to those recipients " +
+  "with manage_crid_access. For an existing resource, read its current policy with list_crids first and do not change it without " +
+  "the user authorizing that policy change. " +
+  "For other consumer_access policies, use manage_crid_access and the policy's approval fields. Only legacy resources " +
+  "without consumer_access use manage_crid_requests and the six-digit code the person requesting access gives the user. " +
+  "Never ask consumers to forward email verification codes to the publisher.";
 
 /**
  * Server for stdio without QURL_API_KEY: every tool runs the locally
