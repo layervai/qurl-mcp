@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.1...qurl-mcp-v0.8.2) (2026-10-24)
+
+
+### Bug Fixes
+
+* **deps:** update vulnerable validation dependencies ([#342](https://github.com/layervai/qurl-mcp/issues/342)) ([2bf9bf7](https://github.com/layervai/qurl-mcp/commit/2bf9bf75c0f6170ece33338a12e394eee6f43d8b))
+
 ## [0.8.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.0...qurl-mcp-v0.8.1) (2026-10-24)
 
 
