@@ -53,6 +53,21 @@ describe("createLocalCliServer", () => {
     expect(mcp.getInstructions()).toContain("QURL_API_KEY is not set");
   });
 
+  it("keeps consumer policies separate from legacy code approval and bearer links", async () => {
+    const mcp = await connect(new QurlCli({ env: { PATH: "" }, fallbackDirs: [] }));
+    const instructions = mcp.getInstructions() ?? "";
+    expect(instructions).toMatch(/publish_crid.*list_crids is empty/);
+    expect(instructions).toMatch(/legacy resources without consumer_access.*six-digit code/);
+    expect(instructions).toContain("Never ask consumers to forward email verification codes");
+
+    const { tools } = await mcp.listTools();
+    for (const name of ["publish_crid", "share_by_crid", "manage_crid_requests"]) {
+      expect(tools.find((tool) => tool.name === name)?.description).toContain(
+        "legacy resources without consumer_access",
+      );
+    }
+  });
+
   it("hands a tool call's cancel signal to the CLI runs of that call", async () => {
     let seen: { aborted: boolean } | undefined;
     const cli: IQurlCli = {

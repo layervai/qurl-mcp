@@ -35,6 +35,10 @@ describe.each(["stdio", "http"] as const)("share_by_crid in %s mode", (mode) => 
     try {
       await server.connect(serverTransport);
       await client.connect(clientTransport);
+      const { tools } = await client.listTools();
+      const description = tools.find((tool) => tool.name === "share_by_crid")?.description;
+      expect(description).toContain("legacy resources without consumer_access");
+      expect(description).toContain("use manage_crid_access");
       const result = await client.callTool({
         name: "share_by_crid",
         arguments: { crid: "$crid_test", ttl: "1.001s999ms" },

@@ -81,8 +81,9 @@ export function shareByCRIDTool(
     name: "share_by_crid",
     title: "Share qURL by CRID",
     description:
+      "Only for legacy resources without consumer_access; use manage_crid_access and the policy's invitation or grant flow for consumer_access resources. " +
       "Request a temporary qURL access link for a resource identified by its CRID. " +
-      "When the user supplies a resource CRID with a leading `$` marker, remove the marker and use this tool. " +
+      "When the user supplies a legacy resource CRID with a leading `$` marker, remove the marker and use this tool. " +
       "Set `ttl` to request a lifetime using Go duration syntax; the total must be a positive whole number of seconds. The service may adjust the lifetime. " +
       "The link is minted by the qURL API and includes its expiration and single-use metadata.",
     inputSchema: shareByCRIDSchema,
