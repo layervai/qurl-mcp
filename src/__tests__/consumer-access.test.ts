@@ -118,6 +118,7 @@ describe("consumer access publisher tools", () => {
         approval: { expected_version: 1, [field]: field === "credential_kind" ? "device" : "new" },
       });
       expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Credential fields apply only to id new");
       expect(client.approveConsumerGrant).not.toHaveBeenCalled();
     },
   );

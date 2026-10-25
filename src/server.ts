@@ -103,7 +103,7 @@ export const LOCAL_CLI_INSTRUCTIONS =
   "the user authorizing that policy change. " +
   "For other consumer_access policies, use manage_crid_access and the policy's approval fields. Only legacy resources " +
   "without consumer_access use manage_crid_requests and the six-digit code the person requesting access gives the user. " +
-  "A six-digit code alone never authorizes approval on a resource with consumer_access; ask the user for the intended verified email and wait for that instruction. Never ask consumers to forward email verification codes to the publisher.";
+  "A six-digit code alone never authorizes approval on a resource with consumer_access. Ask which listed request the user wants to approve (the verified email for review); keys needs the intended public credential and contract needs a trusted entitlement receipt. Wait for that instruction. Never ask consumers to forward email verification codes to the publisher.";
 
 /**
  * Server for stdio without QURL_API_KEY: every tool runs the locally
