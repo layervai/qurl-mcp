@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.2...qurl-mcp-v0.8.3) (2026-10-25)
+
+
+### Bug Fixes
+
+* **tools:** return usable local management IDs and clarify invitations ([#350](https://github.com/layervai/qurl-mcp/issues/350)) ([09d9980](https://github.com/layervai/qurl-mcp/commit/09d998038e1a10edb054b7a57eced4c13b624cb6))
+
 ## [0.8.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.1...qurl-mcp-v0.8.2) (2026-10-25)
 
 
