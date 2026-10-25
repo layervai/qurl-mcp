@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.1...qurl-mcp-v0.8.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **deps:** apply authorized body-parser security age exception ([#348](https://github.com/layervai/qurl-mcp/issues/348)) ([c251009](https://github.com/layervai/qurl-mcp/commit/c251009d8c3fd421e71b144a37de5db11cb03625))
+* **deps:** update vulnerable validation dependencies ([#342](https://github.com/layervai/qurl-mcp/issues/342)) ([2bf9bf7](https://github.com/layervai/qurl-mcp/commit/2bf9bf75c0f6170ece33338a12e394eee6f43d8b))
+* **tools:** guide existing review approvals and reject mixed credential inputs ([#349](https://github.com/layervai/qurl-mcp/issues/349)) ([56c3a78](https://github.com/layervai/qurl-mcp/commit/56c3a787b7eae5d3299ce6ef4cb834cddba56f07))
+
 ## [0.8.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.0...qurl-mcp-v0.8.1) (2026-10-24)
 
 
