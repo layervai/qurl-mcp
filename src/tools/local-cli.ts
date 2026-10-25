@@ -333,7 +333,15 @@ const accessInput = z
     policy: policyInput.optional(),
     email: z.string().email().max(320).optional(),
     id: z.string().max(64).optional(),
-    expected_version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    expected_version: z
+      .number()
+      .int()
+      .min(0)
+      .max(Number.MAX_SAFE_INTEGER)
+      .optional()
+      .describe(
+        "Current listed version for configure, resend, revoke_invitation, deny or revoke_grant. Omit on invites and listings; approve uses approval.expected_version.",
+      ),
     approval: approvalInput.optional(),
     cursor: plainText(4096).optional(),
   })
@@ -478,6 +486,7 @@ export function localManageCridAccessTool(cli: IQurlCli): LocalCliTool {
     title: "Manage private CRID access",
     description:
       "Publisher access policy for a private CRID, run with the qURL CLI on this machine. Configure the next policy version, send or resend an email invitation, list invitations or consumer grants, approve or deny a consumer grant by its decision id, approve a credential with id new, or revoke access. " +
+      "Invite takes only action, resource_id and email; omit version and approval fields. After invitations, report the exact email addresses invited without shortening them, and the full consumer address. For a new share, list invitations and confirm that only the authorized recipients were invited. Accepted delivery is not enrollment. " +
       "Read the current version from a listing first; configure takes expected_version (the current version) and policy.version = expected_version + 1, and the first policy on an existing private resource uses expected_version 0. " +
       "For approve, put expected_version inside approval. For an existing request, use its listed decision id and version; omit all credential fields. Use id new and credential fields only for a key opt-in, never to replace a pending email request. A six-digit code alone never authorizes approval on a resource with consumer_access. Ask which listed request the user wants to approve (the verified email for review); keys needs the intended public credential and contract needs a trusted entitlement receipt. Wait for that instruction. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. " +
       "A removal is complete only when session_cleanup is complete; repeat the same removal and version while it is pending. Email proves mailbox control, not legal identity. " +
