@@ -163,6 +163,15 @@ const actions = z
     (input) =>
       input.action !== "approve" || input.id === "new" || input.approval.expected_version >= 1,
     "Approval of an existing grant requires expected_version of at least 1",
+  )
+  .refine(
+    (input) =>
+      input.action !== "approve" ||
+      input.id === "new" ||
+      (input.approval.credential_kind === undefined &&
+        input.approval.credential_id === undefined &&
+        input.approval.credential_public_key_b64 === undefined),
+    "Credential fields apply only to id new; use the listed decision id and version for an existing request",
   );
 const output = z
   .object({
@@ -184,7 +193,7 @@ export function manageCridAccessTool(
     name: "manage_crid_access",
     title: "Manage private CRID access",
     description:
-      "Publisher access control. Configure the next policy version, send or resend an email invitation, list invitations or consumer grants, approve or deny a request, approve a credential with id new, or revoke access. Read the current version before a decision; configuring the first policy on an existing private resource uses expected_version 0. For approve, put expected_version inside approval; zero is allowed only for id new. After an uncertain invite result, list invitations before retrying. Invite-only access has no consumer requests. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. A removal is complete only when session_cleanup is complete; retry the same removal/version while pending. Email proves mailbox control, not legal identity. Only listed fields are returned; invitation secrets and bearer links are never returned.",
+      "Publisher access control. Configure the next policy version, send or resend an email invitation, list invitations or consumer grants, approve or deny a request, approve a credential with id new, or revoke access. Read the current version before a decision; configuring the first policy on an existing private resource uses expected_version 0. For approve, put expected_version inside approval; zero is allowed only for id new. Existing requests use the listed decision id and version without credential fields. A six-digit code does not authorize approval; wait for the user to name the verified email to approve. After an uncertain invite result, list invitations before retrying. Invite-only access has no consumer requests. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. A removal is complete only when session_cleanup is complete; retry the same removal/version while pending. Email proves mailbox control, not legal identity. Only listed fields are returned; invitation secrets and bearer links are never returned.",
     inputSchema: base,
     outputSchema: output,
     annotations: {

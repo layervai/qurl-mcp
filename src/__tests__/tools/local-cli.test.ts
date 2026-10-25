@@ -843,6 +843,20 @@ describe("CLI-backed tools", () => {
         { action: "approve", resource_id: CRID, id: DECISION, approval: { expected_version: 0 } },
         "at least 1",
       ],
+      ...["credential_kind", "credential_id", "credential_public_key_b64"].map(
+        (field): [unknown, string] => [
+          {
+            action: "approve",
+            resource_id: CRID,
+            id: DECISION,
+            approval: {
+              expected_version: 1,
+              [field]: field === "credential_kind" ? "device" : "new",
+            },
+          },
+          "Credential fields apply only to id new",
+        ],
+      ),
       [{ action: "list_grants", resource_id: CRID, limit: 5 }, ""],
     ])("refuses %j before running the CLI", async (input, message) => {
       const result = await call(localManageCridAccessTool, input);
