@@ -205,7 +205,7 @@ const publishOutput = z.object({
   crid: z
     .string()
     .describe("The resource's permanent ID. Safe to share; grants no access by itself"),
-  resource_id: z.string().describe("Management CRID when the CLI provides one; same as crid."),
+  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
   target_url: z.string(),
   status: z.string().optional(),
   private: z.boolean().optional(),
@@ -508,7 +508,7 @@ export function localManageCridAccessTool(cli: IQurlCli): LocalCliTool {
     title: "Manage private CRID access",
     description:
       "Publisher access policy for a private CRID, run with the qURL CLI on this machine. Configure the next policy version, send or resend an email invitation, list invitations or consumer grants, approve or deny a consumer grant by its decision id, approve a credential with id new, or revoke access. " +
-      "Invite takes only action, resource_id and email; omit expected_version, approval and policy. Report the exact invited email addresses without shortening them, and resource_url from publish_crid. Check every page of list_invitations before claiming nobody else was invited. If listing is denied, report the send receipts and say the list is unconfirmed; do not resend. Accepted delivery does not prove enrollment. " +
+      "Invite takes only action, resource_id and email; omit expected_version, approval and policy. Report the exact invited email addresses without shortening them, and resource_url from publish_crid when available. Check every page of list_invitations before claiming nobody else was invited. If listing is denied, report the send receipts and say the list is unconfirmed; do not resend. Accepted delivery does not prove enrollment. " +
       "Read the current version from a listing first; configure takes expected_version (the current version) and policy.version = expected_version + 1, and the first policy on an existing private resource uses expected_version 0. " +
       "For approve, put expected_version inside approval. For an existing request, use its listed decision id and version; omit all credential fields. Use id new and credential fields only for a key opt-in, never to replace a pending email request. A six-digit code alone never authorizes approval on a resource with consumer_access. Ask which listed request the user wants to approve (the verified email for review); keys needs the intended public credential and contract needs a trusted entitlement receipt. Wait for that instruction. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. " +
       "A removal is complete only when session_cleanup is complete; repeat the same removal and version while it is pending. Email proves mailbox control, not legal identity. " +
@@ -656,7 +656,7 @@ const listInput = z
 
 const listItem = z.object({
   crid: z.string().optional(),
-  resource_id: z.string().describe("Management CRID when the CLI provides one; same as crid."),
+  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
   target_url: z.string().optional(),
   type: z.string().optional(),
   status: z.string().optional(),
@@ -972,7 +972,7 @@ const sharingInput = z
 const sharingOutput = z.object({
   action: z.enum(["stop", "start", "restart"]),
   crid: z.string(),
-  resource_id: z.string().describe("Management CRID when the CLI provides one; same as crid."),
+  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
   target_url: z.string(),
   desired_state: z.string(),
   connection_state: z.string(),
