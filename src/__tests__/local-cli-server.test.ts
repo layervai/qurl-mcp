@@ -53,6 +53,23 @@ describe("createLocalCliServer", () => {
     expect(mcp.getInstructions()).toContain("QURL_API_KEY is not set");
   });
 
+  it("keeps consumer policies separate from legacy code approval and bearer links", async () => {
+    const mcp = await connect(new QurlCli({ env: { PATH: "" }, fallbackDirs: [] }));
+    const instructions = mcp.getInstructions() ?? "";
+    expect(instructions).toMatch(/publish_crid.*list_crids is empty/);
+    expect(instructions).toMatch(/legacy resources without consumer_access.*six-digit code/);
+    expect(instructions).toContain("Never ask consumers to forward email verification codes");
+    expect(instructions).toContain("the user authorizing that policy change");
+    expect(instructions).toContain("refers to account resources that are not listed");
+
+    const { tools } = await mcp.listTools();
+    for (const name of ["publish_crid", "share_by_crid", "manage_crid_requests", "list_crids"]) {
+      expect(tools.find((tool) => tool.name === name)?.description).toContain(
+        "legacy resources without consumer_access",
+      );
+    }
+  });
+
   it("hands a tool call's cancel signal to the CLI runs of that call", async () => {
     let seen: { aborted: boolean } | undefined;
     const cli: IQurlCli = {
@@ -106,6 +123,7 @@ describe("createLocalCliServer", () => {
     const mcp = await connect(
       fake.cli({
         stdout: {
+          name: "TipSplit",
           private: true,
           crid: SAMPLE_CRID,
           resource_id: "pubkey",
@@ -119,13 +137,14 @@ describe("createLocalCliServer", () => {
 
     const result = await mcp.callTool({
       name: "publish_crid",
-      arguments: { target_url: "http://localhost:5173" },
+      arguments: { target_url: "http://localhost:5173", app_name: "TipSplit" },
     });
 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toMatchObject({ crid: SAMPLE_CRID, private: true });
     expect(fake.calls().map((entry) => entry.argv)).toEqual([
       ["publish", "http://localhost:5173", "--output=json"],
+      ["preview", "set", SAMPLE_CRID, "--name=TipSplit", "--output=json"],
     ]);
   });
 
