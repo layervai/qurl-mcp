@@ -32,7 +32,7 @@ import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
 import { auditLinksPrompt } from "./prompts/audit-links.js";
 import { rotateAccessPrompt } from "./prompts/rotate-access.js";
-import { toolScopeOptions } from "./auth/hosted-oauth.js";
+import { toolScopes } from "./auth/hosted-oauth.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -190,6 +190,7 @@ export function createServer(
         description: tool.description,
         inputSchema: inputSchema.shape,
         outputSchema: tool.outputSchema,
+        // Anthropic directory review requires this hint for all data changes, including additions.
         annotations:
           oauth && !tool.annotations.readOnlyHint
             ? { ...tool.annotations, destructiveHint: true }
@@ -197,16 +198,13 @@ export function createServer(
         ...(oauth
           ? {
               _meta: {
-                securitySchemes: toolScopeOptions(tool.name).map((scopes) => ({
-                  type: "oauth2",
-                  scopes,
-                })),
+                securitySchemes: [{ type: "oauth2", scopes: toolScopes(tool.name) }],
               },
             }
           : {}),
       },
       async (...args) => {
-        const required = oauth ? toolScopeOptions(tool.name)[0] : [];
+        const required = oauth ? toolScopes(tool.name) : [];
         if (oauth && !required.every((scope) => oauth.scopes.includes(scope))) {
           return {
             isError: true,

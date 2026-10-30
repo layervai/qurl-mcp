@@ -29,7 +29,7 @@ export function allowsServerApiKeyFallback(runtime: ToolRuntimeOptions): boolean
  * is what the SDK validates against `outputSchema` when one is declared
  * on the tool; `content` carries the human-readable JSON for display.
  */
-type ToolResult = {
+export type ToolResult = {
   content: Array<{ type: "text"; text: string }>;
   structuredContent?: Record<string, unknown>;
   isError?: boolean;

@@ -177,7 +177,7 @@ below use the qURL API. HTTP mode always takes the key as a per-request bearer.
 
 OAuth separates access reads from writes. Existing API-key and local clients keep the combined `manage_crid_access` catalog; its list actions still require API read access.
 
-| Tool                      | Scope Required | Description                                             |
+| Tool                      | OAuth Scope Required | Description                                             |
 | ------------------------- | -------------- | ------------------------------------------------------- |
 | `create_qurl`             | `qurl:write`   | Create a protected link                                 |
 | `publish_crid`            | `qurl:write`   | Publish a private URL CRID                              |

@@ -201,8 +201,8 @@ describe("hosted OAuth HTTP boundary", () => {
       inviteConsumer: vi.fn(async () => ({
         id: "a".repeat(64),
         email: "recipient@example.com",
-        status: "sent",
-        delivery: "accepted",
+        status: "open" as const,
+        delivery: "accepted" as const,
         version: 1,
         expires_at: "2026-10-31T00:00:00Z",
       })),

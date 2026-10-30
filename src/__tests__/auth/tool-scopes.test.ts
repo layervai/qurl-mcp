@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { toolScopeOptions } from "../../auth/hosted-oauth.js";
+import { toolScopes } from "../../auth/hosted-oauth.js";
 import { toolFactories } from "../../server.js";
 import { listCridAccessTool } from "../../tools/consumer-access.js";
 import { makeMockClient } from "../helpers.js";
@@ -13,9 +13,10 @@ it("covers every API tool with the documented scope contract", () => {
     const row = source.split("\n").find((line) => line.startsWith(`| \`${tool.name}\``));
     expect(row, tool.name).toBeDefined();
     const documented = row!.split("|")[2].match(/qurl:[a-z]+/g) ?? [];
-    expect([...new Set(toolScopeOptions(tool.name).flat())].sort(), tool.name).toEqual(
+    expect([...new Set(toolScopes(tool.name))].sort(), tool.name).toEqual(
       [...new Set(documented)].sort(),
     );
   }
-  expect(() => toolScopeOptions("future_unmapped_tool")).toThrow("Missing OAuth scope policy");
+  expect(toolScopes("extend_qurl")).toEqual(["qurl:write", "qurl:read"]);
+  expect(() => toolScopes("future_unmapped_tool")).toThrow("Missing OAuth scope policy");
 });
