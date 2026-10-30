@@ -1,6 +1,13 @@
 import { createServer as createNodeServer, type Server } from "node:http";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTVerifyGetKey } from "jose";
+import {
+  createLocalJWKSet,
+  errors,
+  exportJWK,
+  generateKeyPair,
+  SignJWT,
+  type JWTVerifyGetKey,
+} from "jose";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import {
@@ -193,6 +200,39 @@ describe("hosted OAuth HTTP boundary", () => {
       expect(await result.text()).not.toContain("private-provider-diagnostic");
     }
     expect(factory).not.toHaveBeenCalled();
+  });
+
+  it("returns retryable outages without asking the user to relink", async () => {
+    const input = await token();
+    const exchange = vi.fn(async () => {
+      throw new TypeError("fetch failed: private diagnostics");
+    });
+    vi.stubGlobal("fetch", exchange);
+    const base = await start();
+    const send = () =>
+      realFetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${input}`, "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      });
+    let result = await send();
+    expect(result.status).toBe(503);
+    expect(result.headers.get("retry-after")).toBe("1");
+    expect(result.headers.get("www-authenticate")).toBeNull();
+    expect(await result.text()).not.toContain("private diagnostics");
+    const original = jwks.key;
+    try {
+      jwks.key = async () => {
+        throw new errors.JWKSTimeout();
+      };
+      result = await send();
+      expect(result.status).toBe(503);
+      expect(result.headers.get("retry-after")).toBe("1");
+      expect(result.headers.get("www-authenticate")).toBeNull();
+    } finally {
+      jwks.key = original;
+    }
+    expect(exchange).toHaveBeenCalledTimes(1);
   });
 
   it("permits a write-scoped tool while denying read resources and resolve", async () => {

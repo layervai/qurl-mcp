@@ -72,6 +72,10 @@ Keep Auth0 OBO and the runtime option OFF until these gates pass:
 5. Use the existing candidate-isolated deployment lane and RELEASE's shared
    gates. Validate rate limits, cache behavior and provider exchange capacity.
    This source is not million-user capacity certification.
+   The isolated candidate retains the production resource identifier; it does
+   not take production traffic. Use controlled direct ingress and owned fixture
+   identities against the production API, under RELEASE authorization. A separate
+   staging issuer/audience needs separately approved provider registration.
 6. Complete five positive/three negative vendor workflows, scoped reviewer
    account, domain verification, cleanup and demo. Verify portal acceptance of
    tool metadata. Get action-time legal confirmation before final submission.

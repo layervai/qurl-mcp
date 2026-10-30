@@ -238,11 +238,37 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const publicRouteRateLimiter = createPublicRateLimiter();
   const videoFileRateLimiter = createPublicRateLimiter();
   const healthRateLimiter = createPublicRateLimiter();
-  const verifyBearer = requireBearerAuth({
-    verifier: oauth ?? createPassthroughBearerVerifier(),
-    requiredScopes: oauth ? [] : ["mcp:tools"],
-    ...(oauth ? { resourceMetadataUrl, expectedResource: new URL(OAUTH_RESOURCE) } : {}),
-  });
+  function rejectOAuth(res: express.Response, error: unknown): void {
+    if (res.destroyed) return;
+    if (error instanceof OAuthServerError) {
+      res.set("Retry-After", "1");
+      rejectJsonRpc(res, 503, "Delegated authentication is temporarily unavailable.");
+      return;
+    }
+    res.set(
+      "WWW-Authenticate",
+      `Bearer resource_metadata="${resourceMetadataUrl}", error="invalid_token", error_description="Reconnect your account."`,
+    );
+    rejectJsonRpc(res, 401, "Invalid or unavailable delegated access. Reconnect your account.");
+  }
+  const verifyBearer: express.RequestHandler = oauth
+    ? async (req, res, next) => {
+        try {
+          const match = /^Bearer ([^\s]+)$/i.exec(req.headers.authorization ?? "");
+          if (!match) {
+            rejectOAuth(res, undefined);
+            return;
+          }
+          req.auth = await oauth.verifyAccessToken(match[1]);
+          if (!res.destroyed) next();
+        } catch (error) {
+          rejectOAuth(res, error);
+        }
+      }
+    : requireBearerAuth({
+        verifier: createPassthroughBearerVerifier(),
+        requiredScopes: ["mcp:tools"],
+      });
   const bearerAuthMiddleware: express.RequestHandler = oauth
     ? (req, res, next) => {
         const work = Promise.resolve(
@@ -829,17 +855,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         res.once("finish", clearRedaction);
         res.once("close", clearRedaction);
       } catch (error) {
-        if (res.destroyed) return;
-        if (error instanceof OAuthServerError) {
-          res.set("Retry-After", "1");
-          rejectJsonRpc(res, 503, "Delegated authentication is temporarily unavailable.");
-          return;
-        }
-        res.set(
-          "WWW-Authenticate",
-          `Bearer resource_metadata="${resourceMetadataUrl}", error="invalid_token", error_description="Reconnect your account."`,
-        );
-        rejectJsonRpc(res, 401, "Delegated access is unavailable. Reconnect your account.");
+        rejectOAuth(res, error);
         return;
       }
     }

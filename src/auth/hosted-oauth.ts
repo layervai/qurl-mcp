@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import { createRemoteJWKSet, errors, jwtVerify, type JWTVerifyGetKey } from "jose";
 import { InvalidTokenError, ServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 
@@ -29,13 +29,21 @@ export function createHostedOAuth(
   if (!secret.trim()) throw new Error("MCP_OAUTH_CLIENT_SECRET is required for hosted OAuth.");
   const key =
     dependencies.key ?? createRemoteJWKSet(new URL(".well-known/jwks.json", OAUTH_ISSUER));
+  const resolveKey: JWTVerifyGetKey = async (...args) => {
+    try {
+      return await key(...args);
+    } catch (error) {
+      if (error instanceof errors.JWKSNoMatchingKey) throw error;
+      throw new ServerError("Delegated authentication is temporarily unavailable.");
+    }
+  };
   const exchangeFetch = dependencies.fetch ?? fetch;
   const cache = new Map<string, Delegation>();
   const pending = new Map<string, Promise<Delegation>>();
 
   async function verify(token: string, audience: string) {
     if (!token || Buffer.byteLength(token) > MAX_TOKEN_BYTES) throw new Error("Invalid token size");
-    const { payload } = await jwtVerify(token, key, {
+    const { payload } = await jwtVerify(token, resolveKey, {
       issuer: OAUTH_ISSUER,
       audience,
       algorithms: ["RS256"],
@@ -69,7 +77,8 @@ export function createHostedOAuth(
           resource: new URL(OAUTH_RESOURCE),
           extra: { subject: claims.sub },
         };
-      } catch {
+      } catch (error) {
+        if (error instanceof ServerError) throw error;
         throw new InvalidTokenError("Invalid or expired access token.");
       }
     },
@@ -129,6 +138,7 @@ export function createHostedOAuth(
             throw new Error("Unsupported token response");
           }
           const claims = await verify(result.access_token, OAUTH_API_AUDIENCE);
+          // API1978 must ignore broad RBAC/custom permissions on tokens with act.
           const actor = claims.act;
           if (
             claims.sub !== auth.extra?.subject ||
@@ -160,7 +170,10 @@ export function createHostedOAuth(
           return delegation;
         } catch (error) {
           if (error instanceof ServerError) throw error;
-          if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) {
+          if (
+            error instanceof TypeError ||
+            (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))
+          ) {
             throw new ServerError("Delegated authentication is temporarily unavailable.");
           }
           // Provider errors and tokens never enter logs or client-visible errors.
@@ -200,10 +213,9 @@ const TOOL_SCOPE_OPTIONS: Record<string, string[][]> = {
 };
 
 export function toolScopeOptions(name: string): string[][] {
-  const options = TOOL_SCOPE_OPTIONS[name];
   if (!Object.hasOwn(TOOL_SCOPE_OPTIONS, name))
     throw new Error(`Missing OAuth scope policy for ${name}`);
-  return options;
+  return TOOL_SCOPE_OPTIONS[name];
 }
 
 export function requiredToolScopes(name: string, input: unknown): string[] {

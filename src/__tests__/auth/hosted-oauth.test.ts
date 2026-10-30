@@ -1,5 +1,5 @@
 import { beforeAll, afterEach, describe, expect, it, vi } from "vitest";
-import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
+import { createLocalJWKSet, errors, exportJWK, generateKeyPair, SignJWT } from "jose";
 import {
   createHostedOAuth,
   OAUTH_ISSUER,
@@ -19,7 +19,7 @@ beforeAll(async () => {
 });
 afterEach(() => vi.useRealTimers());
 
-async function token(overrides: Record<string, unknown> = {}, downstream = false) {
+async function token(overrides: Record<string, unknown> = {}, downstream = false, kid = "test") {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({
     iss: OAUTH_ISSUER,
@@ -32,7 +32,7 @@ async function token(overrides: Record<string, unknown> = {}, downstream = false
     ...(downstream ? { act: { sub: OAUTH_CLIENT_ID }, permissions: ["qurl:admin"] } : {}),
     ...overrides,
   })
-    .setProtectedHeader({ alg: "RS256", kid: "test" })
+    .setProtectedHeader({ alg: "RS256", kid })
     .sign(privateKey);
 }
 function response(access_token: string) {
@@ -44,6 +44,32 @@ function response(access_token: string) {
 }
 
 describe("hosted OAuth", () => {
+  it("distinguishes a signing-key outage from an unrecognized token key", async () => {
+    const unavailable = createHostedOAuth("fixture-secret", {
+      key: async () => {
+        throw new errors.JWKSTimeout();
+      },
+    });
+    await expect(unavailable.verifyAccessToken(await token())).rejects.toMatchObject({
+      errorCode: "server_error",
+    });
+    const unknown = createHostedOAuth("fixture-secret", { key });
+    await expect(
+      unknown.verifyAccessToken(await token({}, false, "unknown")),
+    ).rejects.toMatchObject({ errorCode: "invalid_token" });
+  });
+
+  it("does not invalidate a user token when the exchange network fails", async () => {
+    const oauth = createHostedOAuth("fixture-secret", {
+      key,
+      fetch: vi.fn(async () => {
+        throw new TypeError("fetch failed: private diagnostics");
+      }),
+    });
+    await expect(
+      oauth.delegate(await oauth.verifyAccessToken(await token())),
+    ).rejects.toMatchObject({ errorCode: "server_error" });
+  });
   it("validates signed MCP tokens, exchanges once and retains subject and narrow scopes", async () => {
     const input = await token();
     const output = await token({}, true);
