@@ -13,6 +13,7 @@ describe("logging", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     clearSensitiveLogValues("test-other-session");
   });
 
@@ -36,6 +37,11 @@ describe("logging", () => {
     expect(write).toHaveBeenCalledWith(
       "2026-07-10 06:30:45.123 UTC request Bearer [REDACTED] used [REDACTED]\n",
     );
+  });
+
+  it("redacts the exact hosted OAuth client secret", () => {
+    vi.stubEnv("MCP_OAUTH_CLIENT_SECRET", "fixture-opaque-client-secret");
+    expect(sanitizeLogValue("failed fixture-opaque-client-secret")).toBe("failed [REDACTED]");
   });
 
   it("redacts documented qURL key shapes and flattens untrusted error text", () => {

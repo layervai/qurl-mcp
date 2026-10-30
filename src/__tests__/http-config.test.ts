@@ -315,6 +315,21 @@ describe("HTTP listener config", () => {
     );
   });
 
+  it("keeps OAuth off by default and accepts its secret only from the environment", () => {
+    const configPath = join(tempDir, "oauth.json");
+    writeFileSync(configPath, JSON.stringify({ oauthClientSecret: "ignored-file-secret" }));
+    expect(loadHttpServerConfig(configPath).hostedOAuth).toBe(false);
+    expect(loadHttpServerConfig(configPath).oauthClientSecret).toBeUndefined();
+    process.env.MCP_HOSTED_OAUTH = "true";
+    process.env.MCP_OAUTH_CLIENT_SECRET = "fixture-env-secret";
+    expect(loadHttpServerConfig(configPath)).toMatchObject({
+      hostedOAuth: true,
+      oauthClientSecret: "fixture-env-secret",
+    });
+    process.env.MCP_HOSTED_OAUTH = "invalid";
+    expect(() => loadHttpServerConfig(configPath)).toThrow("MCP_HOSTED_OAUTH");
+  });
+
   it("rejects a stateless parser budget above the process safety ceiling", () => {
     const configPath = join(tempDir, "http.json");
     writeFileSync(configPath, JSON.stringify({ stateless: true, maxConcurrentRequests: 100 }));

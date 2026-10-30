@@ -3,6 +3,7 @@ import {
   HEALTH_HTTP_PATH,
   LEGAL_HTTP_PATH_PREFIX,
   MCP_HTTP_PATH,
+  OAUTH_RESOURCE_METADATA_PATH,
   RESERVED_PUBLIC_PATH_PREFIXES,
 } from "../http-routes.js";
 
@@ -12,13 +13,14 @@ describe("HTTP route constants", () => {
       MCP_HTTP_PATH,
       HEALTH_HTTP_PATH,
       LEGAL_HTTP_PATH_PREFIX,
+      OAUTH_RESOURCE_METADATA_PATH,
     ]);
     expect(new Set(RESERVED_PUBLIC_PATH_PREFIXES).size).toBe(RESERVED_PUBLIC_PATH_PREFIXES.length);
   });
 
   it("uses absolute paths for every protected route", () => {
     for (const path of RESERVED_PUBLIC_PATH_PREFIXES) {
-      expect(path).toMatch(/^\/[a-z0-9/-]+$/);
+      expect(path).toMatch(/^\/[.a-z0-9/-]+$/);
     }
   });
 });
