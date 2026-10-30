@@ -110,6 +110,7 @@ describe("createTextPdfTempFile", () => {
 
   it("destroys the write stream and removes the temp directory after a render error", async () => {
     const destroy = vi.spyOn(Writable.prototype, "destroy");
+    const pipe = vi.spyOn(PDFDocument.prototype, "pipe");
     vi.spyOn(PDFDocument.prototype, "text").mockImplementation(() => {
       throw new Error("text render failed");
     });
@@ -117,9 +118,10 @@ describe("createTextPdfTempFile", () => {
     await expect(createTextPdfTempFile({ content: "hello" })).rejects.toThrow("text render failed");
 
     expect(destroy).toHaveBeenCalled();
-    // Other test workers can create PDFs in the same temporary directory.
-    const stream = destroy.mock.instances.find((instance) => instance instanceof WriteStream);
-    expect(stream).toBeDefined();
-    expect(existsSync(dirname(stream!.path.toString()))).toBe(false);
+    // Earlier successful renders can still close their streams during this test.
+    const stream = pipe.mock.results[0]?.value;
+    expect(stream).toBeInstanceOf(WriteStream);
+    expect(stream.closed).toBe(true);
+    expect(existsSync(dirname(stream.path.toString()))).toBe(false);
   });
 });
