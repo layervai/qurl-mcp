@@ -205,7 +205,11 @@ const publishOutput = z.object({
   crid: z
     .string()
     .describe("The resource's permanent ID. Safe to share; grants no access by itself"),
-  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
+  resource_id: z
+    .string()
+    .describe(
+      "Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept.",
+    ),
   target_url: z.string(),
   status: z.string().optional(),
   private: z.boolean().optional(),
@@ -656,7 +660,11 @@ const listInput = z
 
 const listItem = z.object({
   crid: z.string().optional(),
-  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
+  resource_id: z
+    .string()
+    .describe(
+      "Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept.",
+    ),
   target_url: z.string().optional(),
   type: z.string().optional(),
   status: z.string().optional(),
@@ -972,7 +980,11 @@ const sharingInput = z
 const sharingOutput = z.object({
   action: z.enum(["stop", "start", "restart"]),
   crid: z.string(),
-  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
+  resource_id: z
+    .string()
+    .describe(
+      "Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept.",
+    ),
   target_url: z.string(),
   desired_state: z.string(),
   connection_state: z.string(),
