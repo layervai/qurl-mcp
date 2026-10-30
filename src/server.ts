@@ -3,7 +3,12 @@ import type { z } from "zod";
 import type { IQURLClient } from "./client.js";
 import { cliCallContext, type CancelSignal, type IQurlCli } from "./qurl-cli.js";
 import { localCliToolFactories } from "./tools/local-cli.js";
-import { publishCridTool, manageCridAccessTool } from "./tools/consumer-access.js";
+import {
+  publishCridTool,
+  manageCridAccessTool,
+  listCridAccessTool,
+  manageCridAccessWriteTool,
+} from "./tools/consumer-access.js";
 import { createQurlTool } from "./tools/create-qurl.js";
 import { resolveQurlTool } from "./tools/resolve-qurl.js";
 import { listQurlsTool } from "./tools/list-qurls.js";
@@ -27,7 +32,7 @@ import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
 import { auditLinksPrompt } from "./prompts/audit-links.js";
 import { rotateAccessPrompt } from "./prompts/rotate-access.js";
-import { requiredToolScopes, toolScopeOptions } from "./auth/hosted-oauth.js";
+import { toolScopeOptions } from "./auth/hosted-oauth.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -160,7 +165,16 @@ export function createServer(
     version,
   });
 
-  for (const factory of getToolFactoriesForMode(mode)) {
+  const factories = getToolFactoriesForMode(mode);
+  const catalog: ToolFactory[] = capabilities.oauth
+    ? [
+        ...factories.map((factory) =>
+          factory === manageCridAccessTool ? manageCridAccessWriteTool : factory,
+        ),
+        listCridAccessTool,
+      ]
+    : factories;
+  for (const factory of catalog) {
     const tool = factory(client, { mode, maxUploadFileDataBytes });
     if (!capabilities.uploads && tool.name.startsWith("upload_")) continue;
     const inputSchema =
@@ -176,7 +190,10 @@ export function createServer(
         description: tool.description,
         inputSchema: inputSchema.shape,
         outputSchema: tool.outputSchema,
-        annotations: tool.annotations,
+        annotations:
+          oauth && !tool.annotations.readOnlyHint
+            ? { ...tool.annotations, destructiveHint: true }
+            : tool.annotations,
         ...(oauth
           ? {
               _meta: {
@@ -189,7 +206,7 @@ export function createServer(
           : {}),
       },
       async (...args) => {
-        const required = oauth ? requiredToolScopes(tool.name, args[0]) : [];
+        const required = oauth ? toolScopeOptions(tool.name)[0] : [];
         if (oauth && !required.every((scope) => oauth.scopes.includes(scope))) {
           return {
             isError: true,

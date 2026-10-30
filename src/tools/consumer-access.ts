@@ -313,3 +313,67 @@ export function manageCridAccessTool(
     }),
   };
 }
+
+const readAccessActions = z.enum(["list_invitations", "list_grants"]);
+const writeAccessActions = z.enum([
+  "configure",
+  "invite",
+  "resend",
+  "revoke_invitation",
+  "approve",
+  "deny",
+  "revoke_grant",
+]);
+
+// OAuth directory tools separate reads and writes; existing clients keep the combined tool.
+export function listCridAccessTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
+  const tool = manageCridAccessTool(client, runtime);
+  const inputSchema = base
+    .pick({ resource_id: true, cursor: true, limit: true })
+    .extend({ action: readAccessActions });
+  return {
+    ...tool,
+    name: "list_crid_access",
+    title: "List private CRID access",
+    description:
+      "List invitations or consumer grants for one private resource. Follow next_cursor through every page before claiming the list is complete. Returns current versions for access decisions; invitation secrets and bearer links are never returned.",
+    inputSchema,
+    outputSchema: output
+      .pick({ action: true, invitations: true, grants: true, next_cursor: true })
+      .extend({ action: readAccessActions }),
+    annotations: {
+      title: "List private CRID access",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+    handler: async (raw: unknown) => {
+      const parsed = inputSchema.safeParse(raw);
+      if (!parsed.success) return zodErrorToToolResult(parsed.error);
+      return tool.handler(parsed.data);
+    },
+  };
+}
+
+export function manageCridAccessWriteTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
+  const tool = manageCridAccessTool(client, runtime);
+  const inputSchema = base
+    .omit({ cursor: true, limit: true })
+    .extend({ action: writeAccessActions });
+  return {
+    ...tool,
+    description:
+      "Use list_crid_access for read-only invitation and grant listings. " +
+      tool.description.replace("list invitations or consumer grants, ", ""),
+    inputSchema,
+    outputSchema: output
+      .omit({ invitations: true, grants: true, next_cursor: true })
+      .extend({ action: writeAccessActions }),
+    handler: async (raw: unknown) => {
+      const parsed = inputSchema.safeParse(raw);
+      if (!parsed.success) return zodErrorToToolResult(parsed.error);
+      return tool.handler(parsed.data);
+    },
+  };
+}

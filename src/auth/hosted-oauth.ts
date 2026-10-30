@@ -200,7 +200,8 @@ export function createHostedOAuth(
 
 const TOOL_SCOPE_OPTIONS: Record<string, string[][]> = {
   publish_crid: [["qurl:write"]],
-  manage_crid_access: [["qurl:read"], ["qurl:write"]],
+  manage_crid_access: [["qurl:write"]],
+  list_crid_access: [["qurl:read"]],
   create_qurl: [["qurl:write"]],
   resolve_qurl: [["qurl:resolve"]],
   list_qurls: [["qurl:read"]],
@@ -224,17 +225,4 @@ export function toolScopeOptions(name: string): string[][] {
   if (!Object.hasOwn(TOOL_SCOPE_OPTIONS, name))
     throw new Error(`Missing OAuth scope policy for ${name}`);
   return TOOL_SCOPE_OPTIONS[name];
-}
-
-export function requiredToolScopes(name: string, input: unknown): string[] {
-  const options = toolScopeOptions(name);
-  if (name === "manage_crid_access") {
-    const listing =
-      typeof input === "object" &&
-      input !== null &&
-      "action" in input &&
-      (input.action === "list_invitations" || input.action === "list_grants");
-    return options[listing ? 0 : 1];
-  }
-  return options[0];
 }
