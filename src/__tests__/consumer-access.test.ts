@@ -107,6 +107,22 @@ describe("consumer access publisher tools", () => {
     expect(client.approveConsumerGrant).not.toHaveBeenCalled();
   });
 
+  it.each(["credential_kind", "credential_id", "credential_public_key_b64"])(
+    "rejects %s on an existing grant before an API write",
+    async (field) => {
+      const client = makeMockClient();
+      const result = await manageCridAccessTool(client).handler({
+        action: "approve",
+        resource_id: resource.crid,
+        id: "a".repeat(64),
+        approval: { expected_version: 1, [field]: field === "credential_kind" ? "device" : "new" },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Credential fields apply only to id new");
+      expect(client.approveConsumerGrant).not.toHaveBeenCalled();
+    },
+  );
+
   it("accepts new credential approval at version zero", async () => {
     const client = makeMockClient({
       approveConsumerGrant: vi
