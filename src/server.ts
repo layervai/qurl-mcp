@@ -27,7 +27,7 @@ import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
 import { auditLinksPrompt } from "./prompts/audit-links.js";
 import { rotateAccessPrompt } from "./prompts/rotate-access.js";
-import { requiredToolScope } from "./auth/hosted-oauth.js";
+import { requiredToolScopes, toolScopeOptions } from "./auth/hosted-oauth.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 
 /**
@@ -167,7 +167,6 @@ export function createServer(
       !capabilities.email && "email_delivery" in tool.inputSchema.shape
         ? tool.inputSchema.omit({ email_delivery: true })
         : tool.inputSchema;
-    const scope = requiredToolScope(tool.name);
     const oauth = capabilities.oauth;
     // Preserve the output object catchall in the advertised JSON Schema.
     server.registerTool(
@@ -178,10 +177,20 @@ export function createServer(
         inputSchema: inputSchema.shape,
         outputSchema: tool.outputSchema,
         annotations: tool.annotations,
-        ...(oauth ? { _meta: { securitySchemes: [{ type: "oauth2", scopes: [scope] }] } } : {}),
+        ...(oauth
+          ? {
+              _meta: {
+                securitySchemes: toolScopeOptions(tool.name).map((scopes) => ({
+                  type: "oauth2",
+                  scopes,
+                })),
+              },
+            }
+          : {}),
       },
       async (...args) => {
-        if (oauth && !oauth.scopes.includes(scope)) {
+        const required = oauth ? requiredToolScopes(tool.name, args[0]) : [];
+        if (oauth && !required.every((scope) => oauth.scopes.includes(scope))) {
           return {
             isError: true,
             content: [
@@ -192,7 +201,7 @@ export function createServer(
             ],
             _meta: {
               "mcp/www_authenticate": [
-                `Bearer resource_metadata="${oauth.resourceMetadataUrl}", error="insufficient_scope", error_description="Additional permission required.", scope="${scope}"`,
+                `Bearer resource_metadata="${oauth.resourceMetadataUrl}", error="insufficient_scope", error_description="Additional permission required.", scope="${required.join(" ")}"`,
               ],
             },
           };

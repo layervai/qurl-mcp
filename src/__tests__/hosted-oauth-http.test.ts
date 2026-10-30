@@ -11,7 +11,7 @@ import {
 } from "../auth/hosted-oauth.js";
 import { createHttpRuntime } from "../http.js";
 import type { HttpServerConfig } from "../http-config.js";
-import { makeMockClient } from "./helpers.js";
+import { makeMockClient, sampleShareCRIDOutput } from "./helpers.js";
 
 const jwks = vi.hoisted(() => ({ key: undefined as JWTVerifyGetKey | undefined }));
 vi.mock("jose", async (actual) => ({
@@ -118,6 +118,7 @@ describe("hosted OAuth HTTP boundary", () => {
     vi.stubGlobal("fetch", exchange);
     const mock = makeMockClient({
       listQURLs: vi.fn(async () => ({ data: [], meta: { has_more: false } })),
+      listConsumerInvitations: vi.fn(async () => ({ invitations: [], has_more: false })),
     });
     const factory = vi.fn((_token: string) => mock);
     const base = await start(factory);
@@ -136,6 +137,12 @@ describe("hosted OAuth HTTP boundary", () => {
     ]);
     const read = await client.callTool({ name: "list_qurls", arguments: {} });
     expect(read.isError).not.toBe(true);
+    const invitations = await client.callTool({
+      name: "manage_crid_access",
+      arguments: { action: "list_invitations", resource_id: "r_abcdefghijk" },
+    });
+    expect(invitations.isError).not.toBe(true);
+    expect(mock.listConsumerInvitations).toHaveBeenCalled();
     const denied = await client.callTool({
       name: "delete_qurl",
       arguments: { resource_id: "r_abcdefghijk" },
@@ -224,6 +231,47 @@ describe("hosted OAuth HTTP boundary", () => {
     });
     expect(denied.isError).toBe(true);
     expect(mock.resolveQURL).not.toHaveBeenCalled();
+    const extend = await client.callTool({
+      name: "extend_qurl",
+      arguments: { resource_id: "r_abcdefghijk", extend_by: "1h" },
+    });
+    expect(extend.isError).toBe(true);
+    expect(extend._meta?.["mcp/www_authenticate"]).toEqual([
+      expect.stringContaining('scope="qurl:write qurl:read"'),
+    ]);
+    expect(mock.getQURL).not.toHaveBeenCalled();
+  });
+
+  it("allows a resolve-only account to share a known CRID", async () => {
+    const input = await token(false, "qurl:resolve");
+    const output = await token(true, "qurl:resolve");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          access_token: output,
+          token_type: "Bearer",
+          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+        }),
+      ),
+    );
+    const mock = makeMockClient({
+      shareByCRID: vi.fn(async () => ({ data: sampleShareCRIDOutput() })),
+    });
+    const base = await start(() => mock);
+    client = new Client({ name: "resolve-test", version: "1" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+        fetch: realFetch,
+        requestInit: { headers: { authorization: `Bearer ${input}` } },
+      }),
+    );
+    const result = await client.callTool({
+      name: "share_by_crid",
+      arguments: { crid: "crid_fixture" },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(mock.shareByCRID).toHaveBeenCalledWith("crid_fixture", undefined);
   });
 
   it("bounds pending exchanges before expensive work and releases request permits", async () => {
