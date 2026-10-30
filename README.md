@@ -807,6 +807,10 @@ authenticate the forwarded qURL bearer before accepting or storing upload bytes.
 Deploying an unauthenticated connector is unsupported because it would allow an
 unvalidated MCP caller to create connector-side state.
 
+An off-by-default [Auth0 OAuth integration](docs/hosted-oauth.md) is available
+for the directory-review path. It requires per-user token exchange and the
+RELEASE qualification gates in that guide before activation.
+
 Stateful mode is the compatibility default and retains the existing MCP session
 registry, GET SSE, explicit DELETE behavior, and process-local credential quota
 charging for all three MCP methods. Stateless mode creates and closes a server

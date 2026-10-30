@@ -37,6 +37,7 @@ function redactAndFlattenLogValue(value: string): string {
     ...Array.from(sensitiveLogValuesByScope.values()).flatMap((values) => [...values]),
     getRequestQurlApiKey(),
     process.env.QURL_API_KEY,
+    process.env.MCP_OAUTH_CLIENT_SECRET,
     process.env.QURL_SMTP_USERNAME,
     process.env.QURL_SMTP_PASSWORD,
   ].filter((credential): credential is string => Boolean(credential));
