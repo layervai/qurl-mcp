@@ -27,6 +27,8 @@ import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
 import { auditLinksPrompt } from "./prompts/audit-links.js";
 import { rotateAccessPrompt } from "./prompts/rotate-access.js";
+import { requiredToolScopes, toolScopeOptions } from "./auth/hosted-oauth.js";
+import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 
 /**
  * Shape of the object every tool factory returns. Exported so the
@@ -95,9 +97,17 @@ export function getToolFactoriesForMode(mode: ServerMode): ToolFactory[] {
 /** Told to the client, so the agent can tell the user which identity it uses. */
 export const LOCAL_CLI_INSTRUCTIONS =
   "This qURL server runs without a LayerV account: QURL_API_KEY is not set, so every tool runs the qURL CLI " +
-  "(qurl) installed on this machine, and resources belong to this machine's qURL identity. If the user expected " +
-  "to work under their LayerV account, tell them that QURL_API_KEY is not set in this server's environment. " +
-  "Resources are private; approve a waiting request only with the six-digit code the person who asked gives the user.";
+  "(qurl) installed on this machine, and resources belong to this machine's qURL identity. Use publish_crid " +
+  "to share a new app even when list_crids is empty; no API key is needed. Mention the missing QURL_API_KEY " +
+  "if the user expects their LayerV account or refers to account resources that are not listed. Resources are private. " +
+  "For a new app shared with named email recipients, use invite_only and send invitations only to those recipients " +
+  "with manage_crid_access. In your final reply, list each invited email address exactly and the full resource_url; " +
+  "do not replace the addresses with names or phrases such as both listed addresses. Confirm nobody else only after reading all invitation pages. " +
+  "For an existing resource, read its current policy with list_crids first and do not change it without " +
+  "the user authorizing that policy change. " +
+  "For other consumer_access policies, use manage_crid_access and the policy's approval fields. Only legacy resources " +
+  "without consumer_access use manage_crid_requests and the six-digit code the person requesting access gives the user. " +
+  "A six-digit code alone never authorizes approval on a resource with consumer_access. Ask which listed request the user wants to approve (the verified email for review); keys needs the intended public credential and contract needs a trusted entitlement receipt. Wait for that instruction. Never ask consumers to forward email verification codes to the publisher.";
 
 /**
  * Server for stdio without QURL_API_KEY: every tool runs the locally
@@ -136,7 +146,11 @@ export function createServer(
   version: string,
   mode: ServerMode = "stdio",
   maxUploadFileDataBytes?: number,
-  capabilities: { uploads: boolean; email: boolean } = {
+  capabilities: {
+    uploads: boolean;
+    email: boolean;
+    oauth?: { scopes: string[]; resourceMetadataUrl: string };
+  } = {
     uploads: false,
     email: false,
   },
@@ -153,6 +167,7 @@ export function createServer(
       !capabilities.email && "email_delivery" in tool.inputSchema.shape
         ? tool.inputSchema.omit({ email_delivery: true })
         : tool.inputSchema;
+    const oauth = capabilities.oauth;
     // Preserve the output object catchall in the advertised JSON Schema.
     server.registerTool(
       tool.name,
@@ -162,15 +177,49 @@ export function createServer(
         inputSchema: inputSchema.shape,
         outputSchema: tool.outputSchema,
         annotations: tool.annotations,
+        ...(oauth
+          ? {
+              _meta: {
+                securitySchemes: toolScopeOptions(tool.name).map((scopes) => ({
+                  type: "oauth2",
+                  scopes,
+                })),
+              },
+            }
+          : {}),
       },
-      tool.handler,
+      async (...args) => {
+        const required = oauth ? requiredToolScopes(tool.name, args[0]) : [];
+        if (oauth && !required.every((scope) => oauth.scopes.includes(scope))) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text" as const,
+                text: "Reconnect your account with the required permission.",
+              },
+            ],
+            _meta: {
+              "mcp/www_authenticate": [
+                `Bearer resource_metadata="${oauth.resourceMetadataUrl}", error="insufficient_scope", error_description="Additional permission required.", scope="${required.join(" ")}"`,
+              ],
+            },
+          };
+        }
+        return tool.handler(...args);
+      },
     );
   }
 
   // Register resources
   for (const factory of [linksResource, usageResource]) {
     const resource = factory(client);
-    server.resource(resource.name, resource.uri, resource.handler);
+    server.resource(resource.name, resource.uri, async () => {
+      if (capabilities.oauth && !capabilities.oauth.scopes.includes("qurl:read")) {
+        throw new McpError(ErrorCode.InvalidRequest, "Resource access requires qurl:read.");
+      }
+      return resource.handler();
+    });
   }
 
   // Register prompts

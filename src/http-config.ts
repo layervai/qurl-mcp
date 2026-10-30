@@ -26,6 +26,8 @@ export interface HttpServerConfig {
   unvalidatedSessionTtlMs: number;
   mcpRateLimitPerMinute: number;
   stateless?: boolean;
+  hostedOAuth?: boolean;
+  oauthClientSecret?: string;
   maxConcurrentRequests?: number;
   credentialRateLimitStore?: "memory" | "dynamodb";
   rateLimitDynamoDbTable?: string;
@@ -383,6 +385,12 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
     ),
     stateless,
     maxConcurrentRequests,
+    hostedOAuth: parseBoolean(
+      process.env.MCP_HOSTED_OAUTH ?? fileConfig.hostedOAuth,
+      false,
+      "MCP_HOSTED_OAUTH/hostedOAuth",
+    ),
+    oauthClientSecret: process.env.MCP_OAUTH_CLIENT_SECRET,
     credentialRateLimitStore,
     rateLimitDynamoDbTable,
     metricsNamespace,

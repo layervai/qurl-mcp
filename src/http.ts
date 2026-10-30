@@ -23,8 +23,16 @@ import {
 } from "@modelcontextprotocol/sdk/server/middleware/hostHeaderValidation.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
+import { ServerError as OAuthServerError } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { rateLimit } from "express-rate-limit";
+import {
+  createHostedOAuth,
+  OAUTH_RESOURCE,
+  OAUTH_API_AUDIENCE,
+  OAUTH_ISSUER,
+  OAUTH_SCOPES,
+} from "./auth/hosted-oauth.js";
 import { runWithRequestAuthContext } from "./auth/request-context.js";
 import type { IQURLClient } from "./client.js";
 import {
@@ -49,7 +57,7 @@ import {
   normalizeRateLimitDynamoDbTable,
   type HttpServerConfig,
 } from "./http-config.js";
-import { HEALTH_HTTP_PATH, MCP_HTTP_PATH } from "./http-routes.js";
+import { HEALTH_HTTP_PATH, MCP_HTTP_PATH, OAUTH_RESOURCE_METADATA_PATH } from "./http-routes.js";
 import { getLegalDocuments, renderLegalDocumentHtml } from "./services/legal-pages.js";
 import { getPublicVideoFileRoute, renderPublicVideoPageHtml } from "./services/video-page.js";
 import { createServer } from "./server.js";
@@ -129,6 +137,8 @@ export interface HttpRuntimeOptions {
 
 interface McpResponseLocals {
   usingUnvalidatedBodyLimit?: boolean;
+  // Verification hands off to exchange; close waits for the active auth phase.
+  oauthWork?: Promise<unknown>;
 }
 
 export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntimeOptions) {
@@ -140,6 +150,16 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const defaultQurlApiUrl = config.defaultQurlApiUrl;
   const defaultQurlConnectorUrl = config.defaultQurlConnectorUrl;
   const stateless = config.stateless ?? false;
+  if (
+    config.hostedOAuth &&
+    (!stateless ||
+      defaultQurlApiUrl !== OAUTH_API_AUDIENCE ||
+      `${baseUrl.replace(/\/$/, "")}${MCP_HTTP_PATH}` !== OAUTH_RESOURCE)
+  ) {
+    throw new Error("Hosted OAuth requires stateless mode and the production MCP/API URLs.");
+  }
+  const oauth = config.hostedOAuth ? createHostedOAuth(config.oauthClientSecret ?? "") : undefined;
+  const resourceMetadataUrl = `${new URL(baseUrl).origin}${OAUTH_RESOURCE_METADATA_PATH}/mcp`;
   const maxConcurrentRequests = normalizeMaxConcurrentRequests(config.maxConcurrentRequests);
   assertStatelessParserBudget(stateless, maxConcurrentRequests, config.maxUploadFileDataBytes);
   let inFlightRequests = 0;
@@ -219,10 +239,51 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const publicRouteRateLimiter = createPublicRateLimiter();
   const videoFileRateLimiter = createPublicRateLimiter();
   const healthRateLimiter = createPublicRateLimiter();
-  const bearerAuthMiddleware = requireBearerAuth({
-    verifier: createPassthroughBearerVerifier(),
-    requiredScopes: ["mcp:tools"],
-  });
+  function rejectOAuth(res: express.Response, error: unknown): void {
+    if (res.destroyed) return;
+    if (error instanceof OAuthServerError) {
+      res.set("Retry-After", "1");
+      rejectJsonRpc(res, 503, "Delegated authentication is temporarily unavailable.");
+      return;
+    }
+    res.set(
+      "WWW-Authenticate",
+      `Bearer resource_metadata="${resourceMetadataUrl}"${error === undefined ? "" : ', error="invalid_token", error_description="Reconnect your account."'}`,
+    );
+    rejectJsonRpc(res, 401, "Invalid or unavailable delegated access. Reconnect your account.");
+  }
+  const verifyBearer: express.RequestHandler = oauth
+    ? async (req, res, next) => {
+        try {
+          const match = /^Bearer ([^\s]+)$/i.exec(req.headers.authorization ?? "");
+          if (!match) {
+            rejectOAuth(
+              res,
+              req.headers.authorization ? new Error("Malformed bearer header") : undefined,
+            );
+            return;
+          }
+          req.auth = await oauth.verifyAccessToken(match[1]);
+          if (!res.destroyed) next();
+        } catch (error) {
+          rejectOAuth(res, error);
+        }
+      }
+    : requireBearerAuth({
+        verifier: createPassthroughBearerVerifier(),
+        requiredScopes: ["mcp:tools"],
+      });
+  const bearerAuthMiddleware: express.RequestHandler = oauth
+    ? (req, res, next) => {
+        const work = Promise.resolve(
+          verifyBearer(req, res, () => {
+            if (!res.destroyed) next();
+          }),
+        );
+        (res.locals as McpResponseLocals).oauthWork = work;
+        void work.catch(next);
+      }
+    : verifyBearer;
   const concurrencyLimiter: express.RequestHandler = (_req, res, next) => {
     if (
       inFlightRequests >= maxConcurrentRequests ||
@@ -239,10 +300,16 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     inFlightRequests += 1;
     metrics.observeConcurrencyUtilization();
     let released = false;
-    const release = (): void => {
+    const releasePermit = (): void => {
       if (released) return;
       released = true;
       inFlightRequests -= 1;
+    };
+    const release = (): void => {
+      // A disconnected client must not free capacity while OAuth work still runs.
+      const work = (res.locals as McpResponseLocals).oauthWork;
+      if (work) void work.then(releasePermit, releasePermit);
+      else releasePermit();
     };
     // Release when the response lifetime ends: this permit bounds active body
     // parsing/request work, not asynchronously closing MCP objects. Teardown is
@@ -290,8 +357,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   // DELETE are unsupported probes and bypass the fleet-wide store below.
   const authenticatedMcpMiddleware = [bearerAuthMiddleware, credentialRateLimiter];
   const authenticatedMcpPostMiddleware = [
+    ...(stateless && oauth ? [concurrencyLimiter] : []),
     bearerAuthMiddleware,
-    ...(stateless ? [concurrencyLimiter] : []),
+    ...(stateless && !oauth ? [concurrencyLimiter] : []),
     credentialRateLimiter,
   ];
   const rejectUnsupportedStatelessMethod =
@@ -314,6 +382,20 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     app.use(hostHeaderValidation(config.allowedHosts));
   } else {
     app.use(localhostHostValidation());
+  }
+  if (oauth) {
+    app.get(
+      [OAUTH_RESOURCE_METADATA_PATH, `${OAUTH_RESOURCE_METADATA_PATH}/mcp`],
+      publicRouteRateLimiter,
+      (_req, res) => {
+        res.json({
+          resource: OAUTH_RESOURCE,
+          authorization_servers: [OAUTH_ISSUER],
+          scopes_supported: OAUTH_SCOPES,
+          bearer_methods_supported: ["header"],
+        });
+      },
+    );
   }
   // Host validation may admit aliases for routing, but browser-originated MCP
   // requests intentionally use the single canonical public origin in baseUrl.
@@ -753,12 +835,33 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   }
 
   const handleStatelessMcpPost: express.RequestHandler = async (req, res) => {
-    const bearerToken = getAuthenticatedBearerToken(req);
+    let bearerToken = getAuthenticatedBearerToken(req);
     const startedAt = Date.now();
     const hasToolCall = containsToolCall(req.body);
     if (!bearerToken) {
       rejectJsonRpc(res, 401, "Bearer authentication required.");
       return;
+    }
+
+    let delegatedScopes: string[] | undefined;
+    if (oauth) {
+      if (res.destroyed) return;
+      try {
+        const work = oauth.delegate(req.auth!);
+        (res.locals as McpResponseLocals).oauthWork = work;
+        const delegated = await work;
+        if (res.destroyed) return;
+        bearerToken = delegated.token;
+        delegatedScopes = delegated.scopes;
+        const redactionScope = `http-oauth:${randomUUID()}`;
+        registerSensitiveLogValues(redactionScope, [req.auth!.token, bearerToken]);
+        const clearRedaction = () => clearSensitiveLogValues(redactionScope);
+        res.once("finish", clearRedaction);
+        res.once("close", clearRedaction);
+      } catch (error) {
+        rejectOAuth(res, error);
+        return;
+      }
     }
 
     // Stateless transports deliberately ignore caller-provided affinity.
@@ -769,7 +872,12 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       version,
       "http",
       config.maxUploadFileDataBytes,
-      getToolCapabilities(bearerToken),
+      {
+        ...getToolCapabilities(bearerToken),
+        ...(oauth
+          ? { email: false, oauth: { scopes: delegatedScopes!, resourceMetadataUrl } }
+          : {}),
+      },
     );
     const transport =
       options.transportFactory?.(true) ??
@@ -1223,7 +1331,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
 
     const httpServer = app.listen(port, host, () => {
       logInfo(`qURL MCP HTTP server listening on ${sanitizeLogValue(host)}:${port}`);
-      logInfo("HTTP MCP auth mode: qURL API-key passthrough");
+      logInfo(
+        `HTTP MCP auth mode: ${oauth ? "Auth0 OAuth with per-user delegation" : "qURL API-key passthrough"}`,
+      );
       if (config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES) {
         console.warn(
           stateless

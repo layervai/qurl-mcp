@@ -257,11 +257,13 @@ email_capture, review, or contract access. `manage_crid_access` changes the
 policy with its current version, sends invitations, lists grants, approves
 or denies requests, and removes access. The tools return resource-scoped
 receipts and omit invitation secrets and bearer links. Local apps use the
-qURL CLI on the publisher machine. In local mode, `app_name` sets and confirms
+qURL CLI on the publisher machine. In local mode, `app_name` is required and sets and confirms
 the public preview name through `qurl preview set` (requires a CLI with that command).
 If naming fails, the tool returns an error with the published CRID and recovery
-instructions. It does not delete or republish the resource. Older callers may
-omit `app_name`; agents should always provide it for a complete preview.
+instructions. It does not delete or republish the resource. Callers must now
+provide `app_name`; use the user's app name or a short neutral name without
+secrets or recipient details. Include the returned name and browser address
+in the answer even when invitation emails are sent.
 
 For example, an assistant can turn “share this with ana@example.com, and
 allow no requests” into an invite_only resource and an authorized invitation.
@@ -804,6 +806,10 @@ operation. The configured connector is a second credential authority: it must
 authenticate the forwarded qURL bearer before accepting or storing upload bytes.
 Deploying an unauthenticated connector is unsupported because it would allow an
 unvalidated MCP caller to create connector-side state.
+
+An off-by-default [Auth0 OAuth integration](docs/hosted-oauth.md) is available
+for the directory-review path. It requires per-user token exchange and the
+RELEASE qualification gates in that guide before activation.
 
 Stateful mode is the compatibility default and retains the existing MCP session
 registry, GET SSE, explicit DELETE behavior, and process-local credential quota
