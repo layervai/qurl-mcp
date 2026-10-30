@@ -81,7 +81,29 @@ function errorResult(text: string): ToolResult {
   return { isError: true, content: [{ type: "text", text }] };
 }
 
+// Native CLI resource_id is a publisher key; local MCP management takes the CRID.
+function managementResourceId<T extends object>(data: T): T {
+  if (
+    "resource_id" in data &&
+    typeof data.resource_id === "string" &&
+    "crid" in data &&
+    typeof data.crid === "string" &&
+    CRID_PATTERN.test(data.crid)
+  )
+    return { ...data, resource_id: data.crid };
+  return data;
+}
+
 function dataResult<T extends object & { length?: never }>(data: T): ToolResult {
+  data = managementResourceId(data);
+  if ("resources" in data && Array.isArray(data.resources)) {
+    data = {
+      ...data,
+      resources: data.resources.map((resource) =>
+        resource && typeof resource === "object" ? managementResourceId(resource) : resource,
+      ),
+    };
+  }
   return {
     content: [{ type: "text", text: JSON.stringify(data) }],
     structuredContent: toStructuredContent(data),
@@ -183,7 +205,7 @@ const publishOutput = z.object({
   crid: z
     .string()
     .describe("The resource's permanent ID. Safe to share; grants no access by itself"),
-  resource_id: z.string(),
+  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
   target_url: z.string(),
   status: z.string().optional(),
   private: z.boolean().optional(),
@@ -333,7 +355,15 @@ const accessInput = z
     policy: policyInput.optional(),
     email: z.string().email().max(320).optional(),
     id: z.string().max(64).optional(),
-    expected_version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+    expected_version: z
+      .number()
+      .int()
+      .min(0)
+      .max(Number.MAX_SAFE_INTEGER)
+      .optional()
+      .describe(
+        "Current listed version for configure, resend, revoke_invitation, deny or revoke_grant. Omit on invites and listings; approve uses approval.expected_version.",
+      ),
     approval: approvalInput.optional(),
     cursor: plainText(4096).optional(),
   })
@@ -437,6 +467,14 @@ function accessArgs(input: z.infer<typeof accessInput>): string[] | string {
           ? "A key opt-in (id new) requires approval.expected_version 0."
           : "Approval of an existing grant requires approval.expected_version of at least 1.";
       }
+      if (
+        !newKey &&
+        (approval.credential_kind !== undefined ||
+          approval.credential_id !== undefined ||
+          approval.credential_public_key_b64 !== undefined)
+      ) {
+        return "Credential fields apply only to id new. Approve an existing request with its listed decision id and approval.expected_version.";
+      }
       const args = ["access", "approve", crid, id, `--version=${approval.expected_version}`];
       if (approval.credential_kind !== undefined)
         args.push(`--credential-kind=${approval.credential_kind}`);
@@ -470,8 +508,9 @@ export function localManageCridAccessTool(cli: IQurlCli): LocalCliTool {
     title: "Manage private CRID access",
     description:
       "Publisher access policy for a private CRID, run with the qURL CLI on this machine. Configure the next policy version, send or resend an email invitation, list invitations or consumer grants, approve or deny a consumer grant by its decision id, approve a credential with id new, or revoke access. " +
+      "Invite takes only action, resource_id and email; omit expected_version, approval and policy. Report the exact invited email addresses without shortening them, and resource_url from publish_crid when available. Check every page of list_invitations before claiming nobody else was invited. If listing is denied, report the send receipts and say the list is unconfirmed; do not resend. Accepted delivery does not prove enrollment. " +
       "Read the current version from a listing first; configure takes expected_version (the current version) and policy.version = expected_version + 1, and the first policy on an existing private resource uses expected_version 0. " +
-      "For approve, put expected_version inside approval. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. " +
+      "For approve, put expected_version inside approval. For an existing request, use its listed decision id and version; omit all credential fields. Use id new and credential fields only for a key opt-in, never to replace a pending email request. A six-digit code alone never authorizes approval on a resource with consumer_access. Ask which listed request the user wants to approve (the verified email for review); keys needs the intended public credential and contract needs a trusted entitlement receipt. Wait for that instruction. Contract approval requires a trusted publisher entitlement receipt and expiry, not an unverified payment claim. " +
       "A removal is complete only when session_cleanup is complete; repeat the same removal and version while it is pending. Email proves mailbox control, not legal identity. " +
       "Legacy access requests without consumer_access that come with a six-digit code are handled by manage_crid_requests, not here.",
     inputSchema: accessInput,
@@ -617,7 +656,7 @@ const listInput = z
 
 const listItem = z.object({
   crid: z.string().optional(),
-  resource_id: z.string(),
+  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
   target_url: z.string().optional(),
   type: z.string().optional(),
   status: z.string().optional(),
@@ -933,7 +972,7 @@ const sharingInput = z
 const sharingOutput = z.object({
   action: z.enum(["stop", "start", "restart"]),
   crid: z.string(),
-  resource_id: z.string(),
+  resource_id: z.string().describe("Equals a valid crid when present; otherwise a legacy publisher key that management tools do not accept."),
   target_url: z.string(),
   desired_state: z.string(),
   connection_state: z.string(),

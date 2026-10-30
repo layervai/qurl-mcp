@@ -99,11 +99,13 @@ export const LOCAL_CLI_INSTRUCTIONS =
   "to share a new app even when list_crids is empty; no API key is needed. Mention the missing QURL_API_KEY " +
   "if the user expects their LayerV account or refers to account resources that are not listed. Resources are private. " +
   "For a new app shared with named email recipients, use invite_only and send invitations only to those recipients " +
-  "with manage_crid_access. For an existing resource, read its current policy with list_crids first and do not change it without " +
+  "with manage_crid_access. In your final reply, list each invited email address exactly and the full resource_url; " +
+  "do not replace the addresses with names or phrases such as both listed addresses. Confirm nobody else only after reading all invitation pages. " +
+  "For an existing resource, read its current policy with list_crids first and do not change it without " +
   "the user authorizing that policy change. " +
   "For other consumer_access policies, use manage_crid_access and the policy's approval fields. Only legacy resources " +
   "without consumer_access use manage_crid_requests and the six-digit code the person requesting access gives the user. " +
-  "Never ask consumers to forward email verification codes to the publisher.";
+  "A six-digit code alone never authorizes approval on a resource with consumer_access. Ask which listed request the user wants to approve (the verified email for review); keys needs the intended public credential and contract needs a trusted entitlement receipt. Wait for that instruction. Never ask consumers to forward email verification codes to the publisher.";
 
 /**
  * Server for stdio without QURL_API_KEY: every tool runs the locally
