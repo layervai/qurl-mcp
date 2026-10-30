@@ -18,6 +18,7 @@ const DECISION = "a".repeat(64);
 const publisher = { verified: false };
 
 const samplePublish = {
+  name: "TipSplit",
   private: true,
   access_requests: true,
   resource_url: `https://qurl.link/${CRID}`,
@@ -43,7 +44,11 @@ describe("CLI-backed tools", () => {
 
   async function call(factory: LocalCliToolFactory, input: unknown, reply: FakeReply = {}) {
     const tool = factory(fake.cli(reply));
-    const result = await tool.handler(input);
+    const args =
+      factory === localPublishCridTool && typeof input === "object" && input !== null
+        ? { app_name: "TipSplit", ...input }
+        : input;
+    const result = await tool.handler(args);
     if (!result.isError) {
       // Every successful result must satisfy the advertised output schema.
       expect(tool.outputSchema.safeParse(result.structuredContent).success).toBe(true);
@@ -57,6 +62,22 @@ describe("CLI-backed tools", () => {
   }
 
   describe("publish_crid", () => {
+    it("requires a public name in the advertised schema before publishing", () => {
+      const tool = localPublishCridTool({ runJson: vi.fn() });
+      expect(tool.inputSchema.safeParse({ target_url: "http://localhost:3000" }).success).toBe(
+        false,
+      );
+    });
+
+    it("refuses an omitted public name before running any CLI command", async () => {
+      const runJson = vi.fn().mockResolvedValue(samplePublish);
+      const result = await localPublishCridTool({ runJson }).handler({
+        target_url: "http://localhost:3000",
+      });
+      expect(result.isError).toBe(true);
+      expect(runJson).not.toHaveBeenCalled();
+    });
+
     it("publishes a local app privately with no extra flags", async () => {
       const result = await call(
         localPublishCridTool,
@@ -64,19 +85,63 @@ describe("CLI-backed tools", () => {
         { stdout: samplePublish },
       );
 
-      expect(argv()).toEqual([["publish", "http://127.0.0.1:3000", "--output=json"]]);
+      expect(argv()).toEqual([
+        ["publish", "http://127.0.0.1:3000", "--output=json"],
+        ["preview", "set", CRID, "--name=TipSplit", "--output=json"],
+      ]);
       expect(result.isError).toBeUndefined();
       expect(result.structuredContent).toEqual({
+        app_name: "TipSplit",
         private: true,
         access_requests: true,
         resource_url: `https://qurl.link/${CRID}`,
         crid: CRID,
-        resource_id: "pubkey",
+        resource_id: CRID,
         target_url: "http://127.0.0.1:3000",
         status: "serving",
         found_existing: false,
         publisher,
       });
+    });
+
+    it("returns a management ID that can be passed directly to invite", async () => {
+      const published = await call(
+        localPublishCridTool,
+        { target_url: samplePublish.target_url },
+        { stdout: samplePublish },
+      );
+      const resourceId = published.structuredContent?.resource_id;
+      expect(resourceId).toBe(CRID);
+      expect(samplePublish.resource_id).toBe("pubkey");
+      const invited = await call(
+        localManageCridAccessTool,
+        {
+          action: "invite",
+          resource_id: resourceId,
+          email: "ana@example.com",
+        },
+        {
+          stdout: {
+            action: "invite",
+            crid: CRID,
+            invitation: {
+              id: DECISION,
+              email: "ana@example.com",
+              status: "pending",
+              delivery: "accepted",
+              version: 1,
+            },
+          },
+        },
+      );
+      expect(invited.isError).not.toBe(true);
+      expect(argv().at(-1)).toEqual([
+        "access",
+        "invite",
+        CRID,
+        "--email=ana@example.com",
+        "--output=json",
+      ]);
     });
 
     it("sets and confirms the public name with the exact CRID and one safe argument", async () => {
@@ -162,6 +227,7 @@ describe("CLI-backed tools", () => {
           "--alias=-handbook",
           "--output=json",
         ],
+        ["preview", "set", CRID, "--name=TipSplit", "--output=json"],
       ]);
     });
 
@@ -183,6 +249,7 @@ describe("CLI-backed tools", () => {
           "--contract=c-1",
           "--output=json",
         ],
+        ["preview", "set", CRID, "--name=TipSplit", "--output=json"],
       ]);
     });
 
@@ -356,10 +423,29 @@ describe("CLI-backed tools", () => {
       const result = await call(localListCridsTool, {}, { stdout: page });
 
       expect(argv()).toEqual([["list", "--status=active", "--output=json"]]);
-      const row: Record<string, unknown> = { ...page.resources[0] };
+      const row: Record<string, unknown> = { ...page.resources[0], resource_id: CRID };
       delete row.serving_epoch;
       expect(result.structuredContent).toEqual({ ...page, resources: [row] });
     });
+
+    it.each([undefined, "not-a-crid"])(
+      "keeps a legacy publisher key when crid is %s",
+      async (crid) => {
+        const result = await call(
+          localListCridsTool,
+          {},
+          {
+            stdout: {
+              resources: [{ resource_id: "pubkey", ...(crid === undefined ? {} : { crid }) }],
+              has_more: false,
+            },
+          },
+        );
+        expect(
+          (result.structuredContent?.resources as Array<{ resource_id: string }>)[0].resource_id,
+        ).toBe("pubkey");
+      },
+    );
 
     it("maps include_deleted, limit and cursor", async () => {
       await call(
@@ -816,6 +902,20 @@ describe("CLI-backed tools", () => {
         { action: "approve", resource_id: CRID, id: DECISION, approval: { expected_version: 0 } },
         "at least 1",
       ],
+      ...["credential_kind", "credential_id", "credential_public_key_b64"].map(
+        (field): [unknown, string] => [
+          {
+            action: "approve",
+            resource_id: CRID,
+            id: DECISION,
+            approval: {
+              expected_version: 1,
+              [field]: field === "credential_kind" ? "device" : "new",
+            },
+          },
+          "Credential fields apply only to id new",
+        ],
+      ),
       [{ action: "list_grants", resource_id: CRID, limit: 5 }, ""],
     ])("refuses %j before running the CLI", async (input, message) => {
       const result = await call(localManageCridAccessTool, input);
@@ -855,7 +955,7 @@ describe("CLI-backed tools", () => {
       );
 
       expect(argv()).toEqual([[action, CRID, "--output=json"]]);
-      expect(result.structuredContent).toEqual({ action, ...sharing });
+      expect(result.structuredContent).toEqual({ action, ...sharing, resource_id: CRID });
     });
   });
 

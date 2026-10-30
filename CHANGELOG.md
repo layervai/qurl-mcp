@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.8.3](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.2...qurl-mcp-v0.8.3) (2026-10-25)
+
+
+### Bug Fixes
+
+* **tools:** return usable local management IDs and clarify invitations ([#350](https://github.com/layervai/qurl-mcp/issues/350)) ([09d9980](https://github.com/layervai/qurl-mcp/commit/09d998038e1a10edb054b7a57eced4c13b624cb6))
+
+## [0.8.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.1...qurl-mcp-v0.8.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **deps:** apply authorized body-parser security age exception ([#348](https://github.com/layervai/qurl-mcp/issues/348)) ([c251009](https://github.com/layervai/qurl-mcp/commit/c251009d8c3fd421e71b144a37de5db11cb03625))
+* **deps:** update vulnerable validation dependencies ([#342](https://github.com/layervai/qurl-mcp/issues/342)) ([2bf9bf7](https://github.com/layervai/qurl-mcp/commit/2bf9bf75c0f6170ece33338a12e394eee6f43d8b))
+* **tools:** guide existing review approvals and reject mixed credential inputs ([#349](https://github.com/layervai/qurl-mcp/issues/349)) ([56c3a78](https://github.com/layervai/qurl-mcp/commit/56c3a787b7eae5d3299ce6ef4cb834cddba56f07))
+
+## [0.8.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.0...qurl-mcp-v0.8.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* **tools:** distinguish consumer policies from legacy MCP access ([#340](https://github.com/layervai/qurl-mcp/issues/340)) ([6af6dd9](https://github.com/layervai/qurl-mcp/commit/6af6dd9d78258e6cb1673b2c316d3669af1e75ce))
+
+## [0.8.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.2...qurl-mcp-v0.8.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** require public app names for local publishing ([#326](https://github.com/layervai/qurl-mcp/issues/326))
+
+### Features
+
+* **tools:** require public app names for local publishing ([#326](https://github.com/layervai/qurl-mcp/issues/326)) ([aec8d86](https://github.com/layervai/qurl-mcp/commit/aec8d8637b618cfd37fe3bcfab5839aa8cffc768))
+
+
+### Bug Fixes
+
+* **docker:** remove npm build tools from runtime image ([#339](https://github.com/layervai/qurl-mcp/issues/339)) ([31e9eae](https://github.com/layervai/qurl-mcp/commit/31e9eae58a5056c3bf9054a361fee7246ee00a05))
+
 ## [0.7.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.7.1...qurl-mcp-v0.7.2) (2026-10-18)
 
 
