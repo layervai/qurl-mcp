@@ -198,43 +198,30 @@ export function createHostedOAuth(
   };
 }
 
-const TOOL_SCOPE_OPTIONS: Record<string, string[][]> = {
-  publish_crid: [["qurl:write"]],
-  manage_crid_access: [["qurl:read"], ["qurl:write"]],
-  create_qurl: [["qurl:write"]],
-  resolve_qurl: [["qurl:resolve"]],
-  list_qurls: [["qurl:read"]],
-  get_qurl: [["qurl:read"]],
-  delete_qurl: [["qurl:write"]],
-  extend_qurl: [["qurl:write", "qurl:read"]],
-  update_qurl: [["qurl:write"]],
-  mint_link: [["qurl:write"]],
-  share_by_crid: [["qurl:resolve"]],
-  batch_create_qurls: [["qurl:write"]],
-  revoke_qurl_token: [["qurl:write"]],
-  update_qurl_token: [["qurl:write"]],
-  list_qurl_sessions: [["qurl:read"]],
-  terminate_qurl_sessions: [["qurl:write"]],
-  upload_file_qurl: [["qurl:write"]],
-  upload_file_data_qurl: [["qurl:write"]],
-  upload_text_qurl: [["qurl:write"]],
+const TOOL_SCOPES: Record<string, string[]> = {
+  publish_crid: ["qurl:write"],
+  manage_crid_access: ["qurl:write"],
+  list_crid_access: ["qurl:read"],
+  create_qurl: ["qurl:write"],
+  resolve_qurl: ["qurl:resolve"],
+  list_qurls: ["qurl:read"],
+  get_qurl: ["qurl:read"],
+  delete_qurl: ["qurl:write"],
+  extend_qurl: ["qurl:write", "qurl:read"],
+  update_qurl: ["qurl:write"],
+  mint_link: ["qurl:write"],
+  share_by_crid: ["qurl:resolve"],
+  batch_create_qurls: ["qurl:write"],
+  revoke_qurl_token: ["qurl:write"],
+  update_qurl_token: ["qurl:write"],
+  list_qurl_sessions: ["qurl:read"],
+  terminate_qurl_sessions: ["qurl:write"],
+  upload_file_qurl: ["qurl:write"],
+  upload_file_data_qurl: ["qurl:write"],
+  upload_text_qurl: ["qurl:write"],
 };
 
-export function toolScopeOptions(name: string): string[][] {
-  if (!Object.hasOwn(TOOL_SCOPE_OPTIONS, name))
-    throw new Error(`Missing OAuth scope policy for ${name}`);
-  return TOOL_SCOPE_OPTIONS[name];
-}
-
-export function requiredToolScopes(name: string, input: unknown): string[] {
-  const options = toolScopeOptions(name);
-  if (name === "manage_crid_access") {
-    const listing =
-      typeof input === "object" &&
-      input !== null &&
-      "action" in input &&
-      (input.action === "list_invitations" || input.action === "list_grants");
-    return options[listing ? 0 : 1];
-  }
-  return options[0];
+export function toolScopes(name: string): string[] {
+  if (!Object.hasOwn(TOOL_SCOPES, name)) throw new Error(`Missing OAuth scope policy for ${name}`);
+  return TOOL_SCOPES[name];
 }

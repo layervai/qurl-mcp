@@ -6,6 +6,7 @@ import {
   withMissingApiKeyHandler,
   zodErrorToToolResult,
   type ToolRuntimeOptions,
+  type ToolResult,
 } from "./_shared.js";
 
 const version = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
@@ -311,5 +312,68 @@ export function manageCridAccessTool(
         structuredContent: toStructuredContent(result),
       };
     }),
+  };
+}
+
+const readAccessActions = z.enum(["list_invitations", "list_grants"]);
+const writeAccessActions = z.enum([
+  "configure",
+  "invite",
+  "resend",
+  "revoke_invitation",
+  "approve",
+  "deny",
+  "revoke_grant",
+]);
+
+// OAuth directory tools separate reads and writes; existing clients keep the combined tool.
+export function listCridAccessTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
+  const tool = manageCridAccessTool(client, runtime);
+  const inputSchema = base
+    .pick({ resource_id: true, cursor: true, limit: true })
+    .extend({ action: readAccessActions });
+  return {
+    ...tool,
+    name: "list_crid_access",
+    title: "List private CRID access",
+    description:
+      "List invitations or consumer grants for one private resource. Follow next_cursor through every page before claiming the list is complete. Returns current versions for access decisions; invitation secrets and bearer links are never returned.",
+    inputSchema,
+    outputSchema: output
+      .pick({ action: true, invitations: true, grants: true, next_cursor: true })
+      .extend({ action: readAccessActions }),
+    annotations: {
+      title: "List private CRID access",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+    handler: async (raw: unknown): Promise<ToolResult> => {
+      const parsed = inputSchema.safeParse(raw);
+      if (!parsed.success) return zodErrorToToolResult(parsed.error);
+      return tool.handler(parsed.data);
+    },
+  };
+}
+
+export function manageCridAccessWriteTool(client: IQURLClient, runtime: ToolRuntimeOptions) {
+  const tool = manageCridAccessTool(client, runtime);
+  const inputSchema = base
+    .omit({ cursor: true, limit: true })
+    .extend({ action: writeAccessActions });
+  return {
+    ...tool,
+    description:
+      "Change private access policy, send or resend invitations, approve or deny requests, approve a credential with id new, or revoke access. Use list_crid_access for invitation and grant listings, and get_qurl for the current policy. Read every listing page before claiming nobody else was invited. Invite takes only action, resource_id and email; report exact invited addresses. If listing is denied, report send receipts and say the list is unconfirmed; do not resend. Accepted delivery does not prove enrollment. After an uncertain invite, list invitations with list_crid_access before retrying. Decisions use the listed id and version. Configure the next policy version; the first policy on an existing private resource uses expected_version 0. For approve, put expected_version inside approval; zero is allowed only for id new. Existing requests use their listed decision id/version without credential fields. A six-digit code alone never authorizes approval. Ask which listed request the user wants to approve (verified email for review); keys needs the intended public credential and contract needs a trusted entitlement receipt and expiry. Wait for that instruction. This tool does not verify payment. Invite-only access has no consumer requests. Removal is complete only when session_cleanup is complete; retry the same removal/version while pending. Email proves mailbox control, not legal identity. Invitation secrets and bearer links are never returned.",
+    inputSchema,
+    outputSchema: output
+      .omit({ invitations: true, grants: true, next_cursor: true })
+      .extend({ action: writeAccessActions }),
+    handler: async (raw: unknown): Promise<ToolResult> => {
+      const parsed = inputSchema.safeParse(raw);
+      if (!parsed.success) return zodErrorToToolResult(parsed.error);
+      return tool.handler(parsed.data);
+    },
   };
 }

@@ -41,6 +41,16 @@ never exceeds either token. Tokens and secrets are not written to disk or
 returned to clients. Caches are process-local; no global request lock or exchange
 on each tool call is added. Fleet/provider rate limits still need qualification.
 
+OAuth exposes `list_crid_access` for invitation and grant listings (`qurl:read`),
+and `manage_crid_access` only for changes (`qurl:write`). Read and write actions
+are rejected by the other tool before any API call. Existing API-key HTTP and
+local catalogs keep their combined access tool unchanged. This catalog split
+adds no downstream operations or round trips. OAuth marks every non-read-only
+tool as destructive so directory clients request confirmation for data changes;
+read-only and legacy-client annotations remain unchanged. This follows the
+[Anthropic connector checklist](https://claude.com/docs/connectors/building/review-criteria),
+which requires the destructive hint for tools that modify data, including additions.
+
 Each tool checks its required scope before its handler. The installed SDK exposes
 OAuth tool descriptors through the documented `_meta.securitySchemes` compatibility
 field. Insufficient scope returns `mcp/www_authenticate` for reauthorization.

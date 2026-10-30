@@ -138,7 +138,11 @@ describe("hosted OAuth HTTP boundary", () => {
       }),
     );
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(18);
+    expect(tools).toHaveLength(19);
+    for (const tool of tools) {
+      if (!tool.annotations?.readOnlyHint)
+        expect(tool.annotations?.destructiveHint, tool.name).toBe(true);
+    }
     expect(tools.some((tool) => tool.name === "upload_file_qurl")).toBe(false);
     expect(tools.find((tool) => tool.name === "delete_qurl")?._meta?.securitySchemes).toEqual([
       { type: "oauth2", scopes: ["qurl:write"] },
@@ -146,11 +150,27 @@ describe("hosted OAuth HTTP boundary", () => {
     const read = await client.callTool({ name: "list_qurls", arguments: {} });
     expect(read.isError).not.toBe(true);
     const invitations = await client.callTool({
-      name: "manage_crid_access",
+      name: "list_crid_access",
       arguments: { action: "list_invitations", resource_id: "r_abcdefghijk" },
     });
     expect(invitations.isError).not.toBe(true);
-    expect(mock.listConsumerInvitations).toHaveBeenCalled();
+    expect(mock.listConsumerInvitations).toHaveBeenCalledTimes(1);
+    const accessWriter = tools.find((tool) => tool.name === "manage_crid_access")!;
+    expect(accessWriter._meta?.securitySchemes).toEqual([
+      { type: "oauth2", scopes: ["qurl:write"] },
+    ]);
+    expect((accessWriter.inputSchema.properties?.action as { enum: string[] }).enum).not.toContain(
+      "list_invitations",
+    );
+    expect(tools.find((tool) => tool.name === "list_crid_access")?.annotations?.readOnlyHint).toBe(
+      true,
+    );
+    const deniedInvite = await client.callTool({
+      name: "manage_crid_access",
+      arguments: { action: "invite", resource_id: "r_abcdefghijk", email: "recipient@example.com" },
+    });
+    expect(deniedInvite.isError).toBe(true);
+    expect(mock.inviteConsumer).not.toHaveBeenCalled();
     const denied = await client.callTool({
       name: "delete_qurl",
       arguments: { resource_id: "r_abcdefghijk" },
@@ -162,6 +182,54 @@ describe("hosted OAuth HTTP boundary", () => {
     expect(mock.deleteQURL).not.toHaveBeenCalled();
     expect(factory.mock.calls.every((args) => args[0] === output)).toBe(true);
     expect(exchange).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows a scoped write but denies access listing with a write-only token", async () => {
+    const input = await token(false, "qurl:write");
+    const output = await token(true, "qurl:write");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          access_token: output,
+          token_type: "Bearer",
+          issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+        }),
+      ),
+    );
+    const mock = makeMockClient({
+      inviteConsumer: vi.fn(async () => ({
+        id: "a".repeat(64),
+        email: "recipient@example.com",
+        status: "open" as const,
+        delivery: "accepted" as const,
+        version: 1,
+        expires_at: "2026-10-31T00:00:00Z",
+      })),
+    });
+    const base = await start(() => mock);
+    client = new Client({ name: "oauth-write-test", version: "1" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+        fetch: realFetch,
+        requestInit: { headers: { authorization: `Bearer ${input}` } },
+      }),
+    );
+    const denied = await client.callTool({
+      name: "list_crid_access",
+      arguments: { action: "list_grants", resource_id: "r_abcdefghijk" },
+    });
+    expect(denied.isError).toBe(true);
+    expect(denied._meta?.["mcp/www_authenticate"]).toEqual([
+      expect.stringContaining('scope="qurl:read"'),
+    ]);
+    expect(mock.listConsumerGrants).not.toHaveBeenCalled();
+    const invited = await client.callTool({
+      name: "manage_crid_access",
+      arguments: { action: "invite", resource_id: "r_abcdefghijk", email: "recipient@example.com" },
+    });
+    expect(invited.isError).not.toBe(true);
+    expect(mock.inviteConsumer).toHaveBeenCalledWith("r_abcdefghijk", "recipient@example.com");
   });
 
   it("fails closed on unsupported mode, resource URL or missing secret", () => {

@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { manageCridAccessTool, publishCridTool } from "../tools/consumer-access.js";
+import {
+  manageCridAccessTool,
+  publishCridTool,
+  listCridAccessTool,
+  manageCridAccessWriteTool,
+} from "../tools/consumer-access.js";
 import { makeMockClient } from "./helpers.js";
 import { ProtectedResource, QURLClient as SDKClient } from "@layervai/qurl";
 
@@ -291,7 +296,7 @@ describe("consumer access publisher tools", () => {
       email: "ana@example.com",
       status: "revoked",
       version: 2,
-      delivery: "accepted",
+      delivery: "accepted" as const,
       expires_at: resource.expires_at,
       session_cleanup: "pending",
       invitation_token: "must-not-leak",
@@ -332,5 +337,83 @@ describe("consumer access publisher tools", () => {
       "a".repeat(64),
       approval,
     );
+  });
+});
+
+describe("OAuth access tool separation", () => {
+  it("keeps pagination and secret filtering in the read tool", async () => {
+    const client = makeMockClient({
+      listConsumerGrants: vi.fn().mockResolvedValue({
+        grants: [
+          { id: "a".repeat(64), status: "active", version: 2, email_access_token: "secret" },
+        ],
+        next_cursor: "next",
+        has_more: true,
+      }),
+    });
+    const result = await listCridAccessTool(client, { mode: "http" }).handler({
+      action: "list_grants",
+      resource_id: resource.crid,
+      cursor: "previous",
+      limit: 1,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(client.listConsumerGrants).toHaveBeenCalledWith(resource.crid, {
+      cursor: "previous",
+      limit: 1,
+    });
+    expect(result.structuredContent?.next_cursor).toBe("next");
+    expect(JSON.stringify(result)).not.toContain("secret");
+  });
+
+  it("rejects actions belonging to the other tool before any API operation", async () => {
+    const client = makeMockClient();
+    const read = listCridAccessTool(client, { mode: "http" });
+    const write = manageCridAccessWriteTool(client, { mode: "http" });
+    for (const action of ["configure", "invite", "approve", "revoke_grant"]) {
+      expect((await read.handler({ action, resource_id: resource.crid })).isError).toBe(true);
+    }
+    for (const action of ["list_grants", "list_invitations"]) {
+      expect((await write.handler({ action, resource_id: resource.crid })).isError).toBe(true);
+    }
+    expect(client.listConsumerGrants).not.toHaveBeenCalled();
+    expect(client.listConsumerInvitations).not.toHaveBeenCalled();
+    expect(client.inviteConsumer).not.toHaveBeenCalled();
+    expect(client.updateResource).not.toHaveBeenCalled();
+    expect(client.approveConsumerGrant).not.toHaveBeenCalled();
+    expect(client.revokeConsumerGrant).not.toHaveBeenCalled();
+  });
+
+  it("keeps write receipts and cross-field approval validation", async () => {
+    const client = makeMockClient({
+      inviteConsumer: vi.fn().mockResolvedValue({
+        id: "a".repeat(64),
+        email: "ana@example.com",
+        status: "open" as const,
+        delivery: "accepted" as const,
+        version: 1,
+        expires_at: "2026-10-31T00:00:00Z",
+        token: "secret",
+      }),
+    });
+    const tool = manageCridAccessWriteTool(client, { mode: "http" });
+    const result = await tool.handler({
+      action: "invite",
+      resource_id: resource.crid,
+      email: "ana@example.com",
+    });
+    expect(result.isError).not.toBe(true);
+    expect(JSON.stringify(result)).not.toContain("secret");
+    expect(
+      (
+        await tool.handler({
+          action: "approve",
+          resource_id: resource.crid,
+          id: "a".repeat(64),
+          approval: { expected_version: 0 },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(client.approveConsumerGrant).not.toHaveBeenCalled();
   });
 });
