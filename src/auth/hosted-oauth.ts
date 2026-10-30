@@ -30,6 +30,9 @@ export function createHostedOAuth(
   const key =
     dependencies.key ?? createRemoteJWKSet(new URL(".well-known/jwks.json", OAUTH_ISSUER));
   const resolveKey: JWTVerifyGetKey = async (...args) => {
+    if (typeof args[0].kid !== "string" || !args[0].kid) {
+      throw new InvalidTokenError("Missing signing key identifier.");
+    }
     try {
       return await key(...args);
     } catch (error) {
@@ -109,6 +112,8 @@ export function createHostedOAuth(
               audience: OAUTH_API_AUDIENCE,
               scope: auth.scopes.join(" "),
             }),
+          }).catch(() => {
+            throw new ServerError("Delegated authentication is temporarily unavailable.");
           });
           if (!response.ok) {
             await response.body?.cancel();
@@ -134,7 +139,13 @@ export function createHostedOAuth(
             await reader.cancel();
           }
           const result = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-          if (result.token_type !== "Bearer" || result.issued_token_type !== TOKEN_TYPE) {
+          if (
+            typeof result !== "object" ||
+            result === null ||
+            typeof result.access_token !== "string" ||
+            result.token_type !== "Bearer" ||
+            result.issued_token_type !== TOKEN_TYPE
+          ) {
             throw new Error("Unsupported token response");
           }
           const claims = await verify(result.access_token, OAUTH_API_AUDIENCE);
@@ -170,10 +181,7 @@ export function createHostedOAuth(
           return delegation;
         } catch (error) {
           if (error instanceof ServerError) throw error;
-          if (
-            error instanceof TypeError ||
-            (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name))
-          ) {
+          if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) {
             throw new ServerError("Delegated authentication is temporarily unavailable.");
           }
           // Provider errors and tokens never enter logs or client-visible errors.

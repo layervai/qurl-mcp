@@ -9,17 +9,23 @@ import {
 } from "../../auth/hosted-oauth.js";
 
 let privateKey: Awaited<ReturnType<typeof generateKeyPair>>["privateKey"];
+let publicJwk: Awaited<ReturnType<typeof exportJWK>>;
 let key: ReturnType<typeof createLocalJWKSet>;
 beforeAll(async () => {
   const pair = await generateKeyPair("RS256");
   privateKey = pair.privateKey;
+  publicJwk = await exportJWK(pair.publicKey);
   key = createLocalJWKSet({
-    keys: [{ ...(await exportJWK(pair.publicKey)), kid: "test", alg: "RS256" }],
+    keys: [{ ...publicJwk, kid: "test", alg: "RS256" }],
   });
 });
 afterEach(() => vi.useRealTimers());
 
-async function token(overrides: Record<string, unknown> = {}, downstream = false, kid = "test") {
+async function token(
+  overrides: Record<string, unknown> = {},
+  downstream = false,
+  kid: string | null = "test",
+) {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({
     iss: OAUTH_ISSUER,
@@ -32,7 +38,7 @@ async function token(overrides: Record<string, unknown> = {}, downstream = false
     ...(downstream ? { act: { sub: OAUTH_CLIENT_ID }, permissions: ["qurl:admin"] } : {}),
     ...overrides,
   })
-    .setProtectedHeader({ alg: "RS256", kid })
+    .setProtectedHeader({ alg: "RS256", ...(kid === null ? {} : { kid }) })
     .sign(privateKey);
 }
 function response(access_token: string) {
@@ -44,6 +50,21 @@ function response(access_token: string) {
 }
 
 describe("hosted OAuth", () => {
+  it("rejects kid-less tokens before an ambiguous rotation key lookup", async () => {
+    const lookup = vi.fn(
+      createLocalJWKSet({
+        keys: [
+          { ...publicJwk, kid: "test" },
+          { ...publicJwk, kid: "next" },
+        ],
+      }),
+    );
+    const oauth = createHostedOAuth("fixture-secret", { key: lookup });
+    await expect(oauth.verifyAccessToken(await token({}, false, null))).rejects.toMatchObject({
+      errorCode: "invalid_token",
+    });
+    expect(lookup).not.toHaveBeenCalled();
+  });
   it("distinguishes a signing-key outage from an unrecognized token key", async () => {
     const unavailable = createHostedOAuth("fixture-secret", {
       key: async () => {
@@ -181,6 +202,12 @@ describe("hosted OAuth", () => {
 
   it("rejects malformed, oversized and non-bearer provider responses without disclosure", async () => {
     const responses = [
+      Response.json(null),
+      Response.json({
+        access_token: 123,
+        token_type: "Bearer",
+        issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+      }),
       new Response("not json"),
       new Response("x".repeat(33_000)),
       Response.json({ access_token: "secret", token_type: "DPoP" }),

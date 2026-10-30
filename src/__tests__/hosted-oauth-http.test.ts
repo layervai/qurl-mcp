@@ -109,6 +109,7 @@ describe("hosted OAuth HTTP boundary", () => {
     const denied = await realFetch(`${base}/mcp`, { method: "POST" });
     expect(denied.status).toBe(401);
     expect(denied.headers.get("www-authenticate")).toContain("resource_metadata=");
+    expect(denied.headers.get("www-authenticate")).not.toContain("error=");
     expect(exchange).not.toHaveBeenCalled();
   });
 

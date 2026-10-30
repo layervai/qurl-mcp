@@ -137,6 +137,7 @@ export interface HttpRuntimeOptions {
 
 interface McpResponseLocals {
   usingUnvalidatedBodyLimit?: boolean;
+  // Verification hands off to exchange; close waits for the active auth phase.
   oauthWork?: Promise<unknown>;
 }
 
@@ -247,7 +248,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
     res.set(
       "WWW-Authenticate",
-      `Bearer resource_metadata="${resourceMetadataUrl}", error="invalid_token", error_description="Reconnect your account."`,
+      `Bearer resource_metadata="${resourceMetadataUrl}"${error === undefined ? "" : ', error="invalid_token", error_description="Reconnect your account."'}`,
     );
     rejectJsonRpc(res, 401, "Invalid or unavailable delegated access. Reconnect your account.");
   }
@@ -256,7 +257,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         try {
           const match = /^Bearer ([^\s]+)$/i.exec(req.headers.authorization ?? "");
           if (!match) {
-            rejectOAuth(res, undefined);
+            rejectOAuth(
+              res,
+              req.headers.authorization ? new Error("Malformed bearer header") : undefined,
+            );
             return;
           }
           req.auth = await oauth.verifyAccessToken(match[1]);

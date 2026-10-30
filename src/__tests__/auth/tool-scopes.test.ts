@@ -5,6 +5,7 @@ import { toolFactories } from "../../server.js";
 import { makeMockClient } from "../helpers.js";
 
 it("covers every API tool with the documented scope contract", () => {
+  // Keep CLAUDE.md's tool scope column aligned with the executable policy.
   const source = readFileSync(new URL("../../../CLAUDE.md", import.meta.url), "utf8");
   for (const factory of toolFactories) {
     const tool = factory(makeMockClient(), { mode: "http" });
