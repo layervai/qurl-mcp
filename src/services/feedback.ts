@@ -1,0 +1,116 @@
+import { Buffer } from "node:buffer";
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { sanitizeLogValue } from "../logging.js";
+
+export const feedbackSchema = z.strictObject({
+  category: z.enum(["bug", "feature", "friction", "other"]),
+  message: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .describe(
+      "Brief report with expected and actual behavior. Exclude secrets, personal data, links, and conversation history.",
+    ),
+  tool_name: z
+    .string()
+    .regex(/^[a-z][a-z0-9_]{0,79}$/)
+    .optional(),
+});
+export const feedbackReceiptSchema = z.object({
+  feedback_id: z.string().uuid(),
+  status: z.literal("sent_for_human_review"),
+});
+export const FEEDBACK_URL = "https://mcp.connector.layerv.ai/feedback";
+
+export class FeedbackError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export function feedbackWebhookUrl(): string | undefined {
+  const value = process.env.MCP_FEEDBACK_SLACK_WEBHOOK_URL?.trim();
+  if (!value) return undefined;
+  // The secret is operator-owned; callers cannot select an outbound destination.
+  if (
+    !/^https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+$/.test(
+      value,
+    )
+  ) {
+    throw new Error("MCP_FEEDBACK_SLACK_WEBHOOK_URL must be a Slack incoming webhook URL.");
+  }
+  return value;
+}
+
+// shortcut: process-local Slack budget, use a shared queue if replicas need guaranteed burst delivery.
+let nextSlackAttemptAt = 0;
+export async function deliverFeedback(input: unknown) {
+  const report = feedbackSchema.parse(input);
+  const webhook = feedbackWebhookUrl();
+  if (!webhook) throw new FeedbackError(503, "Feedback delivery is not configured.");
+  if (Date.now() < nextSlackAttemptAt)
+    throw new FeedbackError(429, "Feedback is busy. Try again later.");
+  nextSlackAttemptAt = Date.now() + 1_000;
+  const feedback_id = randomUUID();
+  const message = sanitizeLogValue(report.message)
+    .replace(/https?:\/\/\S+/gi, "[link removed]")
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[email removed]");
+  try {
+    const response = await fetch(webhook, {
+      method: "POST",
+      redirect: "error",
+      signal: globalThis.AbortSignal.timeout(5_000),
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        text: `LayerV MCP feedback ${feedback_id}`,
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "plain_text",
+              emoji: false,
+              text: `Untrusted agent feedback - human review required\nID: ${feedback_id}\nCategory: ${report.category}\nTool: ${sanitizeLogValue(report.tool_name ?? "unspecified")}\n${message}`,
+            },
+          },
+        ],
+        unfurl_links: false,
+        unfurl_media: false,
+      }),
+    });
+    const acknowledgement = await readFeedbackResponseText(response, 32);
+    if (response.status !== 200 || acknowledgement.trim() !== "ok") {
+      throw new Error("Slack did not acknowledge feedback");
+    }
+  } catch {
+    // No automatic retry: a timeout can occur after Slack accepted the message.
+    throw new FeedbackError(
+      502,
+      "Feedback delivery could not be confirmed. It may have arrived; avoid automatic retries.",
+    );
+  }
+  return { feedback_id, status: "sent_for_human_review" as const };
+}
+
+export async function readFeedbackResponseText(response: Response, limit: number): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Missing feedback response");
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) throw new Error("Feedback response too large");
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString("utf8");
+  } finally {
+    await reader.cancel();
+  }
+}

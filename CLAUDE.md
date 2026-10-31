@@ -184,6 +184,7 @@ OAuth separates access reads from writes. Existing API-key and local clients kee
 | ------------------------- | -------------- | ------------------------------------------------------- |
 | `create_qurl`             | `qurl:write`   | Create a protected link                                 |
 | `publish_crid`            | `qurl:write`   | Publish a private URL CRID                              |
+| `submit_feedback` | None | Send a brief report to LayerV Slack for human review |
 | `manage_crid_access`      | `qurl:write` | Change private policy, invitations and grants (OAuth) |
 | `list_crid_access`        | `qurl:read` | List private invitations and grants (OAuth only) |
 | `resolve_qurl`            | `qurl:resolve` | Resolve token + grant network access                    |

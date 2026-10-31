@@ -1,3 +1,4 @@
+export const FEEDBACK_HTTP_PATH = "/feedback";
 export const MCP_HTTP_PATH = "/mcp";
 export const HEALTH_HTTP_PATH = "/healthz";
 export const LEGAL_HTTP_PATH_PREFIX = "/legal";
@@ -8,6 +9,7 @@ export const OAUTH_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resour
 // silently diverge from config validation.
 export const RESERVED_PUBLIC_PATH_PREFIXES = [
   MCP_HTTP_PATH,
+  FEEDBACK_HTTP_PATH,
   HEALTH_HTTP_PATH,
   LEGAL_HTTP_PATH_PREFIX,
   OAUTH_RESOURCE_METADATA_PATH,

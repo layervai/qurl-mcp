@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { registerFeedbackRoute } from "./http-feedback.js";
 import {
   createHttpSessionRegistry,
   type SessionContext,
@@ -378,6 +379,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   // requests intentionally use the single canonical public origin in baseUrl.
   // Do not widen this check merely because allowedHosts contains extra names.
   const allowedOrigin = new URL(baseUrl).origin;
+  registerFeedbackRoute(app, allowedOrigin);
   // This is the complete stateful browser-route set today. Add any future
   // state-changing browser route here rather than assuming this check is global.
   app.use((req, res, next) => {
