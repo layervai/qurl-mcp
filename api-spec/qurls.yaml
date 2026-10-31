@@ -540,6 +540,9 @@ paths:
         Lists your resources, each of which can have multiple qURLs.
         Use `GET /v1/resources/{id}/qurls` with a resource's CRID to list its individual links.
         Supports status and date filters and cursor-based pagination.
+        Multiple filter parameters combine with AND. Comma-separated status values
+        match any listed status. Omitting status applies no status filter, so active
+        and revoked resources may both be returned. Sort defaults to created_at:desc.
       operationId: listQurls
       security:
         - bearerAuth: [qurl:read]
@@ -564,6 +567,9 @@ paths:
           description: |
             Filter by status. Valid values are `active` and `revoked`;
             multiple values may be supplied as a comma-separated list.
+            Omitting status applies no status filter: active and revoked resources
+            may both be returned. Values in this list are alternatives (OR); other
+            filter parameters must also match (AND).
             Invalid values return `400 invalid_filter`.
           schema:
             type: string
@@ -595,7 +601,7 @@ paths:
         - name: sort
           in: query
           description: |
-            Sort field and direction (field:direction).
+            Sort field and direction (field:direction). Defaults to created_at:desc.
             Valid fields: created_at, expires_at.
             Direction: asc or desc (default: desc).
             Sort order is consistent across pages.

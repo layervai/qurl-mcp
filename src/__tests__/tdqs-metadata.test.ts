@@ -226,28 +226,26 @@ describe("TDQS tool metadata coverage", () => {
   });
 
   describe("schema describe() and tool description stay aligned", () => {
-    // Defense-in-depth: some hosts surface the schema-level `.describe()`
-    // in argument hints without rendering the tool's overall description.
-    // When a strong factual claim (like "default to active") lives in
-    // both, lock both to a shared substring so a future copy edit can't
-    // drift one without the other.
-    it("list_qurls.status default-active claim appears in both .describe() and the tool description", async () => {
+    it("pins status omission, filter combination, and sort to the source spec", async () => {
       const { listQurlsSchema } = await import("../tools/list-qurls.js");
-      const description = tools.find((t) => t.name === "list_qurls")!.description;
-      const statusFieldDescription = listQurlsSchema.shape.status.description ?? "";
-      // Sentinels must uniquely encode the *default-active claim*, not just
-      // mention the word `active` (which appears in unrelated contexts: the
-      // example block, the "everything still active" prose, the comma-
-      // separated enum). Without a claim-specific phrase, the test would
-      // silently pass if both sides dropped the default claim entirely.
-      expect(
-        statusFieldDescription,
-        "list_qurls.status .describe() must assert the active default with the phrase \"Defaults to 'active'\"",
-      ).toContain("Defaults to 'active'");
-      expect(
-        description,
-        'list_qurls description must assert the active default with the phrase "By default only `active`"',
-      ).toContain("By default only `active`");
+      const description = tools.find((tool) => tool.name === "list_qurls")!.description;
+      const spec = readApiSpec();
+      const operation = spec.split("      operationId: listQurls\n");
+      const parameters = operation[1]?.split("      responses:")[0]?.replace(/\s+/g, " ") ?? "";
+      const contract =
+        "Omitting status applies no status filter: active and revoked resources may both be returned";
+      expect(parameters).toContain(contract);
+      expect(listQurlsSchema.shape.status.description).toContain(contract);
+      expect(description).toContain(contract);
+      expect(description).not.toContain("By default only `active`");
+      const listDescription = operation[0]?.split("    get:").at(-1)?.replace(/\s+/g, " ");
+      expect(listDescription).toContain("Multiple filter parameters combine with AND");
+      expect(description).toContain("Filters AND together");
+      expect(parameters).toContain("Defaults to created_at:desc");
+      expect(description).toContain("Sort defaults to `created_at:desc`");
+      const deletion = tools.find((tool) => tool.name === "delete_qurl")!.description;
+      expect(deletion).toContain('use `status: "revoked"`');
+      expect(deletion).not.toContain("By default the resource is excluded");
     });
   });
 

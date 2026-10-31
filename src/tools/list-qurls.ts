@@ -23,7 +23,7 @@ export const listQurlsSchema = z.object({
     .optional()
     .describe(
       "Filter by status (comma-separated, e.g. 'active,revoked'). " +
-        "Defaults to 'active' when omitted; pass 'revoked' or 'active,revoked' to override. " +
+        "Omitting status applies no status filter: active and revoked resources may both be returned. " +
         "Only active and revoked are valid resource filters; expired is not accepted.",
     ),
   created_after: z
@@ -78,12 +78,8 @@ export function listQurlsTool(
       "An empty `data[]` with `meta.has_more: false` means no resource matched the filters (not an error). " +
       "Pagination is cursor-based: when `meta.has_more` is `true`, pass `meta.next_cursor` as `cursor` on the next call to fetch the following page. " +
       "Default page size is 20, configurable via `limit` up to 100. " +
-      // TODO(#99): both the default-active claim above and the default-sort
-      // claim below are asserted from current API behavior — the spec only
-      // pins the sort *direction* default. The description intentionally
-      // drops the epistemics caveat (overhedging invites defensive
-      // over-specification) and pinning is tracked separately.
-      "By default only `active` qURLs are returned; pass `status: 'revoked'` to see only revoked qURLs or `'active,revoked'` to see both. " +
+      "Omitting status applies no status filter: active and revoked resources may both be returned. " +
+      "Pass `status: 'active'` or `status: 'revoked'` to select one status. " +
       "A past resource expires_at does not change its status; individual access tokens can expire. `status: 'expired'` is not a valid resource filter. " +
       "Sort defaults to `created_at:desc`; override with `sort: 'expires_at:asc'` etc. " +
       "**Returns:** `{ data: QURL[], meta: { has_more: boolean, next_cursor?: string, page_size?: number, request_id?: string } }` — each `data[]` item is the same stable resource shape returned by `get_qurl` minus per-token detail. " +
