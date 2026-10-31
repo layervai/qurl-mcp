@@ -15,6 +15,17 @@ describe("uploadMintOptionsShape", () => {
     expect(uploadMintOptionsSchema.parse(options)).toEqual(options);
   });
 
+  it.each(["1s0.6ns0.6ns", "1.0000000005s", "2.0000000009999999s"])(
+    "accepts %s when Go truncates its components to whole seconds",
+    (session_duration) => {
+      expect(uploadMintOptionsSchema.parse({ session_duration })).toEqual({ session_duration });
+    },
+  );
+
+  it("accepts the maximum expiry with a discarded sub-nanosecond component", () => {
+    expect(uploadMintOptionsSchema.safeParse({ expires_in: "720h0.9ns" }).success).toBe(true);
+  });
+
   it("tolerates null for the rejected options, as some hosts send it", () => {
     expect(
       z.object(uploadMintOptionsShape).safeParse({ access_policy: null, max_sessions: null })
