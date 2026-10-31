@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.3...qurl-mcp-v0.9.0) (2026-10-31)
+
+
+### Features
+
+* allow operators to restrict connector link hosts ([#363](https://github.com/layervai/qurl-mcp/issues/363)) ([5770531](https://github.com/layervai/qurl-mcp/commit/5770531bf3ae15b5eef79bf402080134227d7ee4))
+* **http:** validate hosted OAuth and delegate per user ([#354](https://github.com/layervai/qurl-mcp/issues/354)) ([2f11077](https://github.com/layervai/qurl-mcp/commit/2f11077d51ce7c4dc9356ef90095f4ce64eb2a43))
+* mint file links from stored uploads without uploading again ([#364](https://github.com/layervai/qurl-mcp/issues/364)) ([4ad14ad](https://github.com/layervai/qurl-mcp/commit/4ad14ad7c496b671f0af66111d1981be1c02c6da))
+* **tools:** send MCP feedback to Slack for human review ([#369](https://github.com/layervai/qurl-mcp/issues/369)) ([c5fa8e7](https://github.com/layervai/qurl-mcp/commit/c5fa8e71df16ac1bf022ff0bf86f0d8011ac6521))
+
+
+### Bug Fixes
+
+* **http:** separate OAuth access reads from changes ([#356](https://github.com/layervai/qurl-mcp/issues/356)) ([0112567](https://github.com/layervai/qurl-mcp/commit/01125674e5a4f039414465ca7ff4da637de53a60))
+* match producer duration precision and add contract corpus ([#368](https://github.com/layervai/qurl-mcp/issues/368)) ([abf2ca5](https://github.com/layervai/qurl-mcp/commit/abf2ca53875deb87ea8a310777a72fcb5951663a))
+* report status coercion while preserving tool schemas ([#361](https://github.com/layervai/qurl-mcp/issues/361)) ([244490d](https://github.com/layervai/qurl-mcp/commit/244490d1d8337dd4acb12cecb199599a10f2951c))
+
 ## [0.8.3](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.2...qurl-mcp-v0.8.3) (2026-10-25)
 
 
