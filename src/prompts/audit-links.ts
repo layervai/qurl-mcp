@@ -15,7 +15,7 @@ export function auditLinksPrompt() {
               text: [
                 "Audit my active qURL links. Follow these steps:",
                 "",
-                "1. Use the list_qurls tool to fetch all active qURLs.",
+                '1. Use list_qurls with status: "active". While meta.has_more is true, pass meta.next_cursor as cursor and keep the same filters to fetch every page.',
                 "2. For each qURL, collect facts:",
                 "   - Is it expiring within the next 24 hours? (flag as expiring-soon)",
                 "   - How many access tokens does it have (qurl_count)?",
