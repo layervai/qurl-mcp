@@ -243,6 +243,11 @@ describe("TDQS tool metadata coverage", () => {
       expect(description).toContain("Filters AND together");
       expect(parameters).toContain("Defaults to created_at:desc");
       expect(description).toContain("Sort defaults to `created_at:desc`");
+      expect(parameters).toContain("A field without a direction uses asc");
+      expect(listQurlsSchema.shape.sort.description).toContain(
+        "A field without a direction uses asc",
+      );
+      expect(description).toContain("A field without a direction uses asc");
       const deletion = tools.find((tool) => tool.name === "delete_qurl")!.description;
       expect(deletion).toContain('use `status: "revoked"`');
       expect(deletion).not.toContain("By default the resource is excluded");

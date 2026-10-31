@@ -55,7 +55,7 @@ export const listQurlsSchema = z.object({
     .optional()
     .describe(
       "Sort field and direction as 'field:direction'. " +
-        "Valid fields: created_at, expires_at. Valid directions: asc, desc (default desc). " +
+        "Valid fields: created_at, expires_at. Valid directions: asc, desc. A field without a direction uses asc. " +
         "Example: 'created_at:desc'.",
     ),
   q: z.string().min(1).optional().describe("Search query (searches description and target_url)"),
@@ -81,7 +81,7 @@ export function listQurlsTool(
       "Omitting status applies no status filter: active and revoked resources may both be returned. " +
       "Pass `status: 'active'` or `status: 'revoked'` to select one status. " +
       "A past resource expires_at does not change its status; individual access tokens can expire. `status: 'expired'` is not a valid resource filter. " +
-      "Sort defaults to `created_at:desc`; override with `sort: 'expires_at:asc'` etc. " +
+      "Sort defaults to `created_at:desc`. A field without a direction uses asc. Override with `sort: 'expires_at:asc'` etc. " +
       "**Returns:** `{ data: QURL[], meta: { has_more: boolean, next_cursor?: string, page_size?: number, request_id?: string } }` — each `data[]` item is the same stable resource shape returned by `get_qurl` minus per-token detail. " +
       'Example: `list_qurls({ status: "active", sort: "expires_at:asc", limit: 10 })` returns the 10 active qURLs expiring soonest.',
     inputSchema: listQurlsSchema,

@@ -603,7 +603,7 @@ paths:
           description: |
             Sort field and direction (field:direction). Defaults to created_at:desc.
             Valid fields: created_at, expires_at.
-            Direction: asc or desc (default: desc).
+            Direction: asc or desc. A field without a direction uses asc.
             Sort order is consistent across pages.
           schema:
             type: string
