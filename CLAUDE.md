@@ -160,7 +160,9 @@ SMTP, upload-limit, proxy, session, and public-page settings.
 Without an account (stdio with no `QURL_API_KEY`), the server drives the locally
 installed `qurl` CLI and lists only the tools in `src/tools/local-cli.ts`:
 `publish_crid`, `share_by_crid`, `list_crids`, `manage_crid_requests`,
-`manage_crid_access`, `set_crid_sharing`, `delete_crid`.
+`manage_crid_access`, `set_crid_sharing`, `delete_crid`. The optional
+`submit_feedback` tool sends authorized reports to LayerV; set
+`QURL_MCP_FEEDBACK=off` to disable it.
 
 ```json
 {
@@ -184,6 +186,7 @@ OAuth separates access reads from writes. Existing API-key and local clients kee
 | ------------------------- | -------------- | ------------------------------------------------------- |
 | `create_qurl`             | `qurl:write`   | Create a protected link                                 |
 | `publish_crid`            | `qurl:write`   | Publish a private URL CRID                              |
+| `submit_feedback`         | None           | Send a brief report to LayerV Slack for human review     |
 | `manage_crid_access`      | `qurl:write` | Change private policy, invitations and grants (OAuth) |
 | `list_crid_access`        | `qurl:read` | List private invitations and grants (OAuth only) |
 | `resolve_qurl`            | `qurl:resolve` | Resolve token + grant network access                    |
@@ -302,4 +305,11 @@ create another link. The package now uses the published SDK 3.0.0.
 
 - Never commit API keys or secrets
 - `QURL_API_KEY` is passed via environment variable, never hardcoded
-- The client only communicates with the configured `QURL_API_URL` endpoint
+- Resource API calls use the configured `QURL_API_URL`. Explicit `submit_feedback`
+  calls send reports to `https://mcp.connector.layerv.ai/feedback`; set
+  `QURL_MCP_FEEDBACK=off` to disable them.
+
+Feedback is implemented by `src/http-feedback.ts`, `src/services/feedback.ts`, and
+`src/tools/submit-feedback.ts`. The hosted operator sets the secret environment
+variable `MCP_FEEDBACK_SLACK_WEBHOOK_URL`; clients never need it. Local CLI mode
+also exposes `submit_feedback`, which sends authorized reports to LayerV.

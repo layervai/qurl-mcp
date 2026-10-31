@@ -12,6 +12,7 @@ describe("createLocalCliServer", () => {
   let fake: FakeQurl | undefined;
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await client?.close();
     await server?.close();
     fake?.cleanup();
@@ -27,7 +28,7 @@ describe("createLocalCliServer", () => {
     return client;
   }
 
-  it("lists only the tools that work through the local CLI", async () => {
+  it("lists CLI tools and the feedback tool", async () => {
     const mcp = await connect(new QurlCli({ env: { PATH: "" }, fallbackDirs: [] }));
 
     const { tools } = await mcp.listTools();
@@ -40,11 +41,17 @@ describe("createLocalCliServer", () => {
       "publish_crid",
       "set_crid_sharing",
       "share_by_crid",
+      "submit_feedback",
     ]);
     expect(mcp.getServerCapabilities()?.resources).toBeUndefined();
     expect(mcp.getServerCapabilities()?.prompts).toBeUndefined();
   });
 
+  it("hides feedback in no-account mode when opted out", async () => {
+    vi.stubEnv("QURL_MCP_FEEDBACK", "off");
+    const mcp = await connect(new QurlCli({ env: { PATH: "" }, fallbackDirs: [] }));
+    expect((await mcp.listTools()).tools.map((tool) => tool.name)).not.toContain("submit_feedback");
+  });
   it("tells the client it runs without an account, so the agent can say so", async () => {
     const mcp = await connect(new QurlCli({ env: { PATH: "" }, fallbackDirs: [] }));
 

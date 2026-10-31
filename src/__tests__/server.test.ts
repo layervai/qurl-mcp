@@ -59,6 +59,7 @@ describe("createServer", () => {
         "resolve_qurl",
         "revoke_qurl_token",
         "share_by_crid",
+        "submit_feedback",
         "terminate_qurl_sessions",
         "update_qurl",
         "update_qurl_token",
@@ -69,6 +70,10 @@ describe("createServer", () => {
     });
 
     it("registers http tools with correct names", async () => {
+      vi.stubEnv(
+        "MCP_FEEDBACK_SLACK_WEBHOOK_URL",
+        "https://hooks.slack.com/services/TEST/CHANNEL/secret",
+      );
       const mockClient = makeMockClient();
       server = createServer(mockClient, "0.1.0", "http", undefined, { uploads: true, email: true });
 
@@ -96,6 +101,7 @@ describe("createServer", () => {
         "resolve_qurl",
         "revoke_qurl_token",
         "share_by_crid",
+        "submit_feedback",
         "terminate_qurl_sessions",
         "update_qurl",
         "update_qurl_token",
@@ -104,6 +110,24 @@ describe("createServer", () => {
       ]);
     });
 
+    it("hides feedback for self-hosted HTTP without a webhook", async () => {
+      vi.stubEnv("MCP_FEEDBACK_SLACK_WEBHOOK_URL", "");
+      server = createServer(makeMockClient(), "test", "http");
+      const [a, b] = InMemoryTransport.createLinkedPair();
+      await server.connect(b);
+      client = new Client({ name: "test", version: "1" });
+      await client.connect(a);
+      expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain(
+        "submit_feedback",
+      );
+    });
+    it("hides outbound feedback when the operator opts out", async () => {
+      vi.stubEnv("QURL_MCP_FEEDBACK", "off");
+      const { client } = await connectServer();
+      expect((await client.listTools()).tools.map((tool) => tool.name)).not.toContain(
+        "submit_feedback",
+      );
+    });
     it("each tool has a description", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();

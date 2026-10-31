@@ -199,6 +199,7 @@ export function createHostedOAuth(
 }
 
 const TOOL_SCOPES: Record<string, string[]> = {
+  submit_feedback: [],
   publish_crid: ["qurl:write"],
   manage_crid_access: ["qurl:write"],
   list_crid_access: ["qurl:read"],

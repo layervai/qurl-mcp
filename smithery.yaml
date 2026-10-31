@@ -3,6 +3,10 @@ startCommand:
   configSchema:
     type: object
     properties:
+      qurlMcpFeedback:
+        type: string
+        description: Set to off to hide and disable outbound LayerV product feedback.
+        default: 'on'
       qurlApiKey:
         type: string
         # JSON Schema's `format: password` is the standard convention for
@@ -75,6 +79,7 @@ startCommand:
       command: 'npx',
       args: ['-y', '@layervai/qurl-mcp'],
       env: Object.fromEntries(Object.entries({
+        QURL_MCP_FEEDBACK: config.qurlMcpFeedback || 'on',
         QURL_API_KEY: config.qurlApiKey,
         QURL_API_URL: config.qurlApiUrl || 'https://api.layerv.ai',
         QURL_CONNECTOR_URL: config.qurlConnectorUrl,

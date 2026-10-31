@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  FEEDBACK_HTTP_PATH,
   HEALTH_HTTP_PATH,
   LEGAL_HTTP_PATH_PREFIX,
   MCP_HTTP_PATH,
@@ -11,6 +12,7 @@ describe("HTTP route constants", () => {
   it("keeps every reserved public prefix derived from the protected routes", () => {
     expect(RESERVED_PUBLIC_PATH_PREFIXES).toEqual([
       MCP_HTTP_PATH,
+      FEEDBACK_HTTP_PATH,
       HEALTH_HTTP_PATH,
       LEGAL_HTTP_PATH_PREFIX,
       OAUTH_RESOURCE_METADATA_PATH,

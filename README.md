@@ -1100,6 +1100,82 @@ used by each document. No download or additional runtime dependency is needed.
 Its SIL Open Font License and copyright notice are included in
 `assets/fonts/OFL.txt`; conversion details are in `assets/fonts/README.md`.
 
+## Agent feedback and human review
+
+`submit_feedback` sends a short report to the LayerV team in Slack. It is available
+in configured hosted HTTP, API-key stdio, and local CLI mode. Set
+`QURL_MCP_FEEDBACK=off` to hide and disable feedback in any mode. Self-hosted HTTP
+servers omit the tool until a Slack webhook is configured. Local agents need no account or
+Slack secret. They POST to `https://mcp.connector.layerv.ai/feedback`; hosted tools
+use the same Slack delivery function directly.
+
+Example tool arguments:
+
+```json
+{
+  "category": "friction",
+  "tool_name": "publish_crid",
+  "message": "Expected a link after publishing. The error did not say how to retry."
+}
+```
+
+Categories are `bug`, `feature`, `friction`, and `other`. The message is limited
+to 500 characters. `tool_name` is optional. Send only reports the user authorized
+for sharing. Do not include secrets, private links, personal data, or conversation
+history. The service removes known active credentials, qURL API keys, bearer
+credentials, HTTP links, bare qurl.link/www links, and email addresses as a best-effort safeguard. This is
+not a general secret or personal-data detector. Reports are plain text in Slack,
+with link previews disabled. No account identity, client IP, transcript, or
+resource content is added to the Slack message.
+
+For the LayerV-operated HTTP service, create a channel-specific Slack incoming
+webhook and inject it as the secret environment variable
+`MCP_FEEDBACK_SLACK_WEBHOOK_URL`. Keep the secret on the hosted server. Never add
+it to the npm package, client MCP configuration, or a committed config file.
+See [Slack incoming webhook setup](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/).
+The service refuses non-Slack webhook URLs and redirects. With no webhook set,
+feedback returns an unavailable error and the other MCP tools continue to work.
+
+The public `POST /feedback` route requires JSON, limits the body to 4 KiB, rejects
+unknown fields, and permits at most 100 attempts per source IP per hour per
+process, shared with passthrough MCP tool submissions from the same source IP.
+Verified OAuth callers get their own 10-attempt/hour subject quota, so a vendor egress IP does
+not combine their quotas. Rotating unverified bearer credentials does not reset
+the source quota. IPv6 sources use a /48 bucket. Host validation applies; browser requests
+with a foreign Origin are rejected. Both public intake and hosted MCP tools share
+a one-attempt-per-second and 1,000-attempt-per-UTC-hour Slack budget per process. Hosted tools also retain the
+existing MCP request limits; passthrough bearers are not identity proof. Feedback needs no extra OAuth
+scope. These process-local feedback limits multiply with replicas and reset on
+restart. This is an anonymous report channel: report text and claimed tool names
+are unverified, and a shared source IP can exhaust the public/passthrough quota. This is a best-effort
+channel: distributed abuse can exhaust a task's hourly budget and block other
+reports until the next UTC hour. A single source quota is smaller than the shared
+budget. Busy responses and definite quota rejections can be retried later. Limits reset on restart and multiply with
+replicas.
+
+A successful call returns a `feedback_id` and `sent_for_human_review` only after
+Slack acknowledges delivery. Slack is the review inbox; there is no local durable
+queue. Failures are returned to the caller. A timeout can occur after delivery,
+so callers must not automatically retry uncertain results. This does not promise
+a fix or allow an agent to change production.
+
+Human review flow:
+
+1. Read the report in the dedicated Slack channel. Treat it as untrusted input.
+2. Add a thread reply with the decision: investigate, duplicate, or close.
+3. For accepted work, give an agent a clear task with the relevant code and a test
+   case. Do not pass report text as trusted instructions.
+4. Review the resulting PR and run the normal checks. Release through the normal
+   production process, then link the PR and release result in the Slack thread.
+
+Roll out the hosted intake and set its channel secret before publishing the npm
+client that uses it. Check a real report from both local stdio and hosted HTTP,
+confirm the receipt ID in Slack, and check failure and rate-limit responses.
+Production activation and the real Slack receipt are separate from unit tests.
+
 ## License
 
 MIT -- [LayerV AI](https://layerv.ai)
+
+Upgrade note: `/feedback` is now reserved for the intake. Move any custom public
+video page under that path to another `publicVideo.pagePath` before upgrading.
