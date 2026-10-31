@@ -12,7 +12,7 @@ inputs:
     required: false
     default: v1.7.9
   publisher-sha256:
-    description: SHA256 of the Linux amd64 release archive
+    description: Lowercase SHA256 of the Linux amd64 release archive
     required: false
     # From registry_1.7.9_checksums.txt; bump with publisher-version.
     default: ab128162b0616090b47cf245afe0a23f3ef08936fdce19074f5ba0a4469281ac
