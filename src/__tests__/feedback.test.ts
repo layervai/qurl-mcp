@@ -6,7 +6,12 @@ import express from "express";
 import { createServer, type Server } from "node:http";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { registerFeedbackRoute } from "../http-feedback.js";
-import { deliverFeedback, feedbackWebhookUrl, FEEDBACK_URL } from "../services/feedback.js";
+import {
+  deliverFeedback,
+  feedbackWebhookUrl,
+  redactFeedbackMessage,
+  FEEDBACK_URL,
+} from "../services/feedback.js";
 import { submitFeedbackTool } from "../tools/submit-feedback.js";
 
 const webhook = "https://hooks.slack.com/services/TEST/CHANNEL/secret";
@@ -62,6 +67,12 @@ async function start(withVerifiedSubjects = false) {
   return `http://127.0.0.1:${address.port}/feedback`;
 }
 describe("feedback delivery", () => {
+  it("keeps package versions while removing email addresses", () => {
+    expect(redactFeedbackMessage("qurl-mcp@1.4.0 @layervai/qurl@3.0.0 alice@example.com")).toBe(
+      "qurl-mcp@1.4.0 @layervai/qurl@3.0.0 [email removed]",
+    );
+  });
+
   it("posts plain text to the operator channel and returns a receipt only after acknowledgement", async () => {
     vi.stubEnv("QURL_API_KEY", "test-account-secret");
     const fetchMock = vi.fn().mockResolvedValue(new Response("ok"));

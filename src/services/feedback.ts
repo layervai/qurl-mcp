@@ -148,6 +148,6 @@ export async function readFeedbackResponseText(response: Response, limit: number
 export function redactFeedbackMessage(message: string): string {
   return sanitizeLogValue(message)
     .replace(/(?:https?:\/\/|(?:\bwww\.|(?:[a-z0-9-]+\.)*qurl\.link\/))\S+/gi, "[link removed]")
-    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[email removed]")
+    .replace(/[^\s@]+@[^\s@]+\.[A-Za-z]{2,}\b/g, "[email removed]")
     .slice(0, 500);
 }
