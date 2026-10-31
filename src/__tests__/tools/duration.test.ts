@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   durationSchema,
   MAX_EXPIRY_MS,
+  MAX_SESSION_MS,
+  MIN_SESSION_MS,
   MIN_EXPIRY_MS,
   parseDurationMs,
 } from "../../tools/duration.js";
@@ -9,6 +12,10 @@ import {
 describe("parseDurationMs", () => {
   it.each([
     ["30m", 1_800_000],
+    ["1s0.6ns0.6ns", 1000],
+    ["1.0000000005s", 1000],
+    ["2.0000000009999999s", 2000],
+    ["720h0.9ns", 30 * 86_400_000],
     ["24h", 86_400_000],
     ["1h30m", 5_400_000],
     ["1.5h", 5_400_000],
@@ -70,5 +77,44 @@ describe("durationSchema", () => {
     expect(expiry.safeParse("31d").error?.issues.map((issue) => issue.message)).toEqual([
       "Duration must be 1m to 30d",
     ]);
+  });
+});
+
+// The producer's weekly/PR workflow checks these same public data against real Go code.
+const producerContract = JSON.parse(
+  readFileSync(new URL("../../../api-spec/duration-contract.json", import.meta.url), "utf8"),
+) as {
+  format_version: number;
+  producer_parser_sha256: string;
+  stdlib_parser_sha256: string;
+  min_expiry_ms: number;
+  max_expiry_ms: number;
+  min_session_ms: number;
+  max_session_ms: number;
+  cases: { input: string; upstream_ms: number | null; mcp_ms: number | null }[];
+};
+
+describe("producer duration contract", () => {
+  it("pins the grammar algorithms and all four service bounds", () => {
+    expect(producerContract.format_version).toBe(1);
+    expect(producerContract.producer_parser_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(producerContract.stdlib_parser_sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect([MIN_EXPIRY_MS, MAX_EXPIRY_MS, MIN_SESSION_MS, MAX_SESSION_MS]).toEqual([
+      producerContract.min_expiry_ms,
+      producerContract.max_expiry_ms,
+      producerContract.min_session_ms,
+      producerContract.max_session_ms,
+    ]);
+    expect(producerContract.cases.length).toBeGreaterThan(0);
+    expect(new Set(producerContract.cases.map((entry) => entry.input)).size).toBe(
+      producerContract.cases.length,
+    );
+  });
+
+  it.each(producerContract.cases)("matches the producer corpus for $input", (entry) => {
+    const value = parseDurationMs(entry.input) ?? null;
+    expect(value).toBe(entry.mcp_ms);
+    if (value !== null && value >= 0 && value <= MAX_EXPIRY_MS)
+      expect(value).toBe(entry.upstream_ms);
   });
 });

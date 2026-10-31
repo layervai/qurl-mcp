@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Accepts a safe subset of qurl-service's duration grammar (no sign, leading
-// dot, or U+03BC mu): whole days/weeks ("7d", "1w") or a
+// or trailing dot, or U+03BC mu): whole days/weeks ("7d", "1w") or a
 // Go duration ("30m", "1h30m", "1.5h"). Each repetition must end in a unit,
 // so matching is linear; durationSchema's .max(32) bounds the input as well.
 const DURATION_PATTERN = /^(?:\d+[dw]|(?:\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+)$/;
@@ -27,9 +27,25 @@ export function parseDurationMs(value: string): number | undefined {
   if (whole) return Number(whole[1]) * (whole[2] === "d" ? 86_400_000 : 604_800_000);
   let totalNs = 0;
   for (const [, amount, unit] of value.matchAll(/(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g)) {
-    totalNs += Number(amount) * GO_DURATION_UNIT_NS[unit as keyof typeof GO_DURATION_UNIT_NS];
+    const unitNs = GO_DURATION_UNIT_NS[unit as keyof typeof GO_DURATION_UNIT_NS];
+    const [integer, fraction = ""] = amount.split(".");
+    totalNs += Number(integer) * unitNs + fractionNanoseconds(fraction, unitNs);
   }
   return totalNs / 1e6;
+}
+
+// Match Go's leadingFraction cutoff and float conversion, then truncate each component.
+function fractionNanoseconds(digits: string, unitNs: number): number {
+  let fraction = 0n;
+  let scale = 1;
+  for (const digit of digits) {
+    if (fraction > ((1n << 63n) - 1n) / 10n) break;
+    const next = fraction * 10n + BigInt(digit);
+    if (next > 1n << 63n) break;
+    fraction = next;
+    scale *= 10;
+  }
+  return Math.trunc(Number(fraction) * (unitNs / scale));
 }
 
 // Bounds mirror qurl-service so an out-of-range value fails before any side
@@ -69,8 +85,6 @@ export const MIN_EXPIRY_MS = 60_000;
 // every customer plan (get_quota's max_expiry_seconds reports the same value).
 export const MAX_EXPIRY_MS = 30 * 86_400_000;
 
-// MAX_SESSION_MS mirrors validation.MaxSessionDuration (24h). MIN_SESSION_MS is
-// an MCP-local floor with no service counterpart: a sub-second session expires
-// on arrival.
+// Session bounds mirror validation.MinSessionDuration and MaxSessionDuration.
 export const MIN_SESSION_MS = 1_000;
 export const MAX_SESSION_MS = 86_400_000;
