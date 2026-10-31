@@ -473,6 +473,8 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       const cleanup = setup?.();
 
       try {
+        const parsedInput = tool.inputSchema.parse(input);
+        expect(tool.inputSchema.parse(parsedInput)).toEqual(parsedInput);
         const result = await tool.handler(input);
 
         expect(result.structuredContent).toBeDefined();
