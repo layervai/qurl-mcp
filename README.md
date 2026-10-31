@@ -68,6 +68,7 @@ Upload tools are not listed in no-account local mode. Choose the tool for the tr
 | --- | --- | --- |
 | A PDF or supported raster image on the local MCP server host | `upload_file_qurl` | Available in stdio mode; the host process must be allowed to read the selected file. |
 | PDF or image bytes supplied to an HTTP or stdio MCP client | `upload_file_data_qurl` | Supply the supported file as base64 data with the correct filename and media type. |
+| A file already stored by an upload tool | `mint_uploaded_file_link` | Reuse its resource ID to mint a fresh link without another upload. |
 | Text to share as a generated PDF | `upload_text_qurl` | Uses the configured upload service, rather than publishing a local app. |
 
 A stdio tool argument example:
@@ -334,6 +335,7 @@ operation with a new key, so repeating `create_qurl`, `batch_create_qurls`, or
 | `upload_file_qurl`      | `stdio`      | Upload a local file and mint a qURL        |
 | `upload_file_data_qurl` | `stdio`/HTTP | Upload base64 file content and mint a qURL |
 | `upload_text_qurl`      | `stdio`/HTTP | Upload text content and mint a qURL        |
+| `mint_uploaded_file_link` | `stdio`/HTTP | Mint a link for a stored upload without uploading bytes again |
 
 `upload_file_qurl` is intentionally stdio-only. It can read any supported
 PDF/image that the local MCP process user can access, so agents should invoke
@@ -344,10 +346,18 @@ whose filesystem access is limited to intended shareable content. HTTP mode
 never registers this host-file tool.
 The byte/text tools are also available in stdio so local clients can share
 in-chat attachments without first materializing them at a known host path.
+To recover after a successful upload but a failed mint, keep the returned
+`resource_id` and call `mint_uploaded_file_link`. This makes one mint attempt
+without uploading the file again. Each call can create a new live link. A timed-out
+or failed prior mint may already have created one, so reconcile that result before
+retrying automatically. Existing links are not cancelled. The response contains
+the new link and its expiry status.
+
 Connector upload and link minting are separate operations. The link comes from
 the connector's `POST /api/mint_link/:resource_id` (in tunnel mode, a
 per-recipient watermarked view), not from qURL `mint_link`, so uploaded files
-cannot be re-linked with `mint_link`; run the upload tool again. Upload links
+cannot be re-linked with `mint_link`. Use `mint_uploaded_file_link` with the
+saved `resource_id` instead. Upload links
 support `expires_in` (1m-30d, converted to an absolute expiry on the MCP host's
 clock, so a host clock that is off shortens or lengthens the link; a link whose returned expiry
 is already past by this host's clock is returned with `expires_at_already_past`), `one_time_use`, and `session_duration` (whole seconds, up to 24h); `access_policy` and

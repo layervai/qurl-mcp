@@ -192,6 +192,7 @@ OAuth separates access reads from writes. Existing API-key and local clients kee
 | `update_qurl`             | `qurl:write`   | Update expiration, tags, description                    |
 | `share_by_crid`           | `qurl:resolve` | Mint a temporary link from a resource CRID              |
 | `mint_link`               | `qurl:write`   | Mint a new access link for an existing resource         |
+| `mint_uploaded_file_link` | `qurl:write` | Mint another link for a stored upload without uploading again |
 | `batch_create_qurls`      | `qurl:write`   | Create multiple qURLs at once                           |
 | `revoke_qurl_token`       | `qurl:write`   | Revoke one access token                                 |
 | `update_qurl_token`       | `qurl:write`   | Update one access token                                 |

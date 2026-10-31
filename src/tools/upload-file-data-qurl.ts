@@ -221,7 +221,7 @@ export function uploadFileDataQurlTool(
       "Upload base64-encoded PDF or raster image content to a qURL connector, then mint an access link for it. " +
       "This is the correct tool for a single in-chat image, PDF, or file attachment in either MCP transport, especially when the user wants 'the qURL of this image/file' or wants the generated link emailed. " +
       "Use this when you have the file data available but cannot provide a server-local file path. " +
-      "Use `upload_file_qurl` when the file already exists on the MCP server host, use `create_qurl` when you already have a URL. Each call uploads the file again and returns one new link; `mint_link` cannot re-link an uploaded file. " +
+      "Use `upload_file_qurl` when the file already exists on the MCP server host, use `create_qurl` when you already have a URL. Each call uploads the file again and returns one new link; `mint_link` cannot re-link an uploaded file. Use `mint_uploaded_file_link` with a saved resource_id to mint another link without uploading again. " +
       "For compressible images, compress them before converting to base64 so the request is smaller and more reliable. " +
       "When the server upload limit is configured above 10 MB, a fresh HTTP session must complete a smaller qURL API call (e.g. `list_qurls`) before its first larger upload; a smaller completed upload also counts. " +
       "The tool decodes `file_base64`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. " +

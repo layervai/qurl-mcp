@@ -12,6 +12,7 @@ import { getQurlTool } from "../tools/get-qurl.js";
 import { listQurlsTool } from "../tools/list-qurls.js";
 import { listQurlSessionsTool } from "../tools/list-qurl-sessions.js";
 import { mintLinkTool } from "../tools/mint-link.js";
+import { mintUploadedFileLinkTool } from "../tools/mint-uploaded-file-link.js";
 import { resolveQurlTool } from "../tools/resolve-qurl.js";
 import { shareByCRIDTool } from "../tools/share-by-crid.js";
 import { revokeQurlTokenTool } from "../tools/revoke-qurl-token.js";
@@ -150,6 +151,12 @@ const toolCases: ToolCase[] = [
     build: terminateQurlSessionsTool,
     stubs: ["terminateAllResourceSessions"],
     input: { resource_id: "r_test1234567" },
+  },
+  {
+    name: "mint_uploaded_file_link",
+    build: mintUploadedFileLinkTool,
+    stubs: [],
+    input: { resource_id: "r_upload12345" },
   },
   {
     name: "upload_file_qurl",

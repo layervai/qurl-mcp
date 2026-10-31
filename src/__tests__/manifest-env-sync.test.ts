@@ -71,7 +71,12 @@ describe("published stdio environment manifests", () => {
   });
 
   it("keeps Claude guidance current for upload tools and configuration families", () => {
-    for (const tool of ["upload_file_qurl", "upload_file_data_qurl", "upload_text_qurl"]) {
+    for (const tool of [
+      "upload_file_qurl",
+      "upload_file_data_qurl",
+      "upload_text_qurl",
+      "mint_uploaded_file_link",
+    ]) {
       expect(claudeGuidance).toContain(`| \`${tool}\``);
     }
     for (const variable of [

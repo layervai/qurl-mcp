@@ -138,7 +138,7 @@ describe("hosted OAuth HTTP boundary", () => {
       }),
     );
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(19);
+    expect(tools).toHaveLength(20);
     for (const tool of tools) {
       if (!tool.annotations?.readOnlyHint)
         expect(tool.annotations?.destructiveHint, tool.name).toBe(true);
@@ -177,6 +177,14 @@ describe("hosted OAuth HTTP boundary", () => {
     });
     expect(denied.isError).toBe(true);
     expect(denied._meta?.["mcp/www_authenticate"]).toEqual([
+      expect.stringContaining('scope="qurl:write"'),
+    ]);
+    const deniedFileMint = await client.callTool({
+      name: "mint_uploaded_file_link",
+      arguments: { resource_id: "r_upload12345" },
+    });
+    expect(deniedFileMint.isError).toBe(true);
+    expect(deniedFileMint._meta?.["mcp/www_authenticate"]).toEqual([
       expect.stringContaining('scope="qurl:write"'),
     ]);
     expect(mock.deleteQURL).not.toHaveBeenCalled();

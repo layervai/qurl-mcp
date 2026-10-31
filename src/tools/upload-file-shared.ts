@@ -511,7 +511,7 @@ function mintedLinkFrom(
       (typeof entry === "object" && entry !== null ? entry : {}) as Record<string, unknown>,
   );
   // Use the first deliverable link rather than strictly index 0: a malformed
-  // first entry must not discard a good one, since the file cannot be re-linked.
+  // first entry must not discard a good one or hide a possibly live link.
   // The qurl_id is informational here (it may belong to the connector's
   // resource), so an unexpected or missing ID does not make a working link unusable.
   const connectorIsLoopback = isLoopbackHostname(new URL(connectorUploadUrl).hostname);
@@ -552,6 +552,20 @@ function mintedLinkFrom(
   };
 }
 
+export async function mintUploadedFile(
+  connectorConfig: ConnectorConfig,
+  resourceId: string,
+  file: { name: string; contentType: string; sizeBytes: number },
+  input: UploadMintOptions,
+) {
+  return {
+    ...(await mintUploadedFileLink(connectorConfig, resourceId, input)),
+    file_name: file.name,
+    content_type: file.contentType,
+    size_bytes: file.sizeBytes,
+  };
+}
+
 /**
  * Contract: qurl-s3-connector internal/handler/handler.go MintLink (route in
  * main.go's uploader mode) takes { n, one_time_use, expires_at, session_duration }
@@ -564,10 +578,9 @@ function mintedLinkFrom(
  * never shared there), so minting on it with qurl-service yields a link that
  * opens to a 404.
  */
-export async function mintUploadedFile(
+export async function mintUploadedFileLink(
   connectorConfig: ConnectorConfig,
   resourceId: string,
-  file: { name: string; contentType: string; sizeBytes: number },
   input: UploadMintOptions,
 ) {
   let requestedExpiresAt: string | undefined;
@@ -667,16 +680,15 @@ export async function mintUploadedFile(
     extraQurlIds = result.extraQurlIds;
   } catch (error) {
     if ((error as { neverConnected?: boolean } | null)?.neverConnected) requestSent = false;
-    // The connector API exposes upload but no delete endpoint. Keep the mint
-    // error primary and log the orphan resource for operator cleanup.
+    // Keep the original mint failure visible; no stored file is deleted here.
     console.error(
-      `Connector resource ${resourceId} remains after link minting failed ` +
+      `Connector link mint failed for resource ${resourceId}; stored files were not deleted ` +
         `(requested expires_at=${requestedExpiresAt ?? "connector default"}; ${formatErrorForLog(error)})`,
     );
     throw new QURLAPIError(
       error instanceof QURLAPIError ? error.statusCode : 0,
       "upload_mint_failed",
-      `Upload succeeded but link creation failed` +
+      `File link creation failed` +
         (error instanceof QURLAPIError && error.code === "connector_link_host_not_allowed"
           ? ": the connector link host is not permitted by QURL_LINK_HOSTS/linkHosts"
           : "") +
@@ -684,8 +696,8 @@ export async function mintUploadedFile(
           ? ` (connector responded HTTP ${error.statusCode})`
           : "") +
         `. Resource ID: ${resourceId}. ` +
-        "The stored file remains on the connector and cannot be deleted or re-linked from this tool; " +
-        "do not retry automatically, since each retry stores another copy; tell the user and ask." +
+        "This tool does not delete stored files. For an existing upload, use mint_uploaded_file_link with this resource_id instead of uploading another copy; " +
+        "do not retry automatically after an uncertain mint result; reconcile any prior live link first." +
         (liveLinkCount > 0
           ? ` The connector reported ${liveLinkCount} possibly live link(s) this server refused to return` +
             (liveQurlIds.length > 0
@@ -737,9 +749,6 @@ export async function mintUploadedFile(
           ...(extraQurlIds.length > 0 ? { unexpected_extra_qurl_ids: extraQurlIds } : {}),
         }
       : {}),
-    file_name: file.name,
-    content_type: file.contentType,
-    size_bytes: file.sizeBytes,
   };
 }
 

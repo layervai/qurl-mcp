@@ -668,7 +668,7 @@ describe("resource SDK boundary", () => {
 
     // A link whose expiry is already past by this clock is returned, flagged,
     // not discarded: if this host runs ahead, the link still works, and the
-    // file could never be re-linked.
+    // a replacement could create another live link.
     vi.stubGlobal(
       "fetch",
       mockConnectorFetch(undefined, () =>
