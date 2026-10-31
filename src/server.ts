@@ -51,15 +51,19 @@ type ToolDefinition<S extends z.ZodObject> = {
   handler: (input: z.output<NoInfer<S>>) => Promise<ToolResult>;
 };
 
-type Factory = (client: IQURLClient, runtime: ToolRuntimeOptions) => unknown;
+type RawToolFactory = (client: IQURLClient, runtime: ToolRuntimeOptions) => unknown;
 export type ToolFactory = ((
   client: IQURLClient,
   runtime: ToolRuntimeOptions,
 ) => Omit<ToolDefinition<z.ZodObject>, "handler"> & {
   handler: (input: unknown) => Promise<ToolResult>;
-}) & { source: Factory };
+}) & { source: RawToolFactory };
 
-/** Keep schema/handler types together before erasing heterogeneous inputs. */
+/**
+ * Keep schema/handler types together before erasing heterogeneous inputs.
+ * The SDK parses before dispatch: input schemas must accept their parsed output.
+ * Registered handlers take one input; transport context stays outside this seam.
+ */
 export function defineToolFactory<S extends z.ZodObject>(
   factory: (client: IQURLClient, runtime: ToolRuntimeOptions) => ToolDefinition<S>,
 ): ToolFactory {
