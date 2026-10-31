@@ -1,8 +1,8 @@
 name: Publish to MCP Registry
 description: >
-  Install pinned mcp-publisher, validate server.json, authenticate via
+  Install mcp-publisher (pinned by default, overridable via inputs), validate server.json, authenticate via
   GitHub OIDC, and publish to the MCP Registry. Single source of truth
-  for the publisher version + sha256 — used by both the automatic
+  for the default publisher version + sha256 — used by both the automatic
   release-please publish job and the manual workflow_dispatch escape
   hatch.
 
