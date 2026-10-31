@@ -27,7 +27,12 @@ import { uploadFileDataQurlTool } from "./tools/upload-file-data-qurl.js";
 import { uploadFileQurlTool } from "./tools/upload-file-qurl.js";
 import { uploadTextQurlTool } from "./tools/upload-text-qurl.js";
 import { mintUploadedFileLinkTool } from "./tools/mint-uploaded-file-link.js";
-import type { ToolAnnotations, ToolRuntimeOptions } from "./tools/_shared.js";
+import {
+  zodErrorToToolResult,
+  type ToolResult,
+  type ToolAnnotations,
+  type ToolRuntimeOptions,
+} from "./tools/_shared.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
 import { secureAServicePrompt } from "./prompts/secure-a-service.js";
@@ -36,58 +41,74 @@ import { rotateAccessPrompt } from "./prompts/rotate-access.js";
 import { toolScopes } from "./auth/hosted-oauth.js";
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 
-/**
- * Shape of the object every tool factory returns. Exported so the
- * TDQS-coverage test can iterate the same canonical list without
- * redeclaring the type.
- */
-export type ToolFactory = (
-  client: IQURLClient,
-  // Transport-sensitive tools consume this security context. Other factories
-  // intentionally ignore the required second argument supplied by createServer.
-  runtime: ToolRuntimeOptions,
-) => {
+type ToolDefinition<S extends z.ZodObject> = {
   name: string;
   title: string;
   description: string;
-  inputSchema: z.ZodObject;
+  inputSchema: S;
   outputSchema: z.ZodObject;
   annotations: ToolAnnotations;
-  // Args vary per tool; exact signatures are validated by registerTool at each call site.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: (...args: any[]) => Promise<{
-    content: Array<{ type: "text"; text: string }>;
-    structuredContent?: Record<string, unknown>;
-    isError?: boolean;
-  }>;
+  handler: (input: z.output<NoInfer<S>>) => Promise<ToolResult>;
 };
+
+type RawToolFactory = (client: IQURLClient, runtime: ToolRuntimeOptions) => unknown;
+export type ToolFactory = ((
+  client: IQURLClient,
+  runtime: ToolRuntimeOptions,
+) => Omit<ToolDefinition<z.ZodObject>, "handler"> & {
+  handler: (input: unknown) => Promise<ToolResult>;
+}) & { source: RawToolFactory };
+
+/**
+ * Keep schema/handler types together before erasing heterogeneous inputs.
+ * The SDK parses before dispatch: input schemas must accept their parsed output.
+ * Registered handlers take one input; transport context stays outside this seam.
+ */
+export function defineToolFactory<S extends z.ZodObject>(
+  factory: (client: IQURLClient, runtime: ToolRuntimeOptions) => ToolDefinition<S>,
+): ToolFactory {
+  return Object.assign(
+    (client: IQURLClient, runtime: ToolRuntimeOptions) => {
+      const tool = factory(client, runtime);
+      return {
+        ...tool,
+        handler: async (input: unknown) => {
+          const parsed = await tool.inputSchema.safeParseAsync(input);
+          if (!parsed.success) return zodErrorToToolResult(parsed.error);
+          return tool.handler(parsed.data);
+        },
+      };
+    },
+    { source: factory },
+  );
+}
 
 export type ServerMode = ToolRuntimeOptions["mode"];
 
 const sharedToolFactories = [
-  publishCridTool,
-  manageCridAccessTool,
-  createQurlTool,
-  resolveQurlTool,
-  listQurlsTool,
-  getQurlTool,
-  deleteQurlTool,
-  extendQurlTool,
-  updateQurlTool,
-  mintLinkTool,
-  shareByCRIDTool,
-  batchCreateTool,
-  revokeQurlTokenTool,
-  updateQurlTokenTool,
-  listQurlSessionsTool,
-  terminateQurlSessionsTool,
+  defineToolFactory(publishCridTool),
+  defineToolFactory(manageCridAccessTool),
+  defineToolFactory(createQurlTool),
+  defineToolFactory(resolveQurlTool),
+  defineToolFactory(listQurlsTool),
+  defineToolFactory(getQurlTool),
+  defineToolFactory(deleteQurlTool),
+  defineToolFactory(extendQurlTool),
+  defineToolFactory(updateQurlTool),
+  defineToolFactory(mintLinkTool),
+  defineToolFactory(shareByCRIDTool),
+  defineToolFactory(batchCreateTool),
+  defineToolFactory(revokeQurlTokenTool),
+  defineToolFactory(updateQurlTokenTool),
+  defineToolFactory(listQurlSessionsTool),
+  defineToolFactory(terminateQurlSessionsTool),
 ] satisfies ToolFactory[];
 
 const connectorToolFactories: ToolFactory[] = [
-  uploadFileQurlTool,
-  uploadFileDataQurlTool,
-  uploadTextQurlTool,
-  mintUploadedFileLinkTool,
+  defineToolFactory(uploadFileQurlTool),
+  defineToolFactory(uploadFileDataQurlTool),
+  defineToolFactory(uploadTextQurlTool),
+  defineToolFactory(mintUploadedFileLinkTool),
 ];
 
 export const toolFactories = [
@@ -101,7 +122,7 @@ export function getToolFactoriesForMode(mode: ServerMode): ToolFactory[] {
   // tool's own mkdtemp PDF in HTTP mode. Local stdio callers may use all three
   // upload forms, including caller-chosen paths and base64/text attachments.
   return mode === "http"
-    ? toolFactories.filter((factory) => factory !== uploadFileQurlTool)
+    ? toolFactories.filter((factory) => factory.source !== uploadFileQurlTool)
     : toolFactories;
 }
 
@@ -175,9 +196,11 @@ export function createServer(
   const catalog: ToolFactory[] = capabilities.oauth
     ? [
         ...factories.map((factory) =>
-          factory === manageCridAccessTool ? manageCridAccessWriteTool : factory,
+          factory.source === manageCridAccessTool
+            ? defineToolFactory(manageCridAccessWriteTool)
+            : factory,
         ),
-        listCridAccessTool,
+        defineToolFactory(listCridAccessTool),
       ]
     : factories;
   for (const factory of catalog) {
@@ -209,7 +232,7 @@ export function createServer(
             }
           : {}),
       },
-      async (...args) => {
+      async (input) => {
         const required = oauth ? toolScopes(tool.name) : [];
         if (oauth && !required.every((scope) => oauth.scopes.includes(scope))) {
           return {
@@ -227,7 +250,7 @@ export function createServer(
             },
           };
         }
-        return tool.handler(...args);
+        return tool.handler(input);
       },
     );
   }
