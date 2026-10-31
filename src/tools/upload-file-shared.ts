@@ -53,6 +53,7 @@ type ConnectorUploadResponse = {
 export type ConnectorConfig = {
   apiKey: string;
   uploadUrl: string;
+  linkHosts?: readonly string[];
 };
 
 export function getConnectorConfig(allowServerApiKeyFallback = false): ConnectorConfig {
@@ -84,7 +85,8 @@ export function getConnectorConfig(allowServerApiKeyFallback = false): Connector
   // guarantees the /api/upload suffix the mint route derives from.
   const uploadUrl = getConnectorUploadUrl(connectorURL);
 
-  return { apiKey, uploadUrl };
+  const linkHosts = getRuntimeConfig().linkHosts;
+  return { apiKey, uploadUrl, ...(linkHosts ? { linkHosts } : {}) };
 }
 
 export function getConnectorUploadUrl(connectorURL: string): string {
@@ -395,15 +397,20 @@ function connectorMintUrl(uploadUrl: string, resourceId: string): string {
 }
 
 const MAX_LINK_LENGTH = 8192;
+const DISALLOWED_LINK_HOST = "a link outside the configured host allowlist";
 
 // Why a minted link cannot be returned, or undefined when it can. The link
 // carries an access token and may be emailed, so never plain HTTP, except from
 // a loopback development connector: the same exception the connector URL
-// itself gets in normalizeServiceBaseUrl. The host is deliberately not pinned:
+// itself gets in normalizeServiceBaseUrl. The host is not pinned by default:
 // connector-minted links are served from the qURL link domain, not the
 // connector's own host, and the operator-configured connector is already
 // trusted with the file and the bearer.
-function linkProblem(entry: Record<string, unknown>, connectorIsLoopback: boolean) {
+function linkProblem(
+  entry: Record<string, unknown>,
+  connectorIsLoopback: boolean,
+  linkHosts?: readonly string[],
+) {
   const value = entry.qurl_link;
   if (typeof value !== "string") return "no usable link";
   if (value.length > MAX_LINK_LENGTH) return "an oversized link";
@@ -423,6 +430,7 @@ function linkProblem(entry: Record<string, unknown>, connectorIsLoopback: boolea
   if (!deliverable) {
     return url.protocol === "http:" ? "a non-HTTPS link" : "a non-HTTP(S) link";
   }
+  if (linkHosts && !linkHosts.includes(url.hostname.toLowerCase())) return DISALLOWED_LINK_HOST;
   // An expiry already past by this host's clock is not refused: if this clock
   // runs ahead, the link is still good, and refusing would discard the only
   // handle to a file that cannot be deleted. It is returned with a flag.
@@ -483,9 +491,10 @@ function isPossiblyLiveLink(entry: unknown): boolean {
 function mintedLinkFrom(
   parsed: unknown,
   connectorUploadUrl: string,
+  linkHosts?: readonly string[],
 ):
   | { link: MintedLink; others: unknown[]; extraCount: number; extraQurlIds: string[] }
-  | { problem: string } {
+  | { problem: string; code?: "connector_link_host_not_allowed" } {
   const links = (parsed as { links?: unknown } | undefined)?.links;
   const entries = (Array.isArray(links) ? links : []).map(
     (entry: unknown) =>
@@ -496,7 +505,8 @@ function mintedLinkFrom(
   // The qurl_id is informational here (it may belong to the connector's
   // resource), so an unexpected or missing ID does not make a working link unusable.
   const connectorIsLoopback = isLoopbackHostname(new URL(connectorUploadUrl).hostname);
-  const reasonFor = (entry: Record<string, unknown>) => linkProblem(entry, connectorIsLoopback);
+  const reasonFor = (entry: Record<string, unknown>) =>
+    linkProblem(entry, connectorIsLoopback, linkHosts);
   const problems = entries.map(reasonFor);
   // Prefer a deliverable link that is not already past; fall back to any.
   const firstDeliverable = problems.indexOf(undefined);
@@ -509,6 +519,9 @@ function mintedLinkFrom(
     const reason = reasons || "no usable link";
     return {
       problem: `Connector mint returned ${reason} (links: ${describeLinks(links)}).`,
+      ...(problems.includes(DISALLOWED_LINK_HOST)
+        ? { code: "connector_link_host_not_allowed" as const }
+        : {}),
     };
   }
   const chosen = entries[index];
@@ -623,8 +636,11 @@ export async function mintUploadedFile(
       const reason = detail ? `: ${sanitizeConnectorDetail(detail)}` : "";
       throw unexpected(`Connector mint reported failure${reason}.`);
     }
-    const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl);
-    if ("problem" in result) throw unexpected(result.problem);
+    const result = mintedLinkFrom(parsed, connectorConfig.uploadUrl, connectorConfig.linkHosts);
+    if ("problem" in result) {
+      if (result.code) throw new QURLAPIError(0, result.code, result.problem);
+      throw unexpected(result.problem);
+    }
     // A deliverable mint means qurl-service accepted the forwarded bearer via
     // the operator-configured connector: the same evidence, under the same
     // trust assumption, as a successful direct API call (see QURLClient.call).
@@ -655,6 +671,9 @@ export async function mintUploadedFile(
       error instanceof QURLAPIError ? error.statusCode : 0,
       "upload_mint_failed",
       `Upload succeeded but link creation failed` +
+        (error instanceof QURLAPIError && error.code === "connector_link_host_not_allowed"
+          ? ": the connector link host is not permitted by QURL_LINK_HOSTS/linkHosts"
+          : "") +
         (error instanceof QURLAPIError && error.statusCode > 0
           ? ` (connector responded HTTP ${error.statusCode})`
           : "") +
