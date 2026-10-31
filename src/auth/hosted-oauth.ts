@@ -210,6 +210,7 @@ const TOOL_SCOPES: Record<string, string[]> = {
   extend_qurl: ["qurl:write", "qurl:read"],
   update_qurl: ["qurl:write"],
   mint_link: ["qurl:write"],
+  mint_uploaded_file_link: ["qurl:write"],
   share_by_crid: ["qurl:resolve"],
   batch_create_qurls: ["qurl:write"],
   revoke_qurl_token: ["qurl:write"],

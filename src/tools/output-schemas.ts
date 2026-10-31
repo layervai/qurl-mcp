@@ -248,7 +248,7 @@ export const uploadFileQurlOutputSchema = z.looseObject({
   resource_id: z
     .string()
     .describe(
-      "Stable resource identifier (public key or legacy r_ ID) returned by the connector. Do not pass it to mint_link for another link; run the upload tool again.",
+      "Stable resource identifier (public key or legacy r_ ID) returned by the connector. Use mint_uploaded_file_link to issue another file link without uploading again; do not pass it to mint_link.",
     ),
   qurl_id: z
     .string()
@@ -399,4 +399,11 @@ export const deleteQurlOutputSchema = z.looseObject({
         "Agents that need to distinguish 'I revoked it' from 'it was already gone' should branch on this.",
     ),
   message: z.string().describe("Human-readable confirmation message"),
+});
+
+export const mintedUploadedFileLinkOutputSchema = uploadFileQurlOutputSchema.omit({
+  file_name: true,
+  content_type: true,
+  size_bytes: true,
+  email_delivery: true,
 });

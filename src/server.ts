@@ -26,6 +26,7 @@ import { terminateQurlSessionsTool } from "./tools/terminate-qurl-sessions.js";
 import { uploadFileDataQurlTool } from "./tools/upload-file-data-qurl.js";
 import { uploadFileQurlTool } from "./tools/upload-file-qurl.js";
 import { uploadTextQurlTool } from "./tools/upload-text-qurl.js";
+import { mintUploadedFileLinkTool } from "./tools/mint-uploaded-file-link.js";
 import type { ToolAnnotations, ToolRuntimeOptions } from "./tools/_shared.js";
 import { linksResource } from "./resources/links.js";
 import { usageResource } from "./resources/usage.js";
@@ -82,11 +83,16 @@ const sharedToolFactories = [
   terminateQurlSessionsTool,
 ] satisfies ToolFactory[];
 
-export const toolFactories = [
-  ...sharedToolFactories,
+const connectorToolFactories: ToolFactory[] = [
   uploadFileQurlTool,
   uploadFileDataQurlTool,
   uploadTextQurlTool,
+  mintUploadedFileLinkTool,
+];
+
+export const toolFactories = [
+  ...sharedToolFactories,
+  ...connectorToolFactories,
 ] satisfies ToolFactory[];
 
 export function getToolFactoriesForMode(mode: ServerMode): ToolFactory[] {
@@ -176,7 +182,7 @@ export function createServer(
     : factories;
   for (const factory of catalog) {
     const tool = factory(client, { mode, maxUploadFileDataBytes });
-    if (!capabilities.uploads && tool.name.startsWith("upload_")) continue;
+    if (!capabilities.uploads && connectorToolFactories.includes(factory)) continue;
     const inputSchema =
       !capabilities.email && "email_delivery" in tool.inputSchema.shape
         ? tool.inputSchema.omit({ email_delivery: true })

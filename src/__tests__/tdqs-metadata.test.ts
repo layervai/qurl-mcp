@@ -77,6 +77,7 @@ describe("TDQS tool metadata coverage", () => {
       update_qurl: ["extend_qurl", "delete_qurl"],
       extend_qurl: ["update_qurl"],
       mint_link: ["create_qurl", "update_qurl"],
+      mint_uploaded_file_link: ["mint_link", "upload_file_data_qurl"],
       batch_create_qurls: ["create_qurl"],
       list_qurls: ["get_qurl", "resolve_qurl"],
       create_qurl: ["mint_link", "batch_create_qurls", "update_qurl"],
@@ -313,6 +314,19 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
   const qurlFixture = sampleQURL();
   const uploadFixturePath = resolvePath("src/__tests__/fixtures/sample.pdf");
   const uploadFixtureBase64 = readFileSync(uploadFixturePath).toString("base64");
+  const setupConnectorFixture = () => {
+    const originalApiKey = process.env.QURL_API_KEY;
+    const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
+    const originalFetch = globalThis.fetch;
+    process.env.QURL_API_KEY = "lv_live_test";
+    process.env.QURL_CONNECTOR_URL = "https://connector.test";
+    globalThis.fetch = mockConnectorFetch();
+    return () => {
+      process.env.QURL_API_KEY = originalApiKey;
+      process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
+      globalThis.fetch = originalFetch;
+    };
+  };
   const cases: Record<string, Case> = {
     publish_crid: {
       input: { target_url: "https://example.com", policy: { mode: "invite_only", version: 1 } },
@@ -419,6 +433,11 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
         }),
       },
     },
+    mint_uploaded_file_link: {
+      input: { resource_id: "r_upload12345" },
+      clientOverrides: {},
+      setup: setupConnectorFixture,
+    },
     upload_file_data_qurl: {
       input: {
         file_base64: uploadFixtureBase64,
@@ -426,19 +445,7 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
         content_type: "application/pdf",
       },
       clientOverrides: {},
-      setup: () => {
-        const originalApiKey = process.env.QURL_API_KEY;
-        const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
-        const originalFetch = globalThis.fetch;
-        process.env.QURL_API_KEY = "lv_live_test";
-        process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = mockConnectorFetch();
-        return () => {
-          process.env.QURL_API_KEY = originalApiKey;
-          process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
-          globalThis.fetch = originalFetch;
-        };
-      },
+      setup: setupConnectorFixture,
     },
     upload_text_qurl: {
       input: {
@@ -447,36 +454,12 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
         file_name: "sample.txt",
       },
       clientOverrides: {},
-      setup: () => {
-        const originalApiKey = process.env.QURL_API_KEY;
-        const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
-        const originalFetch = globalThis.fetch;
-        process.env.QURL_API_KEY = "lv_live_test";
-        process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = mockConnectorFetch();
-        return () => {
-          process.env.QURL_API_KEY = originalApiKey;
-          process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
-          globalThis.fetch = originalFetch;
-        };
-      },
+      setup: setupConnectorFixture,
     },
     upload_file_qurl: {
       input: { file_path: uploadFixturePath },
       clientOverrides: {},
-      setup: () => {
-        const originalApiKey = process.env.QURL_API_KEY;
-        const originalConnectorUrl = process.env.QURL_CONNECTOR_URL;
-        const originalFetch = globalThis.fetch;
-        process.env.QURL_API_KEY = "lv_live_test";
-        process.env.QURL_CONNECTOR_URL = "https://connector.test";
-        globalThis.fetch = mockConnectorFetch();
-        return () => {
-          process.env.QURL_API_KEY = originalApiKey;
-          process.env.QURL_CONNECTOR_URL = originalConnectorUrl;
-          globalThis.fetch = originalFetch;
-        };
-      },
+      setup: setupConnectorFixture,
     },
   };
 

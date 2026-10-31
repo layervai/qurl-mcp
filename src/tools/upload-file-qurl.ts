@@ -195,7 +195,7 @@ export function uploadFileQurlTool(
       "Use this when the content already exists on the MCP server host and you need a shareable file qURL rather than a proxy to an existing website URL. " +
       "This stdio-only tool can read any supported file that the local MCP process user can access; invoke it only for a path the user explicitly chose to share. " +
       "Deploy stdio under a restricted OS account or container whose readable files are limited to intended shareable content. " +
-      "Use `create_qurl` when you already have a URL. Each call uploads the file again and returns one new link; `mint_link` cannot re-link an uploaded file. " +
+      "Use `create_qurl` when you already have a URL. Each call uploads the file again and returns one new link; `mint_link` cannot re-link an uploaded file. Use `mint_uploaded_file_link` with a saved resource_id to mint another link without uploading again. " +
       "The tool reads `file_path`, uploads the file to `${QURL_CONNECTOR_URL}/api/upload`, then mints the link through `${QURL_CONNECTOR_URL}/api/mint_link/:resource_id`. " +
       UPLOAD_LINK_DESCRIPTION +
       "If `one_time_use` is omitted, the tool defaults it to `true` for safer file distribution. " +

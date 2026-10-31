@@ -18,9 +18,9 @@ describe("createServer", () => {
     await server?.close();
   });
 
-  async function connectServer() {
+  async function connectServer(uploads = true) {
     const mockClient = makeMockClient();
-    server = createServer(mockClient, "0.1.0", "stdio", undefined, { uploads: true, email: true });
+    server = createServer(mockClient, "0.1.0", "stdio", undefined, { uploads, email: true });
 
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await server.connect(serverTransport);
@@ -32,6 +32,13 @@ describe("createServer", () => {
   }
 
   describe("tools", () => {
+    it("hides stored-upload minting when connector capabilities are disabled", async () => {
+      const { client } = await connectServer(false);
+      const { tools } = await client.listTools();
+      expect(tools.map((tool) => tool.name)).not.toContain("mint_uploaded_file_link");
+      expect(tools.every((tool) => !tool.name.startsWith("upload_"))).toBe(true);
+    });
+
     it("registers stdio tools with correct names", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();
@@ -47,6 +54,7 @@ describe("createServer", () => {
         "list_qurls",
         "manage_crid_access",
         "mint_link",
+        "mint_uploaded_file_link",
         "publish_crid",
         "resolve_qurl",
         "revoke_qurl_token",
@@ -83,6 +91,7 @@ describe("createServer", () => {
         "list_qurls",
         "manage_crid_access",
         "mint_link",
+        "mint_uploaded_file_link",
         "publish_crid",
         "resolve_qurl",
         "revoke_qurl_token",
@@ -116,6 +125,7 @@ describe("createServer", () => {
       },
       { name: "upload_file_qurl", args: { file_path: samplePdf } },
       { name: "upload_text_qurl", args: { type: "text", content: "hello" } },
+      { name: "mint_uploaded_file_link", args: { resource_id: "r_upload12345" } },
     ])(
       "$name rejects access restrictions it cannot enforce before uploading",
       async ({ name, args }) => {
@@ -153,7 +163,12 @@ describe("createServer", () => {
     it("advertises rejected upload options with a portable JSON Schema (no `not`)", async () => {
       const { client } = await connectServer();
       const { tools } = await client.listTools();
-      for (const name of ["upload_file_data_qurl", "upload_file_qurl", "upload_text_qurl"]) {
+      for (const name of [
+        "upload_file_data_qurl",
+        "upload_file_qurl",
+        "upload_text_qurl",
+        "mint_uploaded_file_link",
+      ]) {
         const properties = tools.find((tool) => tool.name === name)?.inputSchema.properties ?? {};
         for (const field of ["access_policy", "max_sessions"]) {
           expect(properties[field], `${name}.${field}`).toBeDefined();
