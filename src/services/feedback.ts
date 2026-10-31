@@ -29,6 +29,7 @@ export class FeedbackError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    public readonly retryAfterSeconds?: number,
   ) {
     super(message);
   }
@@ -67,6 +68,7 @@ export async function deliverFeedback(input: unknown) {
     throw new FeedbackError(
       429,
       "Feedback was not sent: the review inbox is busy. Try again shortly.",
+      1,
     );
   const hour = Math.floor(Date.now() / 3_600_000);
   if (hour !== slackHour) {
@@ -77,6 +79,7 @@ export async function deliverFeedback(input: unknown) {
     throw new FeedbackError(
       429,
       "Feedback was not sent: hourly report limit reached. Try again later.",
+      Math.ceil((3_600_000 - (Date.now() % 3_600_000)) / 1_000),
     );
   slackHourlyAttempts += 1;
   nextSlackAttemptAt = Date.now() + 1_000;

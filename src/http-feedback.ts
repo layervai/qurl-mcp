@@ -55,7 +55,8 @@ export function registerFeedbackRoute(
         res.status(200).json(await deliverFeedback(parsed.data));
       } catch (error) {
         const status = error instanceof FeedbackError ? error.status : 503;
-        if (status === 429) res.set("Retry-After", "1");
+        if (error instanceof FeedbackError && error.retryAfterSeconds !== undefined)
+          res.set("Retry-After", String(error.retryAfterSeconds));
         res.status(status).json({
           error: error instanceof FeedbackError ? error.message : "Feedback is unavailable.",
         });

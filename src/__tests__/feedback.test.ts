@@ -141,6 +141,9 @@ describe("feedback delivery", () => {
     vi.mocked(Date.now).mockReturnValue(tick);
     await expect(deliverFeedback(report)).rejects.toThrow("hourly report limit");
     expect(mock).toHaveBeenCalledTimes(1000);
+    await expect(deliverFeedback(report)).rejects.toMatchObject({
+      retryAfterSeconds: Math.ceil((3_600_000 - (tick % 3_600_000)) / 1_000),
+    });
     tick += 3_600_000;
     vi.mocked(Date.now).mockReturnValue(tick);
     expect((await deliverFeedback(report)).status).toBe("sent_for_human_review");
@@ -182,6 +185,18 @@ describe("feedback delivery", () => {
       expect(result.content[0].text).not.toContain("may have arrived");
     },
   );
+  it.each([1, 3600])("preserves the intake retry delay of %s seconds", async (seconds) => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("busy", { status: 429, headers: { "retry-after": String(seconds) } }),
+        ),
+    );
+    const result = await submitFeedbackTool().handler(report);
+    expect(result.content[0].text).toContain(`Try again in ${seconds} seconds`);
+  });
   it("redacts local secrets before sending feedback to LayerV", async () => {
     vi.stubEnv("QURL_API_KEY", "local-unusual-key");
     const mock = vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 }));

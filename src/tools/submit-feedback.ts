@@ -60,11 +60,18 @@ export function submitFeedbackTool(
           });
           if (!response.ok) {
             await response.body?.cancel();
-            if (response.status === 429)
+            if (response.status === 429) {
+              const retryAfter = Number(response.headers.get("retry-after"));
+              if (Number.isInteger(retryAfter) && retryAfter > 0 && retryAfter <= 3600)
+                throw new FeedbackError(
+                  429,
+                  `Feedback was not sent: the inbox is busy or limited. Try again in ${retryAfter} seconds.`,
+                );
               throw new FeedbackError(
                 429,
                 "Feedback was not sent: too many reports. Try again later.",
               );
+            }
             if (response.status === 503)
               throw new FeedbackError(503, "Feedback was not sent: delivery is unavailable.");
             if ([400, 403, 413, 415].includes(response.status))
