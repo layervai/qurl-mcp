@@ -326,11 +326,10 @@ async function readConnectorResponseBody(response: Response): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-/**
- * Process connector response and extract resource_id.
- * Throws QURLAPIError on failure or missing resource_id.
- */
-async function processConnectorResponse(response: Response): Promise<ConnectorUploadResponse> {
+async function readConnectorJson(
+  response: Response,
+  nonJsonMessage: string,
+): Promise<{ parsed: unknown; requestId?: string }> {
   const requestId = response.headers.get("x-request-id") ?? undefined;
   const raw = await readConnectorResponseBody(response);
   const contentType = response.headers.get("content-type")?.toLowerCase();
@@ -338,13 +337,24 @@ async function processConnectorResponse(response: Response): Promise<ConnectorUp
     throw new QURLAPIError(
       0,
       "unexpected_response",
-      "Connector upload succeeded with a non-JSON response.",
+      nonJsonMessage,
       undefined,
       undefined,
       requestId,
     );
   }
-  const parsed = parseJsonBody(raw);
+  return { parsed: parseJsonBody(raw), requestId };
+}
+
+/**
+ * Process connector response and extract resource_id.
+ * Throws QURLAPIError on failure or missing resource_id.
+ */
+async function processConnectorResponse(response: Response): Promise<ConnectorUploadResponse> {
+  const { parsed, requestId } = await readConnectorJson(
+    response,
+    "Connector upload succeeded with a non-JSON response.",
+  );
 
   if (!response.ok) {
     throwConnectorError(response, parsed, requestId);
@@ -598,16 +608,12 @@ export async function mintUploadedFile(
       },
       body: JSON.stringify(body),
     });
-    const requestId = response.headers.get("x-request-id") ?? undefined;
-    const raw = await readConnectorResponseBody(response);
-    const contentType = response.headers.get("content-type")?.toLowerCase();
+    const { parsed, requestId } = await readConnectorJson(
+      response,
+      "Connector mint returned a non-JSON response.",
+    );
     const unexpected = (message: string) =>
       new QURLAPIError(0, "unexpected_response", message, undefined, undefined, requestId);
-    // Same predicate as processConnectorResponse: a missing Content-Type is tolerated.
-    if (response.ok && contentType && !contentType.includes("json")) {
-      throw unexpected("Connector mint returned a non-JSON response.");
-    }
-    const parsed = parseJsonBody(raw);
     // Any link in a failed response is live and unrevocable here; report it.
     const responseLinks = (parsed as { links?: unknown } | undefined)?.links;
     // Counted apart from IDs (a live link may come back without a qurl_id),
