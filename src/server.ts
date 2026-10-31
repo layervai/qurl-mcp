@@ -144,7 +144,7 @@ export const LOCAL_CLI_INSTRUCTIONS =
   "A six-digit code alone never authorizes approval on a resource with consumer_access. Ask which listed request the user wants to approve (the verified email for review); keys needs the intended public credential and contract needs a trusted entitlement receipt. Wait for that instruction. Never ask consumers to forward email verification codes to the publisher.";
 
 /**
- * Server for stdio without QURL_API_KEY: every tool runs the locally
+ * Server for stdio without QURL_API_KEY: resource tools run the locally
  * installed qURL CLI, which publishes without an account. Feedback goes to LayerV. Only resource tools that
  * work this way are registered. The account-key tools, the link resources,
  * and the prompts that drive them are not listed at all, so an agent never

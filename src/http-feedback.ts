@@ -8,17 +8,21 @@ import {
   feedbackWebhookUrl,
 } from "./services/feedback.js";
 
-export function registerFeedbackRoute(app: express.Express, allowedOrigin: string): void {
+export function registerFeedbackRoute(
+  app: express.Express,
+  allowedOrigin: string,
+): express.RequestHandler {
   feedbackWebhookUrl(); // Fail startup on malformed operator config without printing the secret.
+  const feedbackRateLimiter = rateLimit({
+    windowMs: 60 * 60 * 1_000,
+    limit: 5,
+    ipv6Subnet: 56,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+  });
   app.post(
     FEEDBACK_HTTP_PATH,
-    rateLimit({
-      windowMs: 60 * 60 * 1_000,
-      limit: 5,
-      ipv6Subnet: 56,
-      standardHeaders: "draft-8",
-      legacyHeaders: false,
-    }),
+    feedbackRateLimiter,
     (req: express.Request, res: express.Response, next: express.NextFunction) => {
       res.set("Cache-Control", "no-store");
       if (req.headers.origin !== undefined && req.headers.origin !== allowedOrigin) {
@@ -52,4 +56,21 @@ export function registerFeedbackRoute(app: express.Express, allowedOrigin: strin
       res.status(status).json({ error: "Invalid feedback JSON body." });
     }) as express.ErrorRequestHandler,
   );
+  return (req, res, next) => {
+    const messages: unknown[] = Array.isArray(req.body) ? req.body : [req.body];
+    const hasFeedback = messages.some((message) => {
+      if (!message || typeof message !== "object") return false;
+      const call = message as { method?: unknown; params?: { name?: unknown } };
+      return call.method === "tools/call" && call.params?.name === "submit_feedback";
+    });
+    if (!hasFeedback) {
+      next();
+      return;
+    }
+    if (Array.isArray(req.body)) {
+      res.status(400).json({ error: "Submit feedback one report at a time." });
+      return;
+    }
+    void feedbackRateLimiter(req, res, next);
+  };
 }

@@ -1,6 +1,8 @@
 import type { IQURLClient } from "../client.js";
 import {
   deliverFeedback,
+  FeedbackError,
+  redactFeedbackMessage,
   readFeedbackResponseText,
   feedbackSchema,
   feedbackReceiptSchema,
@@ -40,10 +42,28 @@ export function submitFeedbackTool(
             redirect: "error",
             signal: globalThis.AbortSignal.timeout(10_000),
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(parsed.data),
+            body: JSON.stringify({
+              ...parsed.data,
+              message: redactFeedbackMessage(parsed.data.message),
+              tool_name: parsed.data.tool_name
+                ? redactFeedbackMessage(parsed.data.tool_name)
+                : undefined,
+            }),
           });
           if (!response.ok) {
             await response.body?.cancel();
+            if (response.status === 429)
+              throw new FeedbackError(
+                429,
+                "Feedback was not sent: too many reports. Try again later.",
+              );
+            if (response.status === 503)
+              throw new FeedbackError(503, "Feedback was not sent: delivery is unavailable.");
+            if ([400, 403, 413, 415].includes(response.status))
+              throw new FeedbackError(
+                response.status,
+                "Feedback was not sent: the report was rejected.",
+              );
             throw new Error("Feedback unavailable");
           }
           receipt = feedbackReceiptSchema.parse(
@@ -54,13 +74,16 @@ export function submitFeedbackTool(
           content: [{ type: "text" as const, text: JSON.stringify(receipt) }],
           structuredContent: receipt,
         };
-      } catch {
+      } catch (error) {
         return {
           isError: true,
           content: [
             {
               type: "text" as const,
-              text: "Feedback delivery could not be confirmed. It may have arrived; avoid automatic retries. If this persists, contact LayerV support.",
+              text:
+                error instanceof FeedbackError && error.status !== 502
+                  ? error.message
+                  : "Feedback delivery could not be confirmed. It may have arrived; avoid automatic retries. If this persists, contact LayerV support.",
             },
           ],
         };

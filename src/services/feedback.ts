@@ -22,6 +22,7 @@ export const feedbackReceiptSchema = z.object({
   feedback_id: z.string().uuid(),
   status: z.literal("sent_for_human_review"),
 });
+// Local agents deliberately send product feedback to LayerV, independent of their API deployment.
 export const FEEDBACK_URL = "https://mcp.connector.layerv.ai/feedback";
 
 export class FeedbackError extends Error {
@@ -52,14 +53,12 @@ let nextSlackAttemptAt = 0;
 export async function deliverFeedback(input: unknown) {
   const report = feedbackSchema.parse(input);
   const webhook = feedbackWebhookUrl();
-  if (!webhook) throw new FeedbackError(503, "Feedback delivery is not configured.");
+  if (!webhook) throw new FeedbackError(503, "Feedback was not sent: delivery is not configured.");
   if (Date.now() < nextSlackAttemptAt)
-    throw new FeedbackError(429, "Feedback is busy. Try again later.");
+    throw new FeedbackError(429, "Feedback was not sent: too many reports. Try again later.");
   nextSlackAttemptAt = Date.now() + 1_000;
   const feedback_id = randomUUID();
-  const message = sanitizeLogValue(report.message)
-    .replace(/https?:\/\/\S+/gi, "[link removed]")
-    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[email removed]");
+  const message = redactFeedbackMessage(report.message);
   try {
     const response = await fetch(webhook, {
       method: "POST",
@@ -113,4 +112,11 @@ export async function readFeedbackResponseText(response: Response, limit: number
   } finally {
     await reader.cancel();
   }
+}
+
+export function redactFeedbackMessage(message: string): string {
+  return sanitizeLogValue(message)
+    .replace(/https?:\/\/\S+/gi, "[link removed]")
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[email removed]")
+    .slice(0, 500);
 }

@@ -128,6 +128,28 @@ describe("feedback delivery", () => {
     expect(JSON.parse(mock.mock.calls[0][1].body)).toEqual(report);
     expect(mock.mock.calls[0][1].headers).toEqual({ "content-type": "application/json" });
   });
+  it.each([429, 503, 400, 413, 415])(
+    "reports definite intake rejection %s as not sent",
+    async (status) => {
+      vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status })));
+      const result = await submitFeedbackTool().handler(report);
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("was not sent");
+      expect(result.content[0].text).not.toContain("may have arrived");
+    },
+  );
+  it("redacts local secrets before sending feedback to LayerV", async () => {
+    vi.stubEnv("QURL_API_KEY", "local-unusual-key");
+    const mock = vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 }));
+    vi.stubGlobal("fetch", mock);
+    await submitFeedbackTool().handler({
+      ...report,
+      message: "local-unusual-key alice@example.com https://private.example/path",
+    });
+    expect(mock.mock.calls[0][1].body).not.toContain("local-unusual-key");
+    expect(mock.mock.calls[0][1].body).not.toContain("alice@example.com");
+    expect(mock.mock.calls[0][1].body).not.toContain("https://private.example");
+  });
   it("rejects invalid reports before sending", async () => {
     const mock = vi.fn();
     vi.stubGlobal("fetch", mock);
@@ -195,6 +217,7 @@ describe("POST /feedback", () => {
     vi.stubGlobal("fetch", mock);
     for (const [body, extraHeaders, status] of [
       [JSON.stringify(report), { origin: "https://evil.example" }, 403],
+      [JSON.stringify(report), { "content-type": "text/plain" }, 415],
       [JSON.stringify({ ...report, message: "x".repeat(5000) }), {}, 413],
       [JSON.stringify({ ...report, credentials: "private" }), {}, 400],
       ["{", {}, 400],

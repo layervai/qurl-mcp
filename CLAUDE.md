@@ -304,3 +304,8 @@ create another link. The package now uses the published SDK 3.0.0.
 - Never commit API keys or secrets
 - `QURL_API_KEY` is passed via environment variable, never hardcoded
 - The client only communicates with the configured `QURL_API_URL` endpoint
+
+Feedback is implemented by `src/http-feedback.ts`, `src/services/feedback.ts`, and
+`src/tools/submit-feedback.ts`. The hosted operator sets the secret environment
+variable `MCP_FEEDBACK_SLACK_WEBHOOK_URL`; clients never need it. Local CLI mode
+also exposes `submit_feedback`, which sends authorized reports to LayerV.

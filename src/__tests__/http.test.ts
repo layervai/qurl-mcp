@@ -2831,3 +2831,49 @@ describe("public video range streaming", () => {
     expect(error).toHaveBeenCalledWith(expect.stringContaining("video read failed"));
   });
 });
+
+it("shares feedback IP quota across public intake and MCP calls even when fake passthrough bearers rotate", async () => {
+  vi.stubEnv("MCP_FEEDBACK_SLACK_WEBHOOK_URL", "");
+  const feedbackRuntime = createHttpRuntime(
+    { ...testConfig, stateless: true },
+    { version: "test" },
+  );
+  const baseUrl = await start(feedbackRuntime.app);
+  const report = { category: "bug", message: "Expected a useful error." };
+  for (let i = 0; i < 3; i++) {
+    const response = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { ...bearerHeaders(`fake-${i}`), "mcp-protocol-version": "2025-03-26" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: i,
+        method: "tools/call",
+        params: { name: "submit_feedback", arguments: report },
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Feedback was not sent");
+  }
+  for (let i = 0; i < 2; i++) {
+    const response = await fetch(`${baseUrl}/feedback`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(report),
+    });
+    expect(response.status).toBe(503);
+    await response.body?.cancel();
+  }
+  const limited = await fetch(`${baseUrl}/mcp`, {
+    method: "POST",
+    headers: bearerHeaders("another-fake-key"),
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "tools/call",
+      params: { name: "submit_feedback", arguments: report },
+    }),
+  });
+  expect(limited.status).toBe(429);
+  await limited.body?.cancel();
+  await feedbackRuntime.closeAllSessions();
+});

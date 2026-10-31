@@ -1136,10 +1136,11 @@ feedback returns an unavailable error and the other MCP tools continue to work.
 
 The public `POST /feedback` route requires JSON, limits the body to 4 KiB, rejects
 unknown fields, and permits at most five attempts per source IP per hour per
-process. IPv6 sources use a /56 bucket. Host validation applies; browser requests
+process, shared with MCP tool submissions from the same source IP. Rotating
+bearer credentials does not reset it. IPv6 sources use a /56 bucket. Host validation applies; browser requests
 with a foreign Origin are rejected. Both public intake and hosted MCP tools share
 a one-attempt-per-second Slack budget per process. Hosted tools also retain the
-existing MCP authentication and request limits; feedback needs no extra OAuth
+existing MCP request limits; passthrough bearers are not identity proof. Feedback needs no extra OAuth
 scope. These process-local feedback limits multiply with replicas and reset on
 restart. This is an anonymous report channel: report text and claimed tool names
 are unverified, and a shared source IP can exhaust the public quota.
