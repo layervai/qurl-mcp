@@ -44,14 +44,18 @@ describe("linksResource", () => {
   });
 
   describe("handler", () => {
-    it("calls client.listQURLs with limit 50", async () => {
+    it("requests the 50 most recent active resources", async () => {
       const mockList = vi.fn().mockResolvedValue({ data: sampleQURLs, meta: { has_more: false } });
       const client = makeMockClient({ listQURLs: mockList });
       const resource = linksResource(client);
 
       await resource.handler();
 
-      expect(mockList).toHaveBeenCalledWith({ limit: 50 });
+      expect(mockList).toHaveBeenCalledWith({
+        limit: 50,
+        status: "active",
+        sort: "created_at:desc",
+      });
     });
 
     it("returns contents array with URI and mimeType", async () => {

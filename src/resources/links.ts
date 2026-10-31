@@ -16,7 +16,11 @@ export function linksResource(client: IQURLClient) {
       "For full pagination use the list_qurls tool.",
     mimeType,
     handler: withMissingApiKeyResource(uri, async () => {
-      const result = await client.listQURLs({ limit: LINKS_RESOURCE_LIMIT });
+      const result = await client.listQURLs({
+        limit: LINKS_RESOURCE_LIMIT,
+        status: "active",
+        sort: "created_at:desc",
+      });
       return {
         contents: [{ uri, mimeType, text: JSON.stringify(result.data) }],
       };
