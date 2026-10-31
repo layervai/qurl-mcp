@@ -86,6 +86,8 @@ it("makes one attempt and preserves uncertain-outcome guidance after a server fa
   expect(text).toContain("a link may already have been minted");
   expect(text).not.toContain("private-upstream-detail");
   expect(text).not.toContain("Upload succeeded");
+  expect(text).toContain("Tell the user and ask before minting a replacement");
+  expect(text).not.toContain("use mint_uploaded_file_link");
 });
 
 it("applies the host policy to a replacement link", async () => {

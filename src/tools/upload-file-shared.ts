@@ -443,7 +443,7 @@ function linkProblem(
   if (linkHosts && !linkHosts.includes(url.hostname.toLowerCase())) return DISALLOWED_LINK_HOST;
   // An expiry already past by this host's clock is not refused: if this clock
   // runs ahead, the link is still good, and refusing would discard the only
-  // handle to a file that cannot be deleted. It is returned with a flag.
+  // possibly live link. It is returned with a flag.
   return undefined;
 }
 
@@ -696,8 +696,8 @@ export async function mintUploadedFileLink(
           ? ` (connector responded HTTP ${error.statusCode})`
           : "") +
         `. Resource ID: ${resourceId}. ` +
-        "This tool does not delete stored files. For an existing upload, use mint_uploaded_file_link with this resource_id instead of uploading another copy; " +
-        "do not retry automatically after an uncertain mint result; reconcile any prior live link first." +
+        "This tool does not delete stored files. Do not upload another copy or retry minting automatically. " +
+        "Tell the user and ask before minting a replacement; the user must check for any prior live link first." +
         (liveLinkCount > 0
           ? ` The connector reported ${liveLinkCount} possibly live link(s) this server refused to return` +
             (liveQurlIds.length > 0

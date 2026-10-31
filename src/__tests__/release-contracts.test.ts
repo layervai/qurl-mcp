@@ -667,7 +667,7 @@ describe("resource SDK boundary", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("(links: none)"));
 
     // A link whose expiry is already past by this clock is returned, flagged,
-    // not discarded: if this host runs ahead, the link still works, and the
+    // not discarded: if this host runs ahead, the link still works, and
     // a replacement could create another live link.
     vi.stubGlobal(
       "fetch",
@@ -895,7 +895,9 @@ describe("resource SDK boundary", () => {
     const result = await handler(undefined);
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain(publicKey);
-    expect(result.content[0].text).toContain("do not retry automatically");
+    expect(result.content[0].text).toContain(
+      "Do not upload another copy or retry minting automatically",
+    );
     expect(result.content[0].text).not.toContain("private upstream error");
   });
 });
