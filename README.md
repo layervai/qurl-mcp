@@ -466,7 +466,7 @@ Their responsibilities are:
 | `maxUploadFileDataBytes`  | Limits decoded and local file uploads (default `10mb`) |
 | `defaultQurlApiUrl`       | Base URL of the qURL backend API                       |
 | `defaultQurlConnectorUrl` | Base URL of the upload connector                       |
-| `linkHosts` | Optional exact host allowlist for connector-minted links |
+| `linkHosts`               | Optional exact host allowlist for connector-minted links |
 
 Shared settings have these environment overrides. Environment values take
 precedence over the shared config file.
@@ -478,7 +478,7 @@ cache when the file metadata or any relevant environment value changes.
 | `MCP_MAX_UPLOAD_FILE_DATA_BYTES`       | `maxUploadFileDataBytes`       |
 | `QURL_API_URL`                         | `defaultQurlApiUrl`            |
 | `QURL_CONNECTOR_URL`                   | `defaultQurlConnectorUrl`      |
-| `QURL_LINK_HOSTS` | `linkHosts` |
+| `QURL_LINK_HOSTS`                      | `linkHosts`                   |
 | `QURL_SMTP_HOST`                       | `smtp.host`                    |
 | `QURL_SMTP_PORT`                       | `smtp.port`                    |
 | `QURL_SMTP_SECURE`                     | `smtp.secure`                  |
@@ -498,9 +498,10 @@ Set `QURL_LINK_HOSTS=qurl.link,files.example.com` (or `linkHosts` as a JSON
 array) to restrict connector-minted upload links before they are returned or
 emailed. Entries are exact ASCII hostnames or IPs, without schemes, ports,
 paths, or wildcards. Subdomains need their own entries. The policy checks the
-hostname; existing HTTPS and loopback development rules still apply. Empty or
-unset lists keep custom-domain behavior unchanged. Configure all legitimate
-link hosts before enabling it. A rejected mint may already have created a live
+hostname; existing HTTPS and loopback development rules still apply. When neither source has a non-empty list,
+custom-domain behavior stays unchanged. A blank environment list falls back to
+any file policy; clear the file list to disable that policy. The tracked example
+config uses an empty list. Configure all legitimate link hosts before enabling it. A rejected mint may already have created a live
 link and stored file; the error reports that state and does not retry the upload.
 
 `QURL_API_KEY` is intentionally environment-only and has no config-file field.

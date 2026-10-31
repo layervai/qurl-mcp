@@ -23,6 +23,9 @@ startCommand:
       qurlConnectorUrl:
         type: string
         description: Connector base URL used by file and text upload tools.
+      qurlLinkHosts:
+        type: string
+        description: Optional comma-separated exact hostnames or IPs for uploaded-file links; no schemes, ports, or wildcards. Blank values retain any file-configured policy.
       qurlMcpConfig:
         type: string
         description: Optional path to the shared qURL MCP runtime config file.
@@ -75,6 +78,7 @@ startCommand:
         QURL_API_KEY: config.qurlApiKey,
         QURL_API_URL: config.qurlApiUrl || 'https://api.layerv.ai',
         QURL_CONNECTOR_URL: config.qurlConnectorUrl,
+        QURL_LINK_HOSTS: config.qurlLinkHosts,
         QURL_MCP_CONFIG: config.qurlMcpConfig,
         MCP_MAX_UPLOAD_FILE_DATA_BYTES: config.maxUploadFileDataBytes || '10mb',
         QURL_SMTP_HOST: config.smtpHost,

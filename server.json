@@ -39,6 +39,12 @@
           "format": "string"
         },
         {
+          "name": "QURL_LINK_HOSTS",
+          "description": "Optional comma-separated exact hostnames or IPs for uploaded-file links. No schemes, ports, or wildcards. Blank values retain any file-configured policy.",
+          "isRequired": false,
+          "format": "string"
+        },
+        {
           "name": "QURL_MCP_CONFIG",
           "description": "Optional path to a shared qURL MCP config file. Both stdio and HTTP modes can read SMTP, connector, and default API settings from this file.",
           "isRequired": false,

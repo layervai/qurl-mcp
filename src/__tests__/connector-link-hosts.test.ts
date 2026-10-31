@@ -240,3 +240,18 @@ it.each(["127.0.0.1", "[::1]"])(
     expect(result.qurl_link).toBe(link);
   },
 );
+
+it.each(["", "   ", ",,,"])(
+  "does not disable a file policy with an empty environment list: %j",
+  (value) => {
+    const dir = mkdtempSync(join(tmpdir(), "qurl-link-hosts-"));
+    try {
+      const path = join(dir, "config.json");
+      writeFileSync(path, JSON.stringify({ linkHosts: ["qurl.link"] }));
+      vi.stubEnv("QURL_LINK_HOSTS", value);
+      expect(loadRuntimeConfig(path).linkHosts).toEqual(["qurl.link"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);

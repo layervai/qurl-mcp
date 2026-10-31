@@ -20,6 +20,14 @@ describe("published stdio environment manifests", () => {
     }
   });
 
+  it("advertises the link host policy in both published manifests", () => {
+    expect(publishedVariables).toContainEqual(
+      expect.objectContaining({ name: "QURL_LINK_HOSTS", isRequired: false }),
+    );
+    expect(smitheryManifest).toContain("qurlLinkHosts:");
+    expect(smitheryManifest).toContain("QURL_LINK_HOSTS: config.qurlLinkHosts");
+  });
+
   it("keeps HTTP-only listener variables out of stdio manifests", () => {
     const names = publishedVariables.map((variable) => variable.name);
     expect(names).not.toContain("QURL_MCP_HTTP_CONFIG");
@@ -68,6 +76,7 @@ describe("published stdio environment manifests", () => {
     }
     for (const variable of [
       "QURL_CONNECTOR_URL",
+      "QURL_LINK_HOSTS",
       "MCP_MAX_UPLOAD_FILE_DATA_BYTES",
       "QURL_SMTP_*",
       "QURL_PUBLIC_VIDEO_*",

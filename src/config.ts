@@ -676,10 +676,9 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     maxUploadFileDataBytes,
     defaultQurlApiUrl,
     defaultQurlConnectorUrl,
-    linkHosts: normalizeAllowedHosts(
-      process.env.QURL_LINK_HOSTS ?? fileConfig.linkHosts,
-      "QURL_LINK_HOSTS/linkHosts",
-    ),
+    linkHosts:
+      normalizeAllowedHosts(process.env.QURL_LINK_HOSTS, "QURL_LINK_HOSTS/linkHosts") ??
+      normalizeAllowedHosts(fileConfig.linkHosts, "QURL_LINK_HOSTS/linkHosts"),
     qurlApiKey: trimString(process.env.QURL_API_KEY),
     smtp: resolveSmtpConfig(fileConfig.smtp),
     publicVideo: resolvePublicVideoConfig(fileConfig.publicVideo),
