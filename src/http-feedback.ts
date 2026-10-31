@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { FEEDBACK_HTTP_PATH, MCP_HTTP_PATH } from "./http-routes.js";
 import express from "express";
-import { rateLimit } from "express-rate-limit";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import {
   deliverFeedback,
   FeedbackError,
@@ -15,8 +16,13 @@ export function registerFeedbackRoute(
   feedbackWebhookUrl(); // Fail startup on malformed operator config without printing the secret.
   const feedbackRateLimiter = rateLimit({
     windowMs: 60 * 60 * 1_000,
-    limit: 5,
-    ipv6Subnet: 56,
+    limit: 100,
+    keyGenerator: (req) => {
+      const subject = req.auth?.extra?.subject;
+      return typeof subject === "string"
+        ? `subject:${createHash("sha256").update(subject).digest("hex")}`
+        : `ip:${ipKeyGenerator(req.ip ?? "", 48)}`;
+    },
     standardHeaders: false,
     legacyHeaders: false,
     handler: (req, res) => {

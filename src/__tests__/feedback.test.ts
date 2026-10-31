@@ -33,9 +33,28 @@ afterEach(async () => {
     server = undefined;
   }
 });
-async function start() {
+async function start(withVerifiedSubjects = false) {
   const app = express();
-  registerFeedbackRoute(app, "https://mcp.connector.layerv.ai");
+  const toolLimiter = registerFeedbackRoute(app, "https://mcp.connector.layerv.ai");
+  if (withVerifiedSubjects)
+    app.post(
+      "/mcp",
+      express.json(),
+      (req, _res, next) => {
+        // Production obtains this context only from the existing verified OAuth middleware.
+        req.auth = {
+          token: "fixture",
+          clientId: "fixture",
+          scopes: [],
+          extra: { subject: req.headers["x-test-subject"] },
+        };
+        next();
+      },
+      toolLimiter,
+      (_req, res) => {
+        res.json({ accepted: true });
+      },
+    );
   server = createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -249,16 +268,41 @@ describe("POST /feedback", () => {
     }
     expect(mock).not.toHaveBeenCalled();
   });
+  it("keeps verified OAuth subjects separate behind one vendor egress IP", async () => {
+    const url = (await start(true)).replace("/feedback", "/mcp");
+    const body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "submit_feedback", arguments: report },
+    });
+    for (let i = 0; i < 101; i++) {
+      const response = await realFetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-test-subject": "account-a" },
+        body,
+      });
+      expect(response.status).toBe(i === 100 ? 429 : 200);
+      await response.body?.cancel();
+    }
+    const other = await realFetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-test-subject": "account-b" },
+      body,
+    });
+    expect(other.status).toBe(200);
+    await other.body?.cancel();
+  });
   it("limits anonymous submissions per source IP, even when Slack is disabled", async () => {
     vi.stubEnv("MCP_FEEDBACK_SLACK_WEBHOOK_URL", "");
     const url = await start();
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 101; i++) {
       const response = await realFetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(report),
       });
-      expect(response.status).toBe(i === 5 ? 429 : 503);
+      expect(response.status).toBe(i === 100 ? 429 : 503);
       await response.body?.cancel();
     }
   });

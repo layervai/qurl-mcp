@@ -2858,7 +2858,7 @@ it("shares feedback IP quota across public intake and MCP calls even when fake p
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("submit_feedback");
   }
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 97; i++) {
     const response = await fetch(`${baseUrl}/feedback`, {
       method: "POST",
       headers: { "content-type": "application/json" },

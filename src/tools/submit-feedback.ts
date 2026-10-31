@@ -51,9 +51,11 @@ export function submitFeedbackTool(
             body: JSON.stringify({
               ...parsed.data,
               message: redactFeedbackMessage(parsed.data.message),
-              tool_name: parsed.data.tool_name
-                ? redactFeedbackMessage(parsed.data.tool_name)
-                : undefined,
+              tool_name:
+                parsed.data.tool_name &&
+                redactFeedbackMessage(parsed.data.tool_name) === parsed.data.tool_name
+                  ? parsed.data.tool_name
+                  : undefined,
             }),
           });
           if (!response.ok) {
