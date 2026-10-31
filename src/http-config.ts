@@ -1,5 +1,5 @@
 import {
-  MAX_CONFIG_ALLOWLIST_ENTRIES,
+  normalizeAllowedHosts,
   getDefaultConfigPath,
   isLoopbackHostname,
   loadRuntimeConfig,
@@ -169,43 +169,6 @@ export function normalizeMaxConcurrentRequests(
     1,
     MAX_CONCURRENT_REQUESTS,
   );
-}
-
-function normalizeAllowedHosts(hosts: unknown): string[] | undefined {
-  if (!hosts) return undefined;
-  const values = typeof hosts === "string" ? hosts.split(",") : hosts;
-  if (!Array.isArray(values)) {
-    throw new Error("allowedHosts must be an array or comma-separated list of hostnames or IPs.");
-  }
-  if (values.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
-    throw new Error(`allowedHosts must contain at most ${MAX_CONFIG_ALLOWLIST_ENTRIES} entries.`);
-  }
-  const stringValues: string[] = [];
-  for (const host of values) {
-    if (typeof host !== "string") {
-      throw new Error("allowedHosts must contain only hostnames or IPs.");
-    }
-    stringValues.push(host);
-  }
-  const normalized = Array.from(
-    new Set(stringValues.map((host) => host.trim().toLowerCase()).filter(Boolean)),
-  );
-  const invalid = normalized.some((host) => {
-    if (!/^[a-z0-9.:[\]-]+$/.test(host)) return true;
-    try {
-      const parsed = new URL(`http://${host}`);
-      return (
-        parsed.hostname.replace(/^\[(.*)\]$/, "$1") !== host.replace(/^\[(.*)\]$/, "$1") ||
-        parsed.port !== ""
-      );
-    } catch {
-      return true;
-    }
-  });
-  if (invalid) {
-    throw new Error("allowedHosts must contain hostnames or IPs without ports or URL schemes.");
-  }
-  return normalized.length > 0 ? normalized : undefined;
 }
 
 function normalizeBaseUrl(value: unknown): string {

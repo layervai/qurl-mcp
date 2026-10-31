@@ -25,6 +25,7 @@ export interface RuntimeConfig {
   maxUploadFileDataBytes: number;
   defaultQurlApiUrl: string;
   defaultQurlConnectorUrl?: string;
+  linkHosts?: string[];
   qurlApiKey?: string;
   smtp?: SmtpConfig;
   publicVideo?: PublicVideoConfig;
@@ -77,6 +78,7 @@ export type UncheckedConfigFileShape = Partial<{
   maxUploadFileDataBytes: string | number;
   defaultQurlApiUrl: string;
   defaultQurlConnectorUrl: string;
+  linkHosts: string[];
   smtp: Partial<SmtpConfig>;
   publicVideo: Partial<PublicVideoConfig>;
 }>;
@@ -100,6 +102,7 @@ const RUNTIME_CONFIG_ENV_KEYS = [
   "QURL_API_KEY",
   "QURL_API_URL",
   "QURL_CONNECTOR_URL",
+  "QURL_LINK_HOSTS",
   "QURL_PUBLIC_VIDEO_FILE_PATH",
   "QURL_PUBLIC_VIDEO_PAGE_PATH",
   "QURL_PUBLIC_VIDEO_TITLE",
@@ -363,6 +366,46 @@ export function normalizeServiceBaseUrl(
     throw new Error(`${fieldName} must use HTTPS except for loopback development endpoints.`);
   }
   return url.toString().replace(/\/$/, "");
+}
+
+export function normalizeAllowedHosts(
+  hosts: unknown,
+  fieldName = "allowedHosts",
+): string[] | undefined {
+  if (hosts === undefined || hosts === null || hosts === "") return undefined;
+  const values = typeof hosts === "string" ? hosts.split(",") : hosts;
+  if (!Array.isArray(values)) {
+    throw new Error(`${fieldName} must be an array or comma-separated list of hostnames or IPs.`);
+  }
+  if (values.length > MAX_CONFIG_ALLOWLIST_ENTRIES) {
+    throw new Error(`${fieldName} must contain at most ${MAX_CONFIG_ALLOWLIST_ENTRIES} entries.`);
+  }
+  const stringValues: string[] = [];
+  for (const host of values) {
+    if (typeof host !== "string") {
+      throw new Error(`${fieldName} must contain only hostnames or IPs.`);
+    }
+    stringValues.push(host);
+  }
+  const normalized = Array.from(
+    new Set(stringValues.map((host) => host.trim().toLowerCase()).filter(Boolean)),
+  );
+  const invalid = normalized.some((host) => {
+    if (!/^[a-z0-9.:[\]-]+$/.test(host)) return true;
+    try {
+      const parsed = new URL(`http://${host}`);
+      return (
+        parsed.hostname.replace(/^\[(.*)\]$/, "$1") !== host.replace(/^\[(.*)\]$/, "$1") ||
+        parsed.port !== ""
+      );
+    } catch {
+      return true;
+    }
+  });
+  if (invalid) {
+    throw new Error(`${fieldName} must contain hostnames or IPs without ports or URL schemes.`);
+  }
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function parseCsvList(value: unknown): string[] | undefined {
@@ -633,6 +676,9 @@ export function loadRuntimeConfig(configPath = getDefaultConfigPath()): RuntimeC
     maxUploadFileDataBytes,
     defaultQurlApiUrl,
     defaultQurlConnectorUrl,
+    linkHosts:
+      normalizeAllowedHosts(process.env.QURL_LINK_HOSTS, "QURL_LINK_HOSTS/linkHosts") ??
+      normalizeAllowedHosts(fileConfig.linkHosts, "QURL_LINK_HOSTS/linkHosts"),
     qurlApiKey: trimString(process.env.QURL_API_KEY),
     smtp: resolveSmtpConfig(fileConfig.smtp),
     publicVideo: resolvePublicVideoConfig(fileConfig.publicVideo),

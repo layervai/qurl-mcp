@@ -139,6 +139,7 @@ npm run format
 | `QURL_API_KEY`                                                      | No        | API key with `qurl:read`, `qurl:write`, and/or `qurl:resolve` scopes; unset in stdio = local qURL CLI mode | —                       |
 | `QURL_API_URL`                                                      | No        | qURL API base URL                                                    | `https://api.layerv.ai` |
 | `QURL_CONNECTOR_URL`                                                | Uploads   | HTTPS connector base URL                                             | —                       |
+| `QURL_LINK_HOSTS` | No | Exact host allowlist for connector-minted links; blank env retains a file policy | Disabled unless configured |
 | `QURL_MCP_CONFIG`                                                   | No        | Shared runtime config path                                           | `qurl-mcp.config.json`  |
 | `QURL_MCP_HTTP_CONFIG`                                              | HTTP only | HTTP listener config path                                            | `qurl-mcp.http.json`    |
 | `MCP_HOST`, `MCP_PORT`                                              | HTTP only | Listener address and port                                            | `127.0.0.1`, `3000`     |
