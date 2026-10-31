@@ -113,6 +113,14 @@ describe("feedback delivery", () => {
     );
     expect((await deliverFeedback(report)).status).toBe("sent_for_human_review");
   });
+  it("logs only bounded Slack status on delivery failure", async () => {
+    const log = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("no_service", { status: 404 })));
+    await expect(deliverFeedback(report)).rejects.toThrow("could not be confirmed");
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("HTTP 404"));
+    expect(JSON.stringify(log.mock.calls)).not.toContain(webhook);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(report.message);
+  });
   it("bounds parallel submissions across tool sessions and the public route", async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response("ok"));
     vi.stubGlobal("fetch", fetchMock);
@@ -120,11 +128,11 @@ describe("feedback delivery", () => {
     expect(results.map((x) => x.status)).toEqual(["fulfilled", "rejected"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
-  it("bounds total Slack attempts to 100 per process per UTC hour", async () => {
+  it("bounds total Slack attempts to 1000 per process per UTC hour", async () => {
     tick = Math.ceil(tick / 3_600_000) * 3_600_000;
     const mock = vi.fn().mockImplementation(() => Promise.resolve(new Response("ok")));
     vi.stubGlobal("fetch", mock);
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 1000; i++) {
       tick += 2_000;
       vi.mocked(Date.now).mockReturnValue(tick);
       await deliverFeedback(report);
@@ -132,7 +140,7 @@ describe("feedback delivery", () => {
     tick += 2_000;
     vi.mocked(Date.now).mockReturnValue(tick);
     await expect(deliverFeedback(report)).rejects.toThrow("hourly report limit");
-    expect(mock).toHaveBeenCalledTimes(100);
+    expect(mock).toHaveBeenCalledTimes(1000);
     tick += 3_600_000;
     vi.mocked(Date.now).mockReturnValue(tick);
     expect((await deliverFeedback(report)).status).toBe("sent_for_human_review");
@@ -276,13 +284,13 @@ describe("POST /feedback", () => {
       method: "tools/call",
       params: { name: "submit_feedback", arguments: report },
     });
-    for (let i = 0; i < 101; i++) {
+    for (let i = 0; i < 11; i++) {
       const response = await realFetch(url, {
         method: "POST",
         headers: { "content-type": "application/json", "x-test-subject": "account-a" },
         body,
       });
-      expect(response.status).toBe(i === 100 ? 429 : 200);
+      expect(response.status).toBe(i === 10 ? 429 : 200);
       await response.body?.cancel();
     }
     const other = await realFetch(url, {

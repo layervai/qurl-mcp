@@ -16,7 +16,7 @@ export function registerFeedbackRoute(
   feedbackWebhookUrl(); // Fail startup on malformed operator config without printing the secret.
   const feedbackRateLimiter = rateLimit({
     windowMs: 60 * 60 * 1_000,
-    limit: 100,
+    limit: (req) => (typeof req.auth?.extra?.subject === "string" ? 10 : 100),
     keyGenerator: (req) => {
       const subject = req.auth?.extra?.subject;
       return typeof subject === "string"

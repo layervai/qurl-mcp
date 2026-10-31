@@ -305,7 +305,9 @@ create another link. The package now uses the published SDK 3.0.0.
 
 - Never commit API keys or secrets
 - `QURL_API_KEY` is passed via environment variable, never hardcoded
-- The client only communicates with the configured `QURL_API_URL` endpoint
+- Resource API calls use the configured `QURL_API_URL`. Explicit `submit_feedback`
+  calls send reports to `https://mcp.connector.layerv.ai/feedback`; set
+  `QURL_MCP_FEEDBACK=off` to disable them.
 
 Feedback is implemented by `src/http-feedback.ts`, `src/services/feedback.ts`, and
 `src/tools/submit-feedback.ts`. The hosted operator sets the secret environment

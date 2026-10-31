@@ -1139,17 +1139,18 @@ feedback returns an unavailable error and the other MCP tools continue to work.
 The public `POST /feedback` route requires JSON, limits the body to 4 KiB, rejects
 unknown fields, and permits at most 100 attempts per source IP per hour per
 process, shared with passthrough MCP tool submissions from the same source IP.
-Verified OAuth callers get their own subject quota, so a vendor egress IP does
+Verified OAuth callers get their own 10-attempt/hour subject quota, so a vendor egress IP does
 not combine their quotas. Rotating unverified bearer credentials does not reset
 the source quota. IPv6 sources use a /48 bucket. Host validation applies; browser requests
 with a foreign Origin are rejected. Both public intake and hosted MCP tools share
-a one-attempt-per-second and 100-attempt-per-UTC-hour Slack budget per process. Hosted tools also retain the
+a one-attempt-per-second and 1,000-attempt-per-UTC-hour Slack budget per process. Hosted tools also retain the
 existing MCP request limits; passthrough bearers are not identity proof. Feedback needs no extra OAuth
 scope. These process-local feedback limits multiply with replicas and reset on
 restart. This is an anonymous report channel: report text and claimed tool names
 are unverified, and a shared source IP can exhaust the public/passthrough quota. This is a best-effort
-channel: one abusive source can exhaust a task's hourly budget and block other
-reports until the next UTC hour. Limits reset on restart and multiply with
+channel: distributed abuse can exhaust a task's hourly budget and block other
+reports until the next UTC hour. A single source quota is smaller than the shared
+budget. Busy responses and definite quota rejections can be retried later. Limits reset on restart and multiply with
 replicas.
 
 A successful call returns a `feedback_id` and `sent_for_human_review` only after
@@ -1175,3 +1176,6 @@ Production activation and the real Slack receipt are separate from unit tests.
 ## License
 
 MIT -- [LayerV AI](https://layerv.ai)
+
+Upgrade note: `/feedback` is now reserved for the intake. Move any custom public
+video page under that path to another `publicVideo.pagePath` before upgrading.

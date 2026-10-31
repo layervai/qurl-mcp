@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { sanitizeLogValue } from "../logging.js";
+import { logInfo, sanitizeLogValue } from "../logging.js";
 
 export const feedbackSchema = z.strictObject({
   category: z.enum(["bug", "feature", "friction", "other"]),
@@ -64,13 +64,16 @@ export async function deliverFeedback(input: unknown) {
   const webhook = feedbackEnabled("http") ? feedbackWebhookUrl() : undefined;
   if (!webhook) throw new FeedbackError(503, "Feedback was not sent: delivery is not configured.");
   if (Date.now() < nextSlackAttemptAt)
-    throw new FeedbackError(429, "Feedback was not sent: too many reports. Try again later.");
+    throw new FeedbackError(
+      429,
+      "Feedback was not sent: the review inbox is busy. Try again shortly.",
+    );
   const hour = Math.floor(Date.now() / 3_600_000);
   if (hour !== slackHour) {
     slackHour = hour;
     slackHourlyAttempts = 0;
   }
-  if (slackHourlyAttempts >= 100)
+  if (slackHourlyAttempts >= 1_000)
     throw new FeedbackError(
       429,
       "Feedback was not sent: hourly report limit reached. Try again later.",
@@ -79,6 +82,7 @@ export async function deliverFeedback(input: unknown) {
   nextSlackAttemptAt = Date.now() + 1_000;
   const feedback_id = randomUUID();
   const message = redactFeedbackMessage(report.message);
+  let slackStatus: number | undefined;
   try {
     const response = await fetch(webhook, {
       method: "POST",
@@ -101,11 +105,15 @@ export async function deliverFeedback(input: unknown) {
         unfurl_media: false,
       }),
     });
+    slackStatus = response.status;
     const acknowledgement = await readFeedbackResponseText(response, 32);
     if (response.status !== 200 || acknowledgement.trim() !== "ok") {
       throw new Error("Slack did not acknowledge feedback");
     }
   } catch {
+    logInfo(
+      `[feedback] Slack delivery was not confirmed (${slackStatus === undefined ? "transport error" : `HTTP ${slackStatus}`}).`,
+    );
     // No automatic retry: a timeout can occur after Slack accepted the message.
     throw new FeedbackError(
       502,

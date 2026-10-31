@@ -2842,46 +2842,53 @@ it("shares feedback IP quota across public intake and MCP calls even when fake p
     { ...testConfig, stateless: true },
     { version: "test" },
   );
-  const baseUrl = await start(feedbackRuntime.app);
-  const report = { category: "bug", message: "Expected a useful error." };
-  for (let i = 0; i < 3; i++) {
-    const response = await fetch(`${baseUrl}/mcp`, {
+  try {
+    const baseUrl = await start(feedbackRuntime.app);
+    const report = { category: "bug", message: "Expected a useful error." };
+    for (let i = 0; i < 3; i++) {
+      const response = await fetch(`${baseUrl}/mcp`, {
+        method: "POST",
+        headers: { ...bearerHeaders(`fake-${i}`), "mcp-protocol-version": "2025-03-26" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: i,
+          method: "tools/call",
+          params: { name: "submit_feedback", arguments: report },
+        }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toContain("submit_feedback");
+    }
+    for (let i = 0; i < 97; i++) {
+      const response = await fetch(`${baseUrl}/feedback`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(report),
+      });
+      expect(response.status).toBe(503);
+      await response.body?.cancel();
+    }
+    const limited = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
-      headers: { ...bearerHeaders(`fake-${i}`), "mcp-protocol-version": "2025-03-26" },
+      headers: bearerHeaders("another-fake-key"),
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: i,
+        id: 9,
         method: "tools/call",
         params: { name: "submit_feedback", arguments: report },
       }),
     });
-    expect(response.status).toBe(200);
-    expect(await response.text()).toContain("submit_feedback");
-  }
-  for (let i = 0; i < 97; i++) {
-    const response = await fetch(`${baseUrl}/feedback`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(report),
-    });
-    expect(response.status).toBe(503);
-    await response.body?.cancel();
-  }
-  const limited = await fetch(`${baseUrl}/mcp`, {
-    method: "POST",
-    headers: bearerHeaders("another-fake-key"),
-    body: JSON.stringify({
+    expect(limited.status).toBe(429);
+    expect(await limited.json()).toMatchObject({
       jsonrpc: "2.0",
-      id: 9,
-      method: "tools/call",
-      params: { name: "submit_feedback", arguments: report },
-    }),
-  });
-  expect(limited.status).toBe(429);
-  expect(await limited.json()).toMatchObject({ jsonrpc: "2.0", id: null, error: { code: -32000 } });
-  const headers = limited.headers.get("ratelimit-policy") ?? "";
-  expect(headers).toContain("credential");
-  expect(headers).toContain("ip");
-  vi.unstubAllEnvs();
-  await feedbackRuntime.closeAllSessions();
+      id: null,
+      error: { code: -32000 },
+    });
+    const headers = limited.headers.get("ratelimit-policy") ?? "";
+    expect(headers).toContain("credential");
+    expect(headers).toContain("ip");
+  } finally {
+    vi.unstubAllEnvs();
+    await feedbackRuntime.closeAllSessions();
+  }
 });
