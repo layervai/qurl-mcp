@@ -60,7 +60,9 @@ qurl-mcp/
 ├── src/
 │   ├── index.ts           # Entry point, env validation, stdio transport (API key or local CLI)
 │   ├── qurl-cli.ts        # Bounded runner for the local qURL CLI (no-account stdio mode)
-│   ├── http.ts            # Authenticated HTTP transport and public routes
+│   ├── http.ts            # Authenticated HTTP transport and runtime wiring
+│   ├── http-sessions.ts   # Session registry, expiry, disconnect grace, and teardown
+│   ├── http-public-routes.ts # Public legal/video routes, rate limits, and streaming
 │   ├── http-config.ts     # Bounded listener/session/proxy configuration
 │   ├── config.ts          # Shared qURL, connector, SMTP, and media config
 │   ├── server.ts          # MCP server factory, tool/resource/prompt registration

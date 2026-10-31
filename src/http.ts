@@ -1,10 +1,15 @@
 #!/usr/bin/env node
+import {
+  createHttpSessionRegistry,
+  type SessionContext,
+  type StatelessRequestContext,
+} from "./http-sessions.js";
+import { createPublicHttpRoutes, createPublicRateLimiter } from "./http-public-routes.js";
 import { isHttpEmailAuthorized } from "./services/email.js";
 
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { Buffer } from "node:buffer";
-import { createReadStream, existsSync, realpathSync } from "node:fs";
-import { lstat } from "node:fs/promises";
+import { type createReadStream, existsSync, realpathSync } from "node:fs";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -58,8 +63,6 @@ import {
   type HttpServerConfig,
 } from "./http-config.js";
 import { HEALTH_HTTP_PATH, MCP_HTTP_PATH, OAUTH_RESOURCE_METADATA_PATH } from "./http-routes.js";
-import { getLegalDocuments, renderLegalDocumentHtml } from "./services/legal-pages.js";
-import { getPublicVideoFileRoute, renderPublicVideoPageHtml } from "./services/video-page.js";
 import { createServer } from "./server.js";
 import {
   DynamoDbCredentialRateLimitStore,
@@ -68,35 +71,11 @@ import {
 } from "./credential-rate-limit-store.js";
 import { McpEmfMetrics, normalizeMcpMetricsIdentity } from "./emf-metrics.js";
 
-type SessionContext = {
-  sessionId: string;
-  transport: StreamableHTTPServerTransport;
-  server: ReturnType<typeof createServer>;
-  // The per-session client already retains this credential for downstream
-  // calls. Keep the same value here only so asynchronous teardown errors run
-  // through exact-credential redaction; never render or expose it.
-  bearerTokenForRedaction: string;
-  bearerTokenDigest: Buffer;
-  createdAt: number;
-  lastActivityAt: number;
-  activeRequests: number;
-  credentialValidated: boolean;
-  disconnectedAt?: number;
-};
-
 type AuthorizedSession = {
   session: SessionContext;
   bearerToken: string;
 };
 
-type StatelessRequestContext = {
-  transport: StreamableHTTPServerTransport;
-  server: ReturnType<typeof createServer>;
-  bearerToken: string;
-  closePromise?: Promise<void>;
-};
-
-const DISCONNECTED_SESSION_GRACE_MS = 30_000;
 const STATELESS_HEADERS_TIMEOUT_MS = 15_000;
 const STATELESS_REQUEST_TIMEOUT_MS = 120_000;
 const STATELESS_SOCKET_IDLE_TIMEOUT_MS = 120_000;
@@ -201,7 +180,19 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     config.credentialRateLimitStore !== "dynamodb";
   // Bound completed-response teardown independently from active parser work.
   // A slow SDK close path can consume at most one additional concurrency pool.
-  const closingStatelessRequests = new Set<Promise<void>>();
+  const {
+    sessions,
+    closingSessions,
+    activeStatelessRequests,
+    closingStatelessRequests,
+    markSessionDisconnected,
+    closeSession,
+    sweepExpiredSessions,
+    closeAllSessions,
+    closeStatelessRequest,
+    trackSessionActivity,
+    getActiveSessionCount,
+  } = createHttpSessionRegistry(config, withRequestAuth);
 
   const app = express();
   app.disable("x-powered-by");
@@ -222,23 +213,9 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     legacyHeaders: false,
     handler: (_req, res) => rejectJsonRpc(res, 429, "Too many requests."),
   });
-  const createPublicRateLimiter = () =>
-    rateLimit({
-      windowMs: 60_000,
-      limit: config.publicFileRateLimitPerMinute,
-      ipv6Subnet: 56,
-      standardHeaders: "draft-8",
-      legacyHeaders: false,
-      handler: (_req, res) => {
-        res.status(429).send("Too many requests.");
-      },
-    });
-  // Legal documents and the video page share an aggregate browser-page bucket.
-  // Video byte-range traffic and health probes use isolated instances so
-  // playback and liveness checks cannot starve the public documents.
-  const publicRouteRateLimiter = createPublicRateLimiter();
-  const videoFileRateLimiter = createPublicRateLimiter();
-  const healthRateLimiter = createPublicRateLimiter();
+  const publicRoutes = createPublicHttpRoutes(config, options);
+  const { streamPublicVideo, publicRouteRateLimiter } = publicRoutes;
+  const healthRateLimiter = createPublicRateLimiter(config);
   function rejectOAuth(res: express.Response, error: unknown): void {
     if (res.destroyed) return;
     if (error instanceof OAuthServerError) {
@@ -435,9 +412,6 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     strict: true,
   });
 
-  const sessions = new Map<string, SessionContext>();
-  const closingSessions = new Map<string, Promise<void>>();
-  const activeStatelessRequests = new Set<StatelessRequestContext>();
   let pendingInitializations = 0;
   const pendingInitializationsByCredential = new Map<string, number>();
 
@@ -460,136 +434,6 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     const parser = mayUseConfiguredLimit ? parseConfiguredMcpJsonBody : parseUnvalidatedMcpJsonBody;
     parser(req, res, next);
   };
-
-  function markSessionDisconnected(sessionId: string | undefined): void {
-    if (!sessionId) return;
-    const session = sessions.get(sessionId);
-    if (!session) return;
-    const disconnectedAt = Date.now();
-    session.lastActivityAt = disconnectedAt;
-    session.disconnectedAt = disconnectedAt;
-  }
-
-  async function closeSession(sessionId: string): Promise<void> {
-    const existingClose = closingSessions.get(sessionId);
-    if (existingClose) {
-      await existingClose;
-      return;
-    }
-    const session = sessions.get(sessionId);
-    if (!session) return;
-    // Admission replacement relies on removal before the first await.
-    sessions.delete(sessionId);
-    const closePromise = withRequestAuth(
-      session.sessionId,
-      session.bearerTokenForRedaction,
-      async () => {
-        try {
-          await session.server.close();
-        } catch (error) {
-          // Format while the credential-scoped redaction context is still active.
-          console.error(`[mcp-http] session close failed (${formatErrorForLog(error)})`);
-        }
-      },
-    );
-    closingSessions.set(sessionId, closePromise);
-    try {
-      await closePromise;
-    } finally {
-      closingSessions.delete(sessionId);
-      clearSensitiveLogValues(`http-session:${sessionId}`);
-    }
-  }
-
-  async function sweepExpiredSessions(now = Date.now()): Promise<number> {
-    const expiredIds = [...sessions.values()]
-      .filter((session) => {
-        if (now - session.createdAt >= config.sessionAbsoluteTtlMs) {
-          // The absolute lifetime applies even to active tool/SSE requests so
-          // keepalives cannot pin a validated session slot indefinitely.
-          return true;
-        }
-        if (
-          session.activeRequests === 0 &&
-          session.disconnectedAt !== undefined &&
-          now - session.disconnectedAt >=
-            // A deliberately shorter configured idle TTL remains authoritative.
-            Math.min(DISCONNECTED_SESSION_GRACE_MS, config.sessionIdleTtlMs)
-        ) {
-          return true;
-        }
-        if (!session.credentialValidated) {
-          // The pending-session window is an absolute validation deadline.
-          // Close even an active SSE stream so it cannot hold an unvalidated
-          // slot indefinitely.
-          return now - session.createdAt >= config.unvalidatedSessionTtlMs;
-        }
-        return (
-          session.activeRequests === 0 && now - session.lastActivityAt >= config.sessionIdleTtlMs
-        );
-      })
-      .map((session) => session.sessionId);
-    await Promise.all(expiredIds.map((sessionId) => closeSession(sessionId)));
-    return expiredIds.length;
-  }
-
-  async function closeAllSessions(): Promise<void> {
-    await Promise.all([...sessions.keys()].map((sessionId) => closeSession(sessionId)));
-    // A concurrent DELETE/sweep may have removed its registry entry while its
-    // asynchronous server.close() is still settling. Shutdown callers wait for
-    // that ownership cleanup too rather than observing an empty registry early.
-    await Promise.all([...closingSessions.values()]);
-    await Promise.all(
-      [...activeStatelessRequests].map((request) => closeStatelessRequest(request)),
-    );
-    await Promise.all([...closingStatelessRequests]);
-  }
-
-  async function closeStatelessRequest(request: StatelessRequestContext): Promise<void> {
-    if (request.closePromise) {
-      await request.closePromise;
-      return;
-    }
-    activeStatelessRequests.delete(request);
-    const bearerToken = request.bearerToken;
-    const closePromise = withRequestAuth(undefined, bearerToken, async () => {
-      try {
-        await request.transport.close();
-      } catch (error) {
-        console.error(`[mcp-http] stateless transport close failed (${formatErrorForLog(error)})`);
-      }
-      try {
-        await request.server.close();
-      } catch (error) {
-        console.error(`[mcp-http] stateless server close failed (${formatErrorForLog(error)})`);
-      }
-    }).finally(() => {
-      request.bearerToken = "";
-      closingStatelessRequests.delete(closePromise);
-    });
-    request.closePromise = closePromise;
-    closingStatelessRequests.add(closePromise);
-    await closePromise;
-  }
-
-  async function trackSessionActivity<T>(
-    session: SessionContext,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    session.lastActivityAt = Date.now();
-    session.disconnectedAt = undefined;
-    session.activeRequests += 1;
-    try {
-      return await fn();
-    } finally {
-      session.activeRequests -= 1;
-      session.lastActivityAt = Date.now();
-    }
-  }
-
-  function getActiveSessionCount(): number {
-    return sessions.size;
-  }
 
   function getSessionId(req: IncomingMessage): string | undefined {
     const header = req.headers["mcp-session-id"];
@@ -674,114 +518,6 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         id: null,
       }),
     );
-  }
-
-  async function streamPublicVideo(
-    req: express.Request,
-    res: express.Response,
-    filePath: string,
-  ): Promise<void> {
-    setPublicPageSecurityHeaders(res);
-    let stats;
-    try {
-      // Refuse a final-component symlink so a public video path cannot be
-      // retargeted to a different local file after operator configuration.
-      // Intermediate directory symlinks retain normal resolution because this
-      // absolute path is trusted operator config, never request-derived input.
-      stats = await lstat(filePath);
-    } catch (error) {
-      console.error(`[public-video] file inspection failed (${formatErrorForLog(error)})`);
-      res.status(404).send("Configured video file was not found.");
-      return;
-    }
-    if (stats.isSymbolicLink() || !stats.isFile() || stats.size === 0) {
-      res.status(404).send("Configured video file was not found.");
-      return;
-    }
-
-    // Content-Length is a request-time snapshot. Public media is trusted,
-    // operator-owned configuration and should be replaced atomically; if it
-    // is truncated in place, the stream error path below destroys the response
-    // rather than serving a silently successful partial body.
-    const fileSize = stats.size;
-    const range = req.headers.range;
-
-    const pipeFile = (start?: number, end?: number): void => {
-      const stream = options.fileStreamFactory
-        ? options.fileStreamFactory(filePath, { start, end })
-        : createReadStream(filePath, { start, end });
-      const destroyStream = () => stream.destroy();
-      res.once("close", destroyStream);
-      stream.once("close", () => res.off("close", destroyStream));
-      stream.once("error", (error) => {
-        console.error(`[public-video] stream failed (${formatErrorForLog(error)})`);
-        res.destroy(error);
-      });
-      stream.pipe(res);
-    };
-
-    res.setHeader("Accept-Ranges", "bytes");
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Cache-Control", "public, max-age=300");
-    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-    res.vary("Range");
-
-    const rejectRange = (): void => {
-      res.status(416);
-      res.setHeader("Content-Range", `bytes */${fileSize}`);
-      // Do not let a shared cache retain a malformed/unsatisfiable request's
-      // response under the public representation's cache policy.
-      res.setHeader("Cache-Control", "no-store");
-      res.end();
-    };
-
-    if (!range) {
-      res.setHeader("Content-Length", fileSize);
-      pipeFile();
-      return;
-    }
-
-    // Single ranges cover browser video playback. RFC 9110 permits a server to
-    // reject unsupported multi-range requests, which we answer with 416.
-    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
-    if (!match) {
-      rejectRange();
-      return;
-    }
-
-    const parsedStart = match[1] ? Number(match[1]) : undefined;
-    const parsedEnd = match[2] ? Number(match[2]) : undefined;
-    if (
-      (parsedStart === undefined && parsedEnd === undefined) ||
-      (parsedStart !== undefined && !Number.isSafeInteger(parsedStart)) ||
-      (parsedEnd !== undefined && !Number.isSafeInteger(parsedEnd))
-    ) {
-      rejectRange();
-      return;
-    }
-
-    let start = parsedStart ?? 0;
-    let end = parsedEnd ?? fileSize - 1;
-
-    if (parsedStart === undefined && parsedEnd !== undefined) {
-      start = Math.max(fileSize - parsedEnd, 0);
-      end = fileSize - 1;
-    } else {
-      // RFC 9110 treats an explicit last-byte position beyond the selected
-      // representation as the representation's final byte.
-      end = Math.min(end, fileSize - 1);
-    }
-
-    if (start < 0 || end < 0 || start >= fileSize || start > end) {
-      rejectRange();
-      return;
-    }
-
-    const chunkSize = end - start + 1;
-    res.status(206);
-    res.setHeader("Content-Range", `bytes ${start}-${end}/${fileSize}`);
-    res.setHeader("Content-Length", chunkSize);
-    pipeFile(start, end);
   }
 
   const REINITIALIZE_MESSAGE =
@@ -1221,56 +957,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     rejectJsonRpc(res, 500, "Internal server error.");
   };
 
-  function getInlineStyleSources(html: string): string[] {
-    // Page renderers must keep style blocks static. Interpolating request or
-    // config data into CSS would make this live-content hash authorize it.
-    return [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map(
-      (match) => `'sha256-${createHash("sha256").update(match[1], "utf8").digest("base64")}'`,
-    );
-  }
-
-  function setPublicPageSecurityHeaders(
-    res: express.Response,
-    styleSources: string[] = [],
-    allowSameOriginMedia = false,
-  ): void {
-    const stylePolicy = styleSources.length > 0 ? styleSources.join(" ") : "'none'";
-    const mediaPolicy = allowSameOriginMedia ? "'self'" : "'none'";
-    res.set({
-      "Content-Security-Policy": `default-src 'none'; style-src ${stylePolicy}; img-src 'none'; media-src ${mediaPolicy}; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
-      "Referrer-Policy": "no-referrer",
-      "X-Content-Type-Options": "nosniff",
-      "X-Frame-Options": "DENY",
-    });
-  }
-
-  const legalDocuments = config.serveLayerVLegalPages ? getLegalDocuments() : [];
-  for (const document of legalDocuments) {
-    const html = renderLegalDocumentHtml(document.path, baseUrl);
-    if (!html) continue;
-    const styleSources = getInlineStyleSources(html);
-    app.get(document.path, publicRouteRateLimiter, (_req, res) => {
-      setPublicPageSecurityHeaders(res, styleSources);
-      res.type("html").send(html);
-    });
-  }
-
-  if (config.publicVideo) {
-    const publicVideo = config.publicVideo;
-    const videoPagePath = publicVideo.pagePath;
-    const videoFileRoute = getPublicVideoFileRoute(videoPagePath);
-    const videoPageHtml = renderPublicVideoPageHtml(publicVideo, baseUrl);
-    const videoStyleSources = getInlineStyleSources(videoPageHtml);
-
-    app.get(videoPagePath, publicRouteRateLimiter, (_req, res) => {
-      setPublicPageSecurityHeaders(res, videoStyleSources, true);
-      res.type("html").send(videoPageHtml);
-    });
-
-    app.get(videoFileRoute, videoFileRateLimiter, async (req, res) => {
-      await streamPublicVideo(req, res, publicVideo.filePath);
-    });
-  }
+  publicRoutes.register(app);
 
   // Keep JSON-RPC error envelopes scoped to the protocol route. Public pages
   // use a plain-text fallback so an unrelated handler failure cannot return a
@@ -1356,24 +1043,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
         );
       }
       logInfo("HTTP and runtime config loaded.");
-      logInfo(`Public legal pages enabled: ${legalDocuments.length}`);
-      if (config.publicVideo) {
-        logInfo("Public video page enabled.");
-        // The video is an optional public asset, not an MCP readiness
-        // dependency. Warn at boot but keep /healthz and MCP available; the
-        // request path independently fails closed until the asset is usable.
-        void lstat(config.publicVideo.filePath)
-          .then((stats) => {
-            if (stats.isSymbolicLink() || !stats.isFile()) {
-              console.warn("[public-video] configured path is not a regular file at startup");
-            } else if (stats.size === 0) {
-              console.warn("[public-video] configured video file is empty at startup");
-            }
-          })
-          .catch(() => {
-            console.warn("[public-video] configured video file is unavailable at startup");
-          });
-      }
+      publicRoutes.logStartupStatus();
       if (defaultQurlConnectorUrl) logInfo("qURL Connector uploads enabled.");
       const smtpInspection = inspectSmtpConfig(runtimeConfigPath);
       logInfo(
