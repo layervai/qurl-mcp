@@ -73,7 +73,7 @@ export function defineToolFactory<S extends z.ZodObject>(
       return {
         ...tool,
         handler: async (input: unknown) => {
-          const parsed = tool.inputSchema.safeParse(input);
+          const parsed = await tool.inputSchema.safeParseAsync(input);
           if (!parsed.success) return zodErrorToToolResult(parsed.error);
           return tool.handler(parsed.data);
         },

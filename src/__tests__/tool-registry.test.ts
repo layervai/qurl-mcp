@@ -31,6 +31,17 @@ describe("typed tool registration", () => {
     expect(called).toHaveBeenCalledTimes(1);
   });
 
+  it("supports asynchronous input refinements", async () => {
+    const factory = defineToolFactory(() => ({
+      ...metadata,
+      inputSchema: z.object({ count: z.number().refine(async (count) => count > 0) }),
+      handler: async () => result,
+    }));
+    const tool = factory(makeMockClient(), { mode: "stdio" });
+    expect(await tool.handler({ count: 1 })).toEqual(result);
+    expect(await tool.handler({ count: 0 })).toMatchObject({ isError: true });
+  });
+
   it("accepts zero-argument handlers", async () => {
     const factory = defineToolFactory(() => ({
       ...metadata,
