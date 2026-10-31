@@ -15,6 +15,15 @@ name: Publish to MCP Registry (manual)
 # exist there). That's an acceptable, loud failure mode.
 on:
   workflow_dispatch:
+    inputs:
+      publisher-version:
+        description: Optional publisher tag override; supply its SHA256 too
+        required: false
+        type: string
+      publisher-sha256:
+        description: Optional publisher archive SHA256; supply its tag too
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -23,6 +32,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: mcp-registry-publish
     timeout-minutes: 5
     # Shared with the release-please.yml publish-mcp-registry job —
     # prevents a manual republish from racing an in-flight release.
@@ -33,4 +43,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Publish to MCP Registry
+        if: ${{ !inputs.publisher-version && !inputs.publisher-sha256 }}
         uses: ./.github/actions/publish-mcp-registry
+      - name: Publish with publisher override
+        if: ${{ inputs.publisher-version || inputs.publisher-sha256 }}
+        uses: ./.github/actions/publish-mcp-registry
+        with:
+          publisher-version: ${{ inputs.publisher-version }}
+          publisher-sha256: ${{ inputs.publisher-sha256 }}
