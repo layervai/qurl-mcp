@@ -28,8 +28,18 @@ import { emailDeliveryResultSchema } from "../email-types.js";
 const resourceStatuses = ["active", "revoked", "expired", "unknown"] as const;
 const tokenStatuses = ["active", "consumed", "expired", "revoked", "unknown"] as const;
 
+const statusSignals = new Set<string>();
+let statusSignalWindowStartedAt = 0;
+
 function observeStatus(field: string, input: unknown, allowed: readonly string[]): unknown {
   if (typeof input === "string" && allowed.includes(input) && input !== "unknown") return input;
+  const now = Date.now();
+  if (now < statusSignalWindowStartedAt || now - statusSignalWindowStartedAt >= 60_000) {
+    statusSignals.clear();
+    statusSignalWindowStartedAt = now;
+  }
+  // Bound both warning volume and retained data during a malformed-response flood.
+  if (statusSignals.size >= 100) return input;
   // Select scalar diagnostics only; malformed objects can contain credentials.
   const raw =
     typeof input === "string"
@@ -38,9 +48,11 @@ function observeStatus(field: string, input: unknown, allowed: readonly string[]
         ? "[non-scalar]"
         : String(input);
   const reason = input === "unknown" ? "wire_unknown" : "coerced";
-  console.warn(
-    `[qurl-mcp] status signal field=${field} reason=${reason} input=${sanitizeLogValue(raw)}`,
-  );
+  const signal = `[qurl-mcp] status signal field=${field} reason=${reason} input=${sanitizeLogValue(raw)}`;
+  if (!statusSignals.has(signal)) {
+    statusSignals.add(signal);
+    console.warn(signal);
+  }
   return input;
 }
 

@@ -1,9 +1,16 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { accessTokenOutputSchema, qurlSchema } from "../tools/output-schemas.js";
 import { sampleAccessToken, sampleQURL } from "./helpers.js";
 
-afterEach(() => vi.restoreAllMocks());
+let minute = 0;
+beforeEach(() => {
+  vi.useFakeTimers({ now: Date.UTC(2030, 0, 1) + ++minute * 120_001 });
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 for (const [field, schema, fixture] of [
   ["resource.status", qurlSchema, sampleQURL()],
@@ -22,6 +29,25 @@ for (const [field, schema, fixture] of [
       expect(warn).toHaveBeenCalledExactlyOnceWith(
         `[qurl-mcp] status signal field=${field} reason=${reason} input=${raw}`,
       );
+    });
+
+    it("reports each distinct signal once per minute", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      for (let i = 0; i < 500; i++) schema.parse({ ...fixture, status: "pending" });
+      schema.parse({ ...fixture, status: undefined });
+      expect(warn).toHaveBeenCalledTimes(2);
+      vi.advanceTimersByTime(60_000);
+      schema.parse({ ...fixture, status: "pending" });
+      expect(warn).toHaveBeenCalledTimes(3);
+    });
+
+    it("caps distinct warnings and resumes in the next minute", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      for (let i = 0; i < 150; i++) schema.parse({ ...fixture, status: `future_${i}` });
+      expect(warn).toHaveBeenCalledTimes(100);
+      vi.advanceTimersByTime(60_000);
+      schema.parse({ ...fixture, status: "pending" });
+      expect(warn).toHaveBeenCalledTimes(101);
     });
 
     it("does not warn for known lifecycle values", () => {
@@ -53,9 +79,11 @@ for (const [field, schema, fixture] of [
     });
 
     it("keeps the status schema serializable for tools/list", () => {
-      expect(z.toJSONSchema(schema).properties?.status).toMatchObject({
-        enum: expect.arrayContaining(["active", "unknown"]),
-      });
+      for (const io of ["input", "output"] as const) {
+        expect(z.toJSONSchema(schema, { io }).properties?.status).toMatchObject({
+          enum: expect.arrayContaining(["active", "unknown"]),
+        });
+      }
     });
   });
 }
