@@ -25,14 +25,23 @@ on:
         required: false
         type: string
 
-permissions:
-  contents: read
-  id-token: write # Required for github-oidc auth
+permissions: {}
 
 jobs:
-  publish:
+  approve:
     runs-on: ubuntu-latest
+    # Required Platform review; admin bypass must remain disabled in repo settings.
     environment: mcp-registry-publish
+    timeout-minutes: 1
+    steps:
+      - name: Approval received
+        run: echo 'Manual registry publication approved'
+  publish:
+    needs: approve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for github-oidc auth
     timeout-minutes: 5
     # Shared with the release-please.yml publish-mcp-registry job —
     # prevents a manual republish from racing an in-flight release.
