@@ -39,8 +39,8 @@ function runInstall(tag: string, sha: string) {
   }
 }
 
-describe("publisher install trust boundary", () => {
-  it.each(["", "v1.7.5", "v1.7.9/../../other", "$(touch unwanted)", "v1.7.9\nextra"])(
+describe.skipIf(process.platform === "win32")("publisher install trust boundary", () => {
+  it.each(["", "v1.7.5", "v1.8.0-rc1", "v1.7.9/../../other", "$(touch unwanted)", "v1.7.9\nextra"])(
     "rejects invalid or obsolete version %j before download",
     (tag) => {
       expect(runInstall(tag, checksum)).toEqual({ status: 1, request: "" });
@@ -52,11 +52,14 @@ describe("publisher install trust boundary", () => {
       expect(runInstall(version, sha)).toEqual({ status: 1, request: "" });
     },
   );
-  it.each([version, "v1.7.6", "v1.8.0"])("uses the fixed upstream host for %s", (tag) => {
-    const result = runInstall(tag, checksum);
-    expect(result.status).toBe(73); // The fake download stops before checksum, extraction, or auth.
-    expect(result.request).toContain(
-      `https://github.com/modelcontextprotocol/registry/releases/download/${tag}/mcp-publisher_linux_amd64.tar.gz`,
-    );
-  });
+  it.each([version, "v1.7.6", "v1.8.0", "v1.10.0"])(
+    "uses the fixed upstream host for %s",
+    (tag) => {
+      const result = runInstall(tag, checksum);
+      expect(result.status).toBe(73); // The fake download stops before checksum, extraction, or auth.
+      expect(result.request).toContain(
+        `https://github.com/modelcontextprotocol/registry/releases/download/${tag}/mcp-publisher_linux_amd64.tar.gz`,
+      );
+    },
+  );
 });
