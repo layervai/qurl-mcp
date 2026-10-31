@@ -81,7 +81,7 @@ export function shareByCRIDTool(
     name: "share_by_crid",
     title: "Share qURL by CRID",
     description:
-      "Request a temporary qURL access link for a resource identified by its CRID. " +
+      "Request a temporary qURL access link for a legacy resource identified by its CRID. " +
       "Only for legacy resources without consumer_access; use manage_crid_access and the policy's invitation or grant flow for consumer_access resources. " +
       "Use the known resource policy. If qurl:read is available, get_qurl (without the leading $ marker) can check consumer_access. A resolve-only key can share a known legacy resource without that read; if the policy is unknown, ask the publisher, and never treat a denied read as proof that it is legacy. " +
       "When the user supplies a legacy resource CRID with a leading `$` marker, remove the marker and use this tool. " +
