@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sanitizeLogValue } from "../logging.js";
 import { emailDeliveryResultSchema } from "../email-types.js";
 
 /**
@@ -23,6 +24,25 @@ import { emailDeliveryResultSchema } from "../email-types.js";
  * error for no benefit. We trust the server on shape and use `.string()` as
  * an existence/typeof check.
  */
+
+const resourceStatuses = ["active", "revoked", "expired", "unknown"] as const;
+const tokenStatuses = ["active", "consumed", "expired", "revoked", "unknown"] as const;
+
+function observeStatus(field: string, input: unknown, allowed: readonly string[]): unknown {
+  if (typeof input === "string" && allowed.includes(input) && input !== "unknown") return input;
+  // Select scalar diagnostics only; malformed objects can contain credentials.
+  const raw =
+    typeof input === "string"
+      ? JSON.stringify(input)
+      : input !== null && (typeof input === "object" || typeof input === "function")
+        ? "[non-scalar]"
+        : String(input);
+  const reason = input === "unknown" ? "wire_unknown" : "coerced";
+  console.warn(
+    `[qurl-mcp] status signal field=${field} reason=${reason} input=${sanitizeLogValue(raw)}`,
+  );
+  return input;
+}
 
 const accessPolicy = z
   .looseObject({
@@ -50,8 +70,10 @@ export const accessTokenOutputSchema = z
     // status is wider and just as exposed to a new server-side value
     // reaching a host between weekly snapshot runs.
     status: z
-      .enum(["active", "consumed", "expired", "revoked", "unknown"])
-      .catch("unknown")
+      .preprocess(
+        (input) => observeStatus("token.status", input, tokenStatuses),
+        z.enum(tokenStatuses).catch("unknown"),
+      )
       .describe(
         "Per-token status (wider than resource status — tokens may be consumed/expired independently)",
       ),
@@ -95,17 +117,11 @@ export const qurlSchema = z.looseObject({
   created_at: z.string(),
   // Resources are active/revoked; tolerate "expired" from older responses.
   // The snapshot's expiration prose is stale; its enum is authoritative.
-  // "unknown" is the fail-soft drift sentinel
-  // emitted by `.catch()` for any parse failure (unknown enum value,
-  // null, wrong type, missing field) — see fail-soft-scope tests in
-  // output-schemas.types.test.ts and #101 for operator-visibility.
-  //
-  // Hypothetical-collision: if the API ever introduces a real
-  // `"unknown"` lifecycle value, it would be indistinguishable from a
-  // .catch() coercion. Accepted as low-probability vs. the cost of a
-  // synthetic-name sentinel; #101's telemetry will need to log the
-  // raw-input value (not just the coerced output) to disambiguate.
-  status: z.enum(["active", "revoked", "expired", "unknown"]).catch("unknown"),
+  // Keep the fail-soft sentinel, but distinguish coercion from a wire "unknown".
+  status: z.preprocess(
+    (input) => observeStatus("resource.status", input, resourceStatuses),
+    z.enum(resourceStatuses).catch("unknown"),
+  ),
   custom_domain: z.string().nullable().optional(),
   slug: z
     .string()
