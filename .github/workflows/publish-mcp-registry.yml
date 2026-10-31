@@ -15,14 +15,33 @@ name: Publish to MCP Registry (manual)
 # exist there). That's an acceptable, loud failure mode.
 on:
   workflow_dispatch:
+    inputs:
+      publisher-version:
+        description: Optional publisher tag override; supply its SHA256 too
+        required: false
+        type: string
+      publisher-sha256:
+        description: Optional publisher archive SHA256; supply its tag too
+        required: false
+        type: string
 
-permissions:
-  contents: read
-  id-token: write # Required for github-oidc auth
+permissions: {}
 
 jobs:
-  publish:
+  approve:
     runs-on: ubuntu-latest
+    # Required Platform review; admin bypass must remain disabled in repo settings.
+    environment: mcp-registry-publish
+    timeout-minutes: 1
+    steps:
+      - name: Approval received
+        run: echo 'Manual registry publication approved'
+  publish:
+    needs: approve
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for github-oidc auth
     timeout-minutes: 5
     # Shared with the release-please.yml publish-mcp-registry job —
     # prevents a manual republish from racing an in-flight release.
@@ -32,5 +51,17 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require paired publisher override
+        if: ${{ (inputs.publisher-version == '') != (inputs.publisher-sha256 == '') }}
+        run: |
+          echo 'publisher-version and publisher-sha256 must be supplied together' >&2
+          exit 1
       - name: Publish to MCP Registry
+        if: ${{ !inputs.publisher-version && !inputs.publisher-sha256 }}
         uses: ./.github/actions/publish-mcp-registry
+      - name: Publish with publisher override
+        if: ${{ inputs.publisher-version || inputs.publisher-sha256 }}
+        uses: ./.github/actions/publish-mcp-registry
+        with:
+          publisher-version: ${{ inputs.publisher-version }}
+          publisher-sha256: ${{ inputs.publisher-sha256 }}
