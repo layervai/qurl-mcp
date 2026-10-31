@@ -2833,7 +2833,11 @@ describe("public video range streaming", () => {
 });
 
 it("shares feedback IP quota across public intake and MCP calls even when fake passthrough bearers rotate", async () => {
-  vi.stubEnv("MCP_FEEDBACK_SLACK_WEBHOOK_URL", "");
+  vi.stubEnv(
+    "MCP_FEEDBACK_SLACK_WEBHOOK_URL",
+    "https://hooks.slack.com/services/TEST/CHANNEL/secret",
+  );
+  vi.stubEnv("QURL_MCP_FEEDBACK", "off");
   const feedbackRuntime = createHttpRuntime(
     { ...testConfig, stateless: true },
     { version: "test" },
@@ -2852,7 +2856,7 @@ it("shares feedback IP quota across public intake and MCP calls even when fake p
       }),
     });
     expect(response.status).toBe(200);
-    expect(await response.text()).toContain("Feedback was not sent");
+    expect(await response.text()).toContain("submit_feedback");
   }
   for (let i = 0; i < 2; i++) {
     const response = await fetch(`${baseUrl}/feedback`, {
@@ -2874,6 +2878,10 @@ it("shares feedback IP quota across public intake and MCP calls even when fake p
     }),
   });
   expect(limited.status).toBe(429);
-  await limited.body?.cancel();
+  expect(await limited.json()).toMatchObject({ jsonrpc: "2.0", id: null, error: { code: -32000 } });
+  const headers = limited.headers.get("ratelimit-policy") ?? "";
+  expect(headers).toContain("credential");
+  expect(headers).toContain("ip");
+  vi.unstubAllEnvs();
   await feedbackRuntime.closeAllSessions();
 });

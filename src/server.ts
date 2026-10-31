@@ -1,3 +1,4 @@
+import { feedbackEnabled } from "./services/feedback.js";
 import { submitFeedbackTool } from "./tools/submit-feedback.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { z } from "zod";
@@ -152,18 +153,20 @@ export const LOCAL_CLI_INSTRUCTIONS =
  */
 export function createLocalCliServer(cli: IQurlCli, version: string): McpServer {
   const server = new McpServer({ name: "qurl", version }, { instructions: LOCAL_CLI_INSTRUCTIONS });
-  const feedback = submitFeedbackTool();
-  server.registerTool(
-    feedback.name,
-    {
-      title: feedback.title,
-      description: feedback.description,
-      inputSchema: feedback.inputSchema,
-      outputSchema: feedback.outputSchema,
-      annotations: feedback.annotations,
-    },
-    feedback.handler,
-  );
+  if (feedbackEnabled()) {
+    const feedback = submitFeedbackTool();
+    server.registerTool(
+      feedback.name,
+      {
+        title: feedback.title,
+        description: feedback.description,
+        inputSchema: feedback.inputSchema,
+        outputSchema: feedback.outputSchema,
+        annotations: feedback.annotations,
+      },
+      feedback.handler,
+    );
+  }
   for (const factory of localCliToolFactories) {
     const tool = factory(cli);
     server.registerTool(
@@ -219,6 +222,7 @@ export function createServer(
     : factories;
   for (const factory of catalog) {
     const tool = factory(client, { mode, maxUploadFileDataBytes });
+    if (tool.name === "submit_feedback" && !feedbackEnabled(mode)) continue;
     if (!capabilities.uploads && connectorToolFactories.includes(factory)) continue;
     const inputSchema =
       !capabilities.email && "email_delivery" in tool.inputSchema.shape
@@ -231,7 +235,7 @@ export function createServer(
       {
         title: tool.title,
         description: tool.description,
-        inputSchema: inputSchema.shape,
+        inputSchema: tool.name === "submit_feedback" ? inputSchema : inputSchema.shape,
         outputSchema: tool.outputSchema,
         // Anthropic directory review requires this hint for all data changes, including additions.
         annotations:
@@ -246,7 +250,7 @@ export function createServer(
             }
           : {}),
       },
-      async (input) => {
+      async (input: unknown) => {
         const required = oauth ? toolScopes(tool.name) : [];
         if (oauth && !required.every((scope) => oauth.scopes.includes(scope))) {
           return {

@@ -48,14 +48,34 @@ export function feedbackWebhookUrl(): string | undefined {
   return value;
 }
 
+export function feedbackEnabled(mode: "stdio" | "http" = "stdio"): boolean {
+  return (
+    process.env.QURL_MCP_FEEDBACK?.trim().toLowerCase() !== "off" &&
+    (mode === "stdio" || Boolean(feedbackWebhookUrl()))
+  );
+}
+
 // shortcut: process-local Slack budget, use a shared queue if replicas need guaranteed burst delivery.
 let nextSlackAttemptAt = 0;
+let slackHour = -1;
+let slackHourlyAttempts = 0;
 export async function deliverFeedback(input: unknown) {
   const report = feedbackSchema.parse(input);
-  const webhook = feedbackWebhookUrl();
+  const webhook = feedbackEnabled("http") ? feedbackWebhookUrl() : undefined;
   if (!webhook) throw new FeedbackError(503, "Feedback was not sent: delivery is not configured.");
   if (Date.now() < nextSlackAttemptAt)
     throw new FeedbackError(429, "Feedback was not sent: too many reports. Try again later.");
+  const hour = Math.floor(Date.now() / 3_600_000);
+  if (hour !== slackHour) {
+    slackHour = hour;
+    slackHourlyAttempts = 0;
+  }
+  if (slackHourlyAttempts >= 100)
+    throw new FeedbackError(
+      429,
+      "Feedback was not sent: hourly report limit reached. Try again later.",
+    );
+  slackHourlyAttempts += 1;
   nextSlackAttemptAt = Date.now() + 1_000;
   const feedback_id = randomUUID();
   const message = redactFeedbackMessage(report.message);
@@ -116,7 +136,7 @@ export async function readFeedbackResponseText(response: Response, limit: number
 
 export function redactFeedbackMessage(message: string): string {
   return sanitizeLogValue(message)
-    .replace(/https?:\/\/\S+/gi, "[link removed]")
+    .replace(/(?:https?:\/\/|(?:www\.|(?:[a-z0-9-]+\.)*qurl\.link\/))\S+/gi, "[link removed]")
     .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, "[email removed]")
     .slice(0, 500);
 }

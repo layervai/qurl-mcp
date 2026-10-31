@@ -1103,7 +1103,9 @@ Its SIL Open Font License and copyright notice are included in
 ## Agent feedback and human review
 
 `submit_feedback` sends a short report to the LayerV team in Slack. It is available
-in hosted HTTP, API-key stdio, and local CLI mode. Local agents need no account or
+in configured hosted HTTP, API-key stdio, and local CLI mode. Set
+`QURL_MCP_FEEDBACK=off` to hide and disable feedback in any mode. Self-hosted HTTP
+servers omit the tool until a Slack webhook is configured. Local agents need no account or
 Slack secret. They POST to `https://mcp.connector.layerv.ai/feedback`; hosted tools
 use the same Slack delivery function directly.
 
@@ -1121,7 +1123,7 @@ Categories are `bug`, `feature`, `friction`, and `other`. The message is limited
 to 500 characters. `tool_name` is optional. Send only reports the user authorized
 for sharing. Do not include secrets, private links, personal data, or conversation
 history. The service removes known active credentials, qURL API keys, bearer
-credentials, HTTP links, and email addresses as a best-effort safeguard. This is
+credentials, HTTP links, bare qurl.link/www links, and email addresses as a best-effort safeguard. This is
 not a general secret or personal-data detector. Reports are plain text in Slack,
 with link previews disabled. No account identity, client IP, transcript, or
 resource content is added to the Slack message.
@@ -1139,7 +1141,7 @@ unknown fields, and permits at most five attempts per source IP per hour per
 process, shared with MCP tool submissions from the same source IP. Rotating
 bearer credentials does not reset it. IPv6 sources use a /56 bucket. Host validation applies; browser requests
 with a foreign Origin are rejected. Both public intake and hosted MCP tools share
-a one-attempt-per-second Slack budget per process. Hosted tools also retain the
+a one-attempt-per-second and 100-attempt-per-UTC-hour Slack budget per process. Hosted tools also retain the
 existing MCP request limits; passthrough bearers are not identity proof. Feedback needs no extra OAuth
 scope. These process-local feedback limits multiply with replicas and reset on
 restart. This is an anonymous report channel: report text and claimed tool names

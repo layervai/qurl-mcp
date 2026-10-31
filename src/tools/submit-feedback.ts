@@ -1,6 +1,7 @@
 import type { IQURLClient } from "../client.js";
 import {
   deliverFeedback,
+  feedbackEnabled,
   FeedbackError,
   redactFeedbackMessage,
   readFeedbackResponseText,
@@ -32,6 +33,11 @@ export function submitFeedbackTool(
       const parsed = feedbackSchema.safeParse(input);
       if (!parsed.success) return zodErrorToToolResult(parsed.error);
       try {
+        if (!feedbackEnabled(runtime.mode))
+          throw new FeedbackError(
+            503,
+            "Feedback was not sent: delivery is disabled or not configured.",
+          );
         let receipt;
         if (runtime.mode === "http") {
           receipt = await deliverFeedback(parsed.data);

@@ -138,7 +138,7 @@ describe("hosted OAuth HTTP boundary", () => {
       }),
     );
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(21);
+    expect(tools).toHaveLength(20);
     for (const tool of tools) {
       if (!tool.annotations?.readOnlyHint)
         expect(tool.annotations?.destructiveHint, tool.name).toBe(true);

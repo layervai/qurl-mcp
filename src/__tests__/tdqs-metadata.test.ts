@@ -333,16 +333,14 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       clientOverrides: {},
       setup: () => {
         const previousFetch = globalThis.fetch;
-        globalThis.fetch = vi
-          .fn()
-          .mockResolvedValue(
-            new Response(
-              JSON.stringify({
-                feedback_id: "c572d71e-fb5b-4f38-a632-5f697252856d",
-                status: "sent_for_human_review",
-              }),
-            ),
-          );
+        globalThis.fetch = vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              feedback_id: "c572d71e-fb5b-4f38-a632-5f697252856d",
+              status: "sent_for_human_review",
+            }),
+          ),
+        );
         return () => {
           globalThis.fetch = previousFetch;
         };

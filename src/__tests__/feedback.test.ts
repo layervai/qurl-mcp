@@ -101,6 +101,23 @@ describe("feedback delivery", () => {
     expect(results.map((x) => x.status)).toEqual(["fulfilled", "rejected"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+  it("bounds total Slack attempts to 100 per process per UTC hour", async () => {
+    tick = Math.ceil(tick / 3_600_000) * 3_600_000;
+    const mock = vi.fn().mockImplementation(() => Promise.resolve(new Response("ok")));
+    vi.stubGlobal("fetch", mock);
+    for (let i = 0; i < 100; i++) {
+      tick += 2_000;
+      vi.mocked(Date.now).mockReturnValue(tick);
+      await deliverFeedback(report);
+    }
+    tick += 2_000;
+    vi.mocked(Date.now).mockReturnValue(tick);
+    await expect(deliverFeedback(report)).rejects.toThrow("hourly report limit");
+    expect(mock).toHaveBeenCalledTimes(100);
+    tick += 3_600_000;
+    vi.mocked(Date.now).mockReturnValue(tick);
+    expect((await deliverFeedback(report)).status).toBe("sent_for_human_review");
+  });
   it("fails closed when unconfigured and rejects a non-Slack destination", async () => {
     vi.stubEnv("MCP_FEEDBACK_SLACK_WEBHOOK_URL", "");
     await expect(deliverFeedback(report)).rejects.toThrow("not configured");

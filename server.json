@@ -126,6 +126,13 @@
           "isRequired": false,
           "format": "string",
           "default": "100"
+        },
+        {
+          "name": "QURL_MCP_FEEDBACK",
+          "description": "Set to off to hide and disable outbound LayerV product feedback. Default on. Feedback is sent only by an explicit submit_feedback tool call.",
+          "isRequired": false,
+          "format": "string",
+          "default": "on"
         }
       ]
     }
