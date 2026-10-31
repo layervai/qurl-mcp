@@ -214,3 +214,29 @@ it("selects an allowed replacement and reports rejected live extras by ID only",
   });
   expect(JSON.stringify(result)).not.toContain("evil.example");
 });
+
+it.each(["127.0.0.1", "[::1]"])(
+  "keeps an explicitly permitted loopback development link: %s",
+  async (host) => {
+    vi.stubEnv("QURL_LINK_HOSTS", host);
+    vi.stubEnv("QURL_API_KEY", "lv_test");
+    vi.stubEnv("QURL_CONNECTOR_URL", "http://127.0.0.1:8080");
+    const link = `http://${host}/#at_fixture`;
+    vi.stubGlobal(
+      "fetch",
+      mockConnectorFetch(undefined, (body) =>
+        Response.json({
+          success: true,
+          links: [{ ...connectorMintedLink, qurl_link: link, expires_at: body.expires_at }],
+        }),
+      ),
+    );
+    const result = await mintUploadedFile(
+      getConnectorConfig(true),
+      "r_upload12345",
+      { name: "fixture.pdf", contentType: "application/pdf", sizeBytes: 10 },
+      {},
+    );
+    expect(result.qurl_link).toBe(link);
+  },
+);

@@ -2,6 +2,7 @@
   "maxUploadFileDataBytes": "10mb",
   "defaultQurlApiUrl": "https://api.layerv.ai",
   "defaultQurlConnectorUrl": "https://connector.example.com",
+  "linkHosts": [],
   "smtp": {
     "host": "smtp.example.com",
     "port": 587,
