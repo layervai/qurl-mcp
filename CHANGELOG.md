@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.9.0...qurl-mcp-v0.9.1) (2026-11-01)
+
+
+### Bug Fixes
+
+* **tools:** show tool purposes first in compact catalogs ([#370](https://github.com/layervai/qurl-mcp/issues/370)) ([e3d6d6b](https://github.com/layervai/qurl-mcp/commit/e3d6d6b33a4360603b5338c4e60530e98d6e8e32))
+
 ## [0.9.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.3...qurl-mcp-v0.9.0) (2026-10-31)
 
 
