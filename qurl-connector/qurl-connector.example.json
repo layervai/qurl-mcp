@@ -1,0 +1,12 @@
+{
+  "listenAddr": "127.0.0.1:3100",
+  "apiBaseUrl": "https://api.layerv.xyz",
+  "apiKey": "REPLACE_WITH_QURL_CREDENTIAL_WITH_RESOURCE_SHARE_PERMISSION",
+  "deploymentPath": "qurl-deployment.xyz.json",
+  "allowedLinkHosts": [
+    "qurl.link",
+    "qurl.link.layerv.xyz"
+  ],
+  "cridHeader": "X-MCP-CRID",
+  "dynamicCrid": true
+}
