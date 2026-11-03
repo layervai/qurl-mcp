@@ -1,0 +1,5 @@
+# Local connector configuration contains a qURL credential.
+qurl-connector.json
+
+# Build output from build-and-start.sh.
+/qurl-connector
