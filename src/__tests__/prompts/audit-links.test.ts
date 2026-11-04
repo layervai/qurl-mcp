@@ -28,7 +28,9 @@ describe("auditLinksPrompt", () => {
       const prompt = auditLinksPrompt();
       const result = prompt.handler();
 
-      expect(getPromptText(result)).toContain("list_qurls");
+      expect(getPromptText(result)).toContain('list_qurls with status: "active"');
+      expect(getPromptText(result)).toContain("meta.has_more");
+      expect(getPromptText(result)).toContain("meta.next_cursor");
     });
 
     it("includes expiration check instructions", () => {
