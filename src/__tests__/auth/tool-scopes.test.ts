@@ -23,5 +23,6 @@ it("covers every API tool with the documented scope contract", () => {
     "qurl:read",
   ]);
   expect(toolScopes("create_qurl", { target_url: "https://example.com" })).toEqual(["qurl:write"]);
+  expect(toolScopes("create_qurl", { rule_id: "" })).toEqual(["qurl:write"]);
   expect(() => toolScopes("future_unmapped_tool")).toThrow("Missing OAuth scope policy");
 });

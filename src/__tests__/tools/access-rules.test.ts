@@ -44,6 +44,17 @@ const rules: AccessRules = {
   ],
 };
 const [domainRule, publicRule, paidRule, reviewRule] = rules.items;
+const extraRules = [
+  { id: "future-rule", name: "Future", mode: "future_mode" },
+  {
+    id: "paid-public",
+    name: "Paid link",
+    mode: "public",
+    payment: { price_id: "price_1", access_seconds: 0 },
+  },
+  { id: "broken-public", name: "Broken", mode: "public", link_limits: {} },
+  { id: "broken-private", name: "Broken", mode: "review", allowed_emails: "x" },
+];
 const text = (result: { content: Array<{ text?: string }> }) => result.content[0].text ?? "";
 const rulesClient = (overrides = {}) =>
   makeMockClient({ getAccessRules: vi.fn().mockResolvedValue(rules), ...overrides });
@@ -90,6 +101,10 @@ describe("create_qurl with rule_id", () => {
       { expires_in: "2h", one_time_use: false },
     ],
     [{ rule_id: "once-rule" }, { expires_in: "30d", one_time_use: true, session_duration: "24h" }],
+    [
+      { rule_id: "no-session-rule", session_duration: "2h" },
+      { expires_in: "1h", one_time_use: false, session_duration: "2h" },
+    ],
   ])("uses %j as %j", async (input, sent) => {
     const client = makeMockClient({
       getAccessRules: vi.fn().mockResolvedValue({
@@ -100,6 +115,12 @@ describe("create_qurl with rule_id", () => {
             name: "Once",
             mode: "public",
             link_limits: { expires_in: "30d", one_time_use: true, session_duration: "24h" },
+          },
+          {
+            id: "no-session-rule",
+            name: "Hour",
+            mode: "public",
+            link_limits: { expires_in: "1h" },
           },
         ],
       }),
@@ -128,11 +149,19 @@ describe("create_qurl with rule_id", () => {
     [{ rule_id: "future-rule" }, "cannot use"],
     [{ rule_id: "builtin.unknown" }, "No access rule"],
     [{ rule_id: publicRule.id, expires_in: "2h" }, "omit them"],
+    [{ rule_id: "paid-public" }, "takes payment"],
+    [{ rule_id: "broken-public" }, "unrecognized access rules"],
   ])("refuses %j before creating", async (input, message) => {
     const client = rulesClient({
       getAccessRules: vi.fn().mockResolvedValue({
         ...rules,
-        items: [...rules.items, { id: "future-rule", name: "Future", mode: "future_mode" }],
+        // A malformed rule fails the whole library, so add one only to its own case.
+        items: [
+          ...rules.items,
+          ...extraRules.filter(
+            (r) => !r.id.startsWith("broken") || r.id === (input as { rule_id?: string }).rule_id,
+          ),
+        ],
       }),
     });
     const result = await createQurlTool(client, { mode: "stdio" }).handler({
@@ -187,13 +216,20 @@ describe("publish_crid with rule_id", () => {
     [{ rule_id: publicRule.id }, "Use create_qurl"],
     [{ rule_id: paidRule.id }, "takes payment"],
     [{ rule_id: "future-rule" }, "cannot publish"],
+    [{ rule_id: "broken-private" }, "unrecognized access rules"],
     [{}, "exactly one"],
     [{ rule_id: reviewRule.id, policy: { mode: "review", version: 1 } }, "exactly one"],
   ])("refuses %j before publishing", async (input, message) => {
     const client = makeMockClient({
       getAccessRules: vi.fn().mockResolvedValue({
         ...rules,
-        items: [...rules.items, { id: "future-rule", name: "Future", mode: "future_mode" }],
+        // A malformed rule fails the whole library, so add one only to its own case.
+        items: [
+          ...rules.items,
+          ...extraRules.filter(
+            (r) => !r.id.startsWith("broken") || r.id === (input as { rule_id?: string }).rule_id,
+          ),
+        ],
       }),
     });
     const result = await publishCridTool(client).handler({

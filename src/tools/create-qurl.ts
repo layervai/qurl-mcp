@@ -132,7 +132,7 @@ export const createQurlSchema = z.object({
   rule_id: ruleIdSchema
     .optional()
     .describe(
-      "ID of a public access rule from list_access_rules. A rule with link limits sets expires_in, one_time_use and session_duration, so omit those. Reading it needs qurl:read.",
+      "ID of a public access rule from list_access_rules. A rule with link limits sets expires_in and one_time_use, and session_duration when it has one; omit the fields it sets. Reading it needs qurl:read.",
     ),
   email_delivery: emailDeliveryInputSchema
     .optional()
@@ -183,16 +183,26 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
               : `Access rule ${rule.id} uses mode ${rule.mode}, which this server cannot use.`,
           );
         }
+        if (rule.payment) {
+          return errorResult(`Access rule ${rule.id} takes payment, which this server cannot use.`);
+        }
         // A public rule is a reusable link unless its limits say otherwise.
         createInput.one_time_use ??= false;
         if (rule.link_limits) {
-          if (RULE_LIMIT_FIELDS.some((field) => input[field] !== undefined)) {
-            return errorResult(
-              `Access rule ${rule.id} sets ${RULE_LIMIT_FIELDS.join(", ")}; omit them.`,
-            );
-          }
+          // The limits always set expires_in and one_time_use (omitted means false).
           const { expires_in, one_time_use = false, session_duration } = rule.link_limits;
-          Object.assign(createInput, { expires_in, one_time_use, session_duration });
+          const set = {
+            expires_in,
+            one_time_use,
+            ...(session_duration ? { session_duration } : {}),
+          };
+          const conflicts = RULE_LIMIT_FIELDS.filter(
+            (field) => field in set && input[field] !== undefined,
+          );
+          if (conflicts.length > 0) {
+            return errorResult(`Access rule ${rule.id} sets ${conflicts.join(", ")}; omit them.`);
+          }
+          Object.assign(createInput, set);
         }
       }
       const result = await client.createQURL(createInput);

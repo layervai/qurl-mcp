@@ -89,7 +89,9 @@ export async function findAccessRule(
   client: IQURLClient,
   id: string,
 ): Promise<AccessRule | ToolResult> {
-  const rules = await client.getAccessRules();
+  const parsed = listOutput.safeParse(await client.getAccessRules());
+  if (!parsed.success) return errorResult("The service returned unrecognized access rules.");
+  const rules = parsed.data;
   const found = [...rules.items, ...rules.built_ins].find((candidate) => candidate.id === id);
   return found ?? errorResult(`No access rule has ID ${id}. Use list_access_rules to find one.`);
 }
