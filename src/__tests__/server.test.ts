@@ -148,10 +148,7 @@ describe("createServer", () => {
         },
       },
       { name: "upload_file_qurl", args: { file_path: samplePdf } },
-      {
-        name: "upload_text_qurl",
-        args: { type: "text", content: "hello", file_name: "hello.pdf" },
-      },
+      { name: "upload_text_qurl", args: { type: "text", content: "hello" } },
       { name: "mint_uploaded_file_link", args: { resource_id: "r_upload12345" } },
     ])(
       "$name rejects access restrictions it cannot enforce before uploading",

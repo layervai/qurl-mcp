@@ -1,12 +1,6 @@
 import { z } from "zod";
 import { QurlCliError, type IQurlCli } from "../qurl-cli.js";
-import {
-  plainText,
-  publicName,
-  toStructuredContent,
-  zodErrorToToolResult,
-  type ToolAnnotations,
-} from "./_shared.js";
+import { toStructuredContent, zodErrorToToolResult, type ToolAnnotations } from "./_shared.js";
 import { normalizeCRID, parseTTLSeconds } from "./share-by-crid.js";
 
 /**
@@ -52,6 +46,9 @@ const CRID_PATTERN = /^(?:[a-z2-7]{47}|[a-z2-7]{60})$/;
 const DEVICE_ID_PATTERN = /^[a-z2-7]{4}(?:-[a-z2-7]{4}){3}$/;
 const REQUEST_CODE_PATTERN = /^([0-9]{3})[ -]?([0-9]{3})$/;
 const DECISION_ID_PATTERN = /^[a-f0-9]{64}$/;
+// eslint-disable-next-line no-control-regex
+const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$/;
+
 function cridSchema(verb: string) {
   return z
     .string()
@@ -60,6 +57,14 @@ function cridSchema(verb: string) {
       "Expected a CRID: 47 or 60 lowercase characters a-z and 2-7, copied exactly",
     )
     .describe(`The CRID of the resource to ${verb}. Copy it exactly; never trim or change case.`);
+}
+
+function plainText(max: number) {
+  return z
+    .string()
+    .min(1)
+    .max(max)
+    .regex(NO_CONTROL_CHARACTERS, "Control characters are not allowed");
 }
 
 const deviceIdSchema = z
@@ -165,9 +170,12 @@ const publishInput = z
       .describe(
         "What to publish: a local app as http://127.0.0.1:PORT, http://localhost:PORT, or http://[::1]:PORT (no path), or a remote http(s) URL. A local app must already be running.",
       ),
-    app_name: publicName(100).describe(
-      "Public app name shown before access. Always provide a short name; use the requested name or choose a neutral one. Keep secrets and recipient details out.",
-    ),
+    app_name: plainText(100)
+      .trim()
+      .min(1)
+      .describe(
+        "Public app name shown before access. Always provide a short name; use the requested name or choose a neutral one. Keep secrets and recipient details out.",
+      ),
     allow_requests: z
       .boolean()
       .optional()

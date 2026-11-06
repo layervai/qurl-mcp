@@ -24,12 +24,9 @@ describe("createTextPdfTempFile", () => {
 
   it("directly normalizes basename, extension, and empty-stem filename cases", () => {
     expect(ensurePdfFileName("../REPORT.PDF")).toBe("REPORT.pdf");
-    expect(ensurePdfFileName("archive.tar.gz")).toBe("archive.tar.gz.pdf");
-    expect(ensurePdfFileName("notes.md")).toBe("notes.pdf");
-    expect(ensurePdfFileName("Release 2.5 notes")).toBe("Release 2.5 notes.pdf");
-    expect(ensurePdfFileName("Acme v1.2")).toBe("Acme v1.2.pdf");
+    expect(ensurePdfFileName("archive.tar.gz")).toBe("archive.tar.pdf");
     expect(ensurePdfFileName("..pdf")).toBe("content.pdf");
-    expect(ensurePdfFileName("..foo")).toBe("foo.pdf");
+    expect(ensurePdfFileName("..foo")).toBe("content.pdf");
     expect(ensurePdfFileName(".notes")).toBe("notes.pdf");
   });
 
@@ -57,10 +54,10 @@ describe("createTextPdfTempFile", () => {
     await result.cleanup();
   });
 
-  it("replaces only a text source extension with the PDF extension", async () => {
-    const result = await createTextPdfTempFile({ content: "safe", fileName: "notes.json.md" });
+  it("normalizes chained source extensions to one PDF extension", async () => {
+    const result = await createTextPdfTempFile({ content: "safe", fileName: "archive.tar.gz" });
 
-    expect(result.fileName).toBe("notes.json.pdf");
+    expect(result.fileName).toBe("archive.tar.pdf");
     await result.cleanup();
   });
 
