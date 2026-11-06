@@ -51,9 +51,31 @@ describe("createQurlTool", () => {
       expect(result.success).toBe(false);
     });
 
+    it.each([
+      ["missing", undefined],
+      ["empty", ""],
+      ["whitespace only", "   "],
+      ["multi-line", "Q3\ndeck"],
+      ["tab", "Q3\tdeck"],
+      ["line separator", "Q3\u2028deck"],
+      ["over 100 chars", "x".repeat(101)],
+    ])("rejects a %s name", (_case, name) => {
+      const result = createQurlSchema.safeParse({ target_url: "https://example.com", name });
+      expect(result.success).toBe(false);
+    });
+
+    it("trims surrounding whitespace from name", () => {
+      const result = createQurlSchema.parse({
+        target_url: "https://example.com",
+        name: "  Q3 board deck  ",
+      });
+      expect(result.name).toBe("Q3 board deck");
+    });
+
     it("accepts valid minimal input", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
       });
       expect(result.success).toBe(true);
     });
@@ -62,6 +84,7 @@ describe("createQurlTool", () => {
       expect(
         createQurlSchema.safeParse({
           target_url: "https://example.com",
+          name: "Test share",
           type: "x".repeat(MAX_RESOURCE_TYPE_CHARACTERS + 1),
         }).success,
       ).toBe(false);
@@ -71,6 +94,7 @@ describe("createQurlTool", () => {
       const result = createQurlSchema.safeParse({
         type: "url",
         target_url: "https://example.com",
+        name: "Test share",
         label: "Alice from Acme",
         expires_in: "24h",
         one_time_use: true,
@@ -93,6 +117,7 @@ describe("createQurlTool", () => {
     it("accepts access_policy with ai_agent_policy", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         access_policy: {
           ai_agent_policy: {
             deny_categories: ["gptbot", "commoncrawl"],
@@ -111,12 +136,14 @@ describe("createQurlTool", () => {
       expect(
         createQurlSchema.safeParse({
           target_url: "https://example.com",
+          name: "Test share",
           access_policy: { [field]: ["x".repeat(maxLength + 1)] },
         }).success,
       ).toBe(false);
       expect(
         createQurlSchema.safeParse({
           target_url: "https://example.com",
+          name: "Test share",
           access_policy: { [field]: Array(MAX_ACCESS_POLICY_IP_ITEMS + 1).fill("x") },
         }).success,
       ).toBe(false);
@@ -128,6 +155,7 @@ describe("createQurlTool", () => {
         expect(
           createQurlSchema.safeParse({
             target_url: "https://example.com",
+            name: "Test share",
             access_policy: {
               ai_agent_policy: { [field]: ["x".repeat(MAX_AI_AGENT_CATEGORY_CHARACTERS + 1)] },
             },
@@ -136,6 +164,7 @@ describe("createQurlTool", () => {
         expect(
           createQurlSchema.safeParse({
             target_url: "https://example.com",
+            name: "Test share",
             access_policy: {
               ai_agent_policy: { [field]: Array(MAX_ACCESS_POLICY_IP_ITEMS + 1).fill("x") },
             },
@@ -150,12 +179,14 @@ describe("createQurlTool", () => {
         expect(
           createQurlSchema.safeParse({
             target_url: "https://example.com",
+            name: "Test share",
             access_policy: { [field]: "x".repeat(MAX_USER_AGENT_REGEX_CHARACTERS) },
           }).success,
         ).toBe(true);
         expect(
           createQurlSchema.safeParse({
             target_url: "https://example.com",
+            name: "Test share",
             access_policy: { [field]: "x".repeat(MAX_USER_AGENT_REGEX_CHARACTERS + 1) },
           }).success,
         ).toBe(false);
@@ -165,6 +196,7 @@ describe("createQurlTool", () => {
     it("rejects non-integer max_sessions", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         max_sessions: 2.5,
       });
       expect(result.success).toBe(false);
@@ -173,6 +205,7 @@ describe("createQurlTool", () => {
     it("accepts max_sessions of 0 (unlimited)", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         max_sessions: 0,
       });
       expect(result.success).toBe(true);
@@ -181,6 +214,7 @@ describe("createQurlTool", () => {
     it("rejects negative max_sessions", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         max_sessions: -1,
       });
       expect(result.success).toBe(false);
@@ -189,6 +223,7 @@ describe("createQurlTool", () => {
     it("rejects max_sessions above 1000 (API hard limit)", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         max_sessions: 1001,
       });
       expect(result.success).toBe(false);
@@ -197,6 +232,7 @@ describe("createQurlTool", () => {
     it("accepts max_sessions at the 1000 ceiling", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         max_sessions: 1000,
       });
       expect(result.success).toBe(true);
@@ -205,6 +241,7 @@ describe("createQurlTool", () => {
     it("rejects label longer than 500 characters", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         label: "x".repeat(501),
       });
       expect(result.success).toBe(false);
@@ -213,6 +250,7 @@ describe("createQurlTool", () => {
     it("rejects empty expires_in", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         expires_in: "",
       });
       expect(result.success).toBe(false);
@@ -221,6 +259,7 @@ describe("createQurlTool", () => {
     it("rejects empty session_duration", () => {
       const result = createQurlSchema.safeParse({
         target_url: "https://example.com",
+        name: "Test share",
         session_duration: "",
       });
       expect(result.success).toBe(false);
@@ -235,6 +274,7 @@ describe("createQurlTool", () => {
 
       const input = {
         target_url: "https://example.com/protected",
+        name: "Test share",
         label: "Test QURL",
       };
       const result = await tool.handler(input);
@@ -254,7 +294,7 @@ describe("createQurlTool", () => {
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
 
-      const result = await tool.handler({ target_url: "https://example.com" });
+      const result = await tool.handler({ target_url: "https://example.com", name: "Test share" });
 
       expect(result.structuredContent).toBeDefined();
       expect(result.structuredContent).toEqual(JSON.parse(result.content[0].text));
@@ -267,9 +307,30 @@ describe("createQurlTool", () => {
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
 
-      const result = await tool.handler({ target_url: "https://example.com" });
+      const result = await tool.handler({ target_url: "https://example.com", name: "Test share" });
 
       expect(result.content[0].text).toBe(JSON.stringify(fixture));
+    });
+
+    it("returns a server name_required error as tool error content", async () => {
+      const message = "name is required: the public name recipients see for this resource";
+      const client = makeMockClient({
+        createQURL: vi.fn().mockRejectedValue(new QURLAPIError(400, "name_required", message)),
+      });
+      const result = await createQurlTool(client).handler({
+        target_url: "https://example.com",
+        name: "Test share",
+      });
+      expect(result).toEqual({ isError: true, content: [{ type: "text", text: message }] });
+    });
+
+    it("sends name to the API", async () => {
+      const mockCreate = vi.fn().mockResolvedValue({ data: fixture });
+      await createQurlTool(makeMockClient({ createQURL: mockCreate })).handler({
+        target_url: "https://example.com",
+        name: "Q3 board deck",
+      });
+      expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ name: "Q3 board deck" }));
     });
 
     it("propagates client errors", async () => {
@@ -277,9 +338,9 @@ describe("createQurlTool", () => {
       const client = makeMockClient({ createQURL: mockCreate });
       const tool = createQurlTool(client);
 
-      await expect(tool.handler({ target_url: "https://example.com" })).rejects.toThrow(
-        "API Error",
-      );
+      await expect(
+        tool.handler({ target_url: "https://example.com", name: "Test share" }),
+      ).rejects.toThrow("API Error");
     });
 
     it("translates missing_api_key into an isError content block instead of throwing", async () => {
@@ -296,6 +357,7 @@ describe("createQurlTool", () => {
 
       const result = await tool.handler({
         target_url: "https://example.com",
+        name: "Test share",
         email_delivery: { to: ["alice@example.com"] },
       });
 
@@ -313,6 +375,7 @@ describe("createQurlTool", () => {
 
       const input = {
         target_url: "https://example.com",
+        name: "Test share",
         label: "Test",
         expires_in: "1h",
         one_time_use: true,
@@ -343,6 +406,7 @@ describe("createQurlTool", () => {
 
       const result = await tool.handler({
         target_url: "https://example.com/protected",
+        name: "Test share",
         email_delivery: {
           to: ["alice@example.com", "bob@example.com"],
           message: "Here you go",
@@ -383,6 +447,7 @@ describe("createQurlTool", () => {
 
       await tool.handler({
         target_url: "https://example.com/protected",
+        name: "Test share",
         email_delivery: { to: ["alice@example.com"] },
       });
 
@@ -413,6 +478,7 @@ describe("createQurlTool", () => {
 
       const result = await tool.handler({
         target_url: "https://example.com/protected",
+        name: "Test share",
         email_delivery: { to: ["alice@example.com"] },
       });
 
@@ -447,6 +513,7 @@ describe("createQurlTool", () => {
 
       const result = await tool.handler({
         target_url: "https://example.com/protected",
+        name: "Test share",
         email_delivery: { to: ["alice@example.com"] },
       });
 
@@ -490,6 +557,7 @@ describe("createQurlTool", () => {
 
       const result = await tool.handler({
         target_url: "https://example.com/protected",
+        name: "Test share",
         email_delivery: { to: ["alice@example.com"] },
       });
 

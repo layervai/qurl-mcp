@@ -84,6 +84,7 @@ describe("uploadTextQurlTool", () => {
       const result = uploadTextQurlSchema.safeParse({
         type: "markdown",
         content: "hello world",
+        file_name: "hello.pdf",
       });
       expect(result.success).toBe(true);
     });
@@ -166,25 +167,11 @@ describe("uploadTextQurlTool", () => {
       expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     });
 
-    it("defaults file_name to content.pdf", async () => {
-      globalThis.fetch = mockConnectorFetch();
-
+    it("requires file_name", () => {
       const tool = uploadTextQurlTool(makeMockClient());
-
-      const result = await tool.handler({
-        type: "markdown",
-        content: "# Hello",
-      });
-
-      const parsed = JSON.parse(result.content[0].text);
-      expect(parsed.content_type).toBe("application/pdf");
-      expect(parsed.file_name).toBe("content.pdf");
-      expect(createTextPdfTempFile).toHaveBeenCalledWith({
-        content: "# Hello",
-        fileName: "content.pdf",
-        title: "content.pdf",
-      });
-      expect(cleanupSpy).toHaveBeenCalledOnce();
+      expect(tool.inputSchema.safeParse({ type: "markdown", content: "# Hello" }).success).toBe(
+        false,
+      );
     });
 
     it("emails the generated text link when email_delivery is provided", async () => {
@@ -226,6 +213,7 @@ describe("uploadTextQurlTool", () => {
       const result = await tool.handler({
         type: "markdown",
         content: "hello world",
+        file_name: "content.pdf",
       });
 
       const parsed = JSON.parse(result.content[0].text);

@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import {
   allowsServerApiKeyFallback,
+  plainText,
   withMissingApiKeyHandler,
   type ToolRuntimeOptions,
 } from "./_shared.js";
@@ -89,6 +90,15 @@ export const createQurlSchema = z.object({
       `Resource type for integrations allowed to mint non-url qURLs (max ${MAX_RESOURCE_TYPE_CHARACTERS} chars). Defaults to url.`,
     ),
   target_url: z.string().url().describe("The URL to protect with qURL"),
+  name: plainText(100)
+    .trim()
+    .min(1)
+    .describe(
+      "Public name recipients see on the qURL page and in link previews; it also names the passkey they save. " +
+        "Write a short, specific, human-readable title for what is shared (e.g. 'Q3 board deck', 'Acme staging dashboard'); never a generic or random string. " +
+        "It is public on qurl.link: never include internal hostnames, IPs, secrets, or recipient details (max 100 chars, one line). Ignored when the target URL reuses an existing resource, which keeps its name. " +
+        "Not the same as `label`, which identifies who one link is for.",
+    ),
   label: z
     .string()
     .max(500)
@@ -151,7 +161,7 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
       "`max_sessions` is per minted qURL, not resource-wide; set `one_time_use: false` explicitly when you need `max_sessions: 0` to mean unlimited visitors. " +
       "**Returns:** `{ qurl_id: string (q_…), resource_id: string, qurl_link: string (shown once), branded_domain?: string, qurl_site: string, expires_at: string (RFC 3339), label?: string, type?: string }`. " +
       "`qurl_id` is the only `q_…` display ID an agent gets in this response — keep it if you plan a follow-up against `get_qurl`/`update_qurl`/`mint_link` (which accept either prefix). " +
-      "Example: `create_qurl({ target_url: 'https://example.com/private', expires_in: '24h', one_time_use: true, access_policy: { geo_allowlist: ['US'] } })`.",
+      "Example: `create_qurl({ target_url: 'https://example.com/private', name: 'Private pricing page', expires_in: '24h', one_time_use: true, access_policy: { geo_allowlist: ['US'] } })`.",
     inputSchema: createQurlSchema,
     outputSchema: createQurlOutputSchema,
     annotations: {

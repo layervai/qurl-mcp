@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { QurlCliError, type IQurlCli } from "../qurl-cli.js";
-import { toStructuredContent, zodErrorToToolResult, type ToolAnnotations } from "./_shared.js";
+import {
+  plainText,
+  toStructuredContent,
+  zodErrorToToolResult,
+  type ToolAnnotations,
+} from "./_shared.js";
 import { normalizeCRID, parseTTLSeconds } from "./share-by-crid.js";
 
 /**
@@ -46,9 +51,6 @@ const CRID_PATTERN = /^(?:[a-z2-7]{47}|[a-z2-7]{60})$/;
 const DEVICE_ID_PATTERN = /^[a-z2-7]{4}(?:-[a-z2-7]{4}){3}$/;
 const REQUEST_CODE_PATTERN = /^([0-9]{3})[ -]?([0-9]{3})$/;
 const DECISION_ID_PATTERN = /^[a-f0-9]{64}$/;
-// eslint-disable-next-line no-control-regex
-const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$/;
-
 function cridSchema(verb: string) {
   return z
     .string()
@@ -57,14 +59,6 @@ function cridSchema(verb: string) {
       "Expected a CRID: 47 or 60 lowercase characters a-z and 2-7, copied exactly",
     )
     .describe(`The CRID of the resource to ${verb}. Copy it exactly; never trim or change case.`);
-}
-
-function plainText(max: number) {
-  return z
-    .string()
-    .min(1)
-    .max(max)
-    .regex(NO_CONTROL_CHARACTERS, "Control characters are not allowed");
 }
 
 const deviceIdSchema = z
@@ -265,7 +259,8 @@ export function localPublishCridTool(cli: IQurlCli): LocalCliTool {
       }
       const contractProblem = input.policy && contractIdProblem(input.policy);
       if (contractProblem) return errorResult(contractProblem);
-      const args = ["publish", input.target_url];
+      // --name names a new resource; on reuse the CLI keeps the stored name, so preview set below still applies it.
+      const args = ["publish", input.target_url, `--name=${input.app_name}`];
       if (input.allow_requests) args.push("--allow-requests");
       if (input.policy) {
         args.push(`--access=${input.policy.mode}`);

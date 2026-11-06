@@ -1,6 +1,18 @@
 import { z, type ZodError } from "zod";
 import { QURLAPIError } from "../client.js";
 
+// eslint-disable-next-line no-control-regex
+const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$/;
+
+/** Non-empty, bounded text with no control characters or line breaks. */
+export function plainText(max: number) {
+  return z
+    .string()
+    .min(1)
+    .max(max)
+    .regex(NO_CONTROL_CHARACTERS, "Control characters are not allowed");
+}
+
 // Public API resource IDs are bounded base64url public keys or base32 CRIDs.
 // Public keys encode 80–160 DER bytes: 107–214 base64url chars, excluding length % 4 === 1.
 // CRIDs are the API-registered 47- or 60-character base32 forms.
@@ -98,6 +110,7 @@ export function withMissingApiKeyHandler<I>(
         err instanceof QURLAPIError &&
         (err.code === "missing_api_key" ||
           err.code === "upload_mint_failed" ||
+          err.code === "name_required" ||
           err.code === "access_receipt_unconfirmed")
       ) {
         return {

@@ -71,7 +71,7 @@ const toolCases: ToolCase[] = [
     name: "create_qurl",
     build: createQurlTool,
     stubs: ["createQURL"],
-    input: { target_url: "https://example.com" },
+    input: { target_url: "https://example.com", name: "Test share" },
   },
   {
     name: "resolve_qurl",
@@ -126,7 +126,7 @@ const toolCases: ToolCase[] = [
     name: "batch_create_qurls",
     build: batchCreateTool,
     stubs: ["batchCreate"],
-    input: { items: [{ target_url: "https://example.com" }] },
+    input: { items: [{ target_url: "https://example.com", name: "Test share" }] },
   },
   {
     name: "revoke_qurl_token",

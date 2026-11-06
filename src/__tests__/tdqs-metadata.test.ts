@@ -366,7 +366,7 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       },
     },
     create_qurl: {
-      input: { target_url: "https://example.com" },
+      input: { target_url: "https://example.com", name: "Test share" },
       clientOverrides: {
         createQURL: vi.fn().mockResolvedValue({ data: sampleCreateQURLData() }),
       },
@@ -418,7 +418,7 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       },
     },
     batch_create_qurls: {
-      input: { items: [{ target_url: "https://example.com" }] },
+      input: { items: [{ target_url: "https://example.com", name: "Test share" }] },
       clientOverrides: { batchCreate: vi.fn().mockResolvedValue(sampleBatchCreateOutput()) },
     },
     revoke_qurl_token: {

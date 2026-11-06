@@ -50,9 +50,10 @@ export const uploadTextQurlSchema = z
       .string()
       .min(1)
       .max(255)
-      .optional()
       .describe(
-        "Filename to register with the connector. The tool will normalize it to a `.pdf` filename.",
+        "Filename to register with the connector; it becomes the public name recipients see and names the passkey they save. " +
+          "Use a short, specific title of the content (e.g. 'Q3 launch notes'), never a generic or random string, and never internal hostnames, IPs, or secrets. " +
+          "The tool will normalize it to a `.pdf` filename.",
       ),
     email_delivery: emailDeliveryInputSchema
       .optional()
@@ -97,14 +98,13 @@ export function uploadTextQurlTool(
         ...mintOptions
       } = input;
       const allowServerApiKeyFallback = allowsServerApiKeyFallback(runtime);
-      const requestedFileName = fileName ?? "content.pdf";
 
       const connectorConfig = getConnectorConfig(allowServerApiKeyFallback);
 
       const pdfFile = await createTextPdfTempFile({
         content,
-        fileName: requestedFileName,
-        title: mintOptions.label ?? requestedFileName,
+        fileName,
+        title: mintOptions.label ?? fileName,
       });
 
       try {

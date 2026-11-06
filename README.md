@@ -200,7 +200,7 @@ ask for access.
 
 | Tool                   | What it does                                                                 | CLI command                                              |
 | ---------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
-| `publish_crid`         | Publish a local app or URL privately and return its CRID                     | `qurl publish <url> [--allow-requests] [--access <mode>]` |
+| `publish_crid`         | Publish a local app or URL privately and return its CRID                     | `qurl publish <url> --name <app_name> [--allow-requests] [--access <mode>]` |
 | `share_by_crid`        | Make a short-lived access link for a CRID this machine published             | `qurl share <CRID> [--ttl] [--session-duration]`        |
 | `list_crids`           | List this machine's published resources (read-only)                          | `qurl list --status active`                              |
 | `manage_crid_requests` | List, approve by code, or deny access requests; list or remove approved people; turn requests on or off | `qurl requests`, `qurl approve`, `qurl deny`, `qurl grants` |
@@ -293,7 +293,7 @@ is no longer supported.
 
 | Tool                      | Description                                         |
 | ------------------------- | --------------------------------------------------- |
-| `create_qurl`             | Create a new qURL                                   |
+| `create_qurl`             | Create a new qURL (requires a public `name`)        |
 | `resolve_qurl`            | Resolve an access token into a protected target URL |
 | `list_qurls`              | List qURL resources                                 |
 | `get_qurl`                | Fetch details for a single qURL                     |
@@ -307,6 +307,14 @@ is no longer supported.
 | `update_qurl_token`       | Update a specific token                             |
 | `list_qurl_sessions`      | List active access sessions                         |
 | `terminate_qurl_sessions` | Terminate one or all active sessions                |
+
+`create_qurl` and each `batch_create_qurls` item require `name`: the public
+title recipients see on qurl.link and in link previews, which also names the
+passkey they save. The agent writes a short, specific title for what is shared
+(at most 100 characters, one line; no internal hostnames, IPs, or secrets).
+It is not the per-link `label`. When the target URL reuses an existing resource,
+that resource keeps its stored name. `share_by_crid` and `mint_link` only mint links for existing resources and
+take no name.
 
 `share_by_crid` recognizes a standalone `$<CRID>` value as an explicit request
 to mint a temporary link for that CRID. The `$` is a user-facing marker and is
