@@ -110,6 +110,11 @@ export function withMissingApiKeyHandler<I>(
   };
 }
 
+/** A tool error result with one text message. */
+export function errorResult(text: string): ToolResult {
+  return { isError: true, content: [{ type: "text", text }] };
+}
+
 /**
  * Convert a ZodError into an MCP tool error result.
  *
@@ -118,11 +123,6 @@ export function withMissingApiKeyHandler<I>(
  * Zod refinements to JSON Schema, so cross-field constraints have to be
  * checked at call time and converted into a tool error response.
  */
-/** A tool error result with one text message. */
-export function errorResult(text: string): ToolResult {
-  return { isError: true, content: [{ type: "text", text }] };
-}
-
 export function zodErrorToToolResult(error: ZodError) {
   return {
     isError: true as const,

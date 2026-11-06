@@ -224,7 +224,8 @@ const TOOL_SCOPES: Record<string, string[]> = {
   upload_text_qurl: ["qurl:write"],
 };
 
-// Applying a saved access rule (rule_id) also reads the account's rules.
+// Applying a saved access rule (rule_id) also reads the account's rules. An empty
+// rule_id counts as none; the tools' input schemas refuse it before the handler runs.
 const RULE_READING_TOOLS = new Set(["create_qurl", "publish_crid"]);
 
 export function toolScopes(name: string, input?: unknown): string[] {

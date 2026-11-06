@@ -13,7 +13,7 @@ import {
   toEmailAugmentedResult,
 } from "./email-delivery.js";
 import { createQurlOutputSchema } from "./output-schemas.js";
-import { findAccessRule, isToolResult, ruleIdSchema } from "./access-rules.js";
+import { findAccessRule, isPrivateMode, isToolResult, ruleIdSchema } from "./access-rules.js";
 
 const RULE_LIMIT_FIELDS = ["expires_in", "one_time_use", "session_duration"] as const;
 
@@ -178,17 +178,20 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
         if (isToolResult(rule)) return rule;
         if (rule.mode !== "public") {
           return errorResult(
-            `Access rule ${rule.id} is private (${rule.mode}). Use publish_crid with this rule_id.`,
+            isPrivateMode(rule.mode)
+              ? `Access rule ${rule.id} is private (${rule.mode}). Use publish_crid with this rule_id.`
+              : `Access rule ${rule.id} uses mode ${rule.mode}, which this server cannot use.`,
           );
         }
+        // A public rule is a reusable link unless its limits say otherwise.
+        createInput.one_time_use ??= false;
         if (rule.link_limits) {
-          if (RULE_LIMIT_FIELDS.some((field) => createInput[field] !== undefined)) {
+          if (RULE_LIMIT_FIELDS.some((field) => input[field] !== undefined)) {
             return errorResult(
               `Access rule ${rule.id} sets ${RULE_LIMIT_FIELDS.join(", ")}; omit them.`,
             );
           }
           const { expires_in, one_time_use = false, session_duration } = rule.link_limits;
-          // Send one_time_use explicitly: some resource types default to one-time links.
           Object.assign(createInput, { expires_in, one_time_use, session_duration });
         }
       }

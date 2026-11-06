@@ -18,7 +18,7 @@ function isBatchPayload(value: unknown): value is BatchCreateOutput["data"] {
 
 export const batchCreateSchema = z.object({
   items: z
-    .array(createQurlSchema.omit({ email_delivery: true }))
+    .array(createQurlSchema.omit({ email_delivery: true, rule_id: true }))
     .min(1)
     .max(100)
     .describe("Array of qURL creation requests (1-100 items)"),

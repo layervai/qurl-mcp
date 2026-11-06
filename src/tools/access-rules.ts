@@ -18,7 +18,7 @@ export const PRIVATE_MODES = [
   "contract",
 ] as const satisfies readonly ConsumerAccessPolicy["mode"][];
 
-const isPrivateMode = (mode: string): mode is ConsumerAccessPolicy["mode"] =>
+export const isPrivateMode = (mode: string): mode is ConsumerAccessPolicy["mode"] =>
   (PRIVATE_MODES as readonly string[]).includes(mode);
 
 export const ruleIdSchema = z
@@ -73,8 +73,9 @@ export function listAccessRulesTool(
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async () => {
-      const rules = await client.getAccessRules();
-      const data = listOutput.parse(rules);
+      const parsed = listOutput.safeParse(await client.getAccessRules());
+      if (!parsed.success) return errorResult("The service returned unrecognized access rules.");
+      const data = parsed.data;
       return {
         content: [{ type: "text" as const, text: JSON.stringify(data) }],
         structuredContent: toStructuredContent(data),

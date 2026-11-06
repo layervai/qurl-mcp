@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AccessRules } from "@layervai/qurl";
 import { listAccessRulesTool } from "../../tools/access-rules.js";
 import { publishCridTool } from "../../tools/consumer-access.js";
+import { batchCreateSchema } from "../../tools/batch-create.js";
 import { createQurlTool } from "../../tools/create-qurl.js";
 import { makeMockClient, sampleCreateQURLData } from "../helpers.js";
 
@@ -54,6 +55,15 @@ describe("list_access_rules", () => {
     expect(text(result)).not.toContain("quick_share_rule_id");
     expect(text(result)).not.toContain("acct-test");
   });
+
+  it("reports an unrecognized library instead of throwing", async () => {
+    const client = makeMockClient({
+      getAccessRules: vi.fn().mockResolvedValue({ ...rules, items: [{ id: "x" }] }),
+    });
+    const result = await listAccessRulesTool(client).handler({});
+    expect(result.isError).toBe(true);
+    expect(text(result)).toContain("unrecognized access rules");
+  });
 });
 
 describe("create_qurl with rule_id", () => {
@@ -75,7 +85,10 @@ describe("create_qurl with rule_id", () => {
   });
 
   it.each([
-    [{ rule_id: "builtin.public", expires_in: "2h" }, { expires_in: "2h" }],
+    [
+      { rule_id: "builtin.public", expires_in: "2h" },
+      { expires_in: "2h", one_time_use: false },
+    ],
     [{ rule_id: "once-rule" }, { expires_in: "30d", one_time_use: true, session_duration: "24h" }],
   ])("uses %j as %j", async (input, sent) => {
     const client = makeMockClient({
@@ -112,10 +125,16 @@ describe("create_qurl with rule_id", () => {
 
   it.each([
     [{ rule_id: domainRule.id }, "Use publish_crid"],
+    [{ rule_id: "future-rule" }, "cannot use"],
     [{ rule_id: "builtin.unknown" }, "No access rule"],
     [{ rule_id: publicRule.id, expires_in: "2h" }, "omit them"],
   ])("refuses %j before creating", async (input, message) => {
-    const client = rulesClient();
+    const client = rulesClient({
+      getAccessRules: vi.fn().mockResolvedValue({
+        ...rules,
+        items: [...rules.items, { id: "future-rule", name: "Future", mode: "future_mode" }],
+      }),
+    });
     const result = await createQurlTool(client, { mode: "stdio" }).handler({
       target_url: "https://example.com",
       ...input,
@@ -185,4 +204,11 @@ describe("publish_crid with rule_id", () => {
     expect(text(result)).toContain(message);
     expect(client.protectUrl).not.toHaveBeenCalled();
   });
+});
+
+it("does not offer rule_id on batch items", () => {
+  const parsed = batchCreateSchema.safeParse({
+    items: [{ target_url: "https://example.com", rule_id: publicRule.id }],
+  });
+  expect(parsed.success && "rule_id" in parsed.data.items[0]).toBe(false);
 });
