@@ -28,7 +28,7 @@ describe("create_qurl SDK retry contract", () => {
       new QURLClient({ apiKey: "lv_live_test", baseURL: "https://api.example.com" }),
       { mode: "http" },
     );
-    const input = { target_url: "https://example.com/private" };
+    const input = { target_url: "https://example.com/private", name: "Test share" };
 
     const firstCall = tool.handler(input);
     await vi.runAllTimersAsync();
@@ -63,7 +63,9 @@ describe("create_qurl SDK retry contract", () => {
       new QURLClient({ apiKey: "lv_live_test", baseURL: "https://api.example.com" }),
       { mode: "http" },
     );
-    await expect(tool.handler({ target_url: "https://example.com/private" })).rejects.toThrow();
+    await expect(
+      tool.handler({ target_url: "https://example.com/private", name: "Test share" }),
+    ).rejects.toThrow();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

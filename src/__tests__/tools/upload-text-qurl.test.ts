@@ -232,6 +232,7 @@ describe("uploadTextQurlTool", () => {
       const result = await tool.handler({
         type: "markdown",
         content: "hello world",
+        file_name: "hello.pdf",
       });
 
       expect(result).toEqual({
@@ -262,6 +263,7 @@ describe("uploadTextQurlTool", () => {
         tool.handler({
           type: "markdown",
           content: "hello world",
+          file_name: "hello.pdf",
         }),
       ).rejects.toMatchObject({
         statusCode: 400,

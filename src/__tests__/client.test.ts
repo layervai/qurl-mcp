@@ -261,9 +261,15 @@ describe("QURLClient adapter", () => {
         qurl_link: "https://qurl.link/#at_x",
         qurl_site: "https://r_x.qurl.site",
       });
-      const out = await newClient().createQURL({ target_url: "https://example.com" });
+      const out = await newClient().createQURL({
+        target_url: "https://example.com",
+        name: "Test share",
+      });
 
-      expect(sdk.create).toHaveBeenCalledWith({ target_url: "https://example.com" });
+      expect(sdk.create).toHaveBeenCalledWith({
+        target_url: "https://example.com",
+        name: "Test share",
+      });
       expect(out.data.qurl_id).toBe("q_x");
       expect(out.data.resource_id).toBe("r_x");
     });
@@ -303,7 +309,9 @@ describe("QURLClient adapter", () => {
         results: [{ index: 0, success: true, resource_id: "r_x", qurl_link: "L", qurl_site: "S" }],
         request_id: "req_1",
       });
-      const out = await newClient().batchCreate({ items: [{ target_url: "https://example.com" }] });
+      const out = await newClient().batchCreate({
+        items: [{ target_url: "https://example.com", name: "Test share" }],
+      });
 
       expect(out.data.succeeded).toBe(1);
       expect(out.data.failed).toBe(0);
@@ -329,7 +337,10 @@ describe("QURLClient adapter", () => {
         { markCredentialValidated: () => (credentialValidated = true) },
         () =>
           newClient().batchCreate({
-            items: [{ target_url: "ftp://a" }, { target_url: "ftp://b" }],
+            items: [
+              { target_url: "ftp://a", name: "Test share" },
+              { target_url: "ftp://b", name: "Test share" },
+            ],
           }),
       );
 
@@ -467,7 +478,7 @@ describe("QURLClient adapter", () => {
         }),
       );
       const err = (await newClient()
-        .createQURL({ target_url: "https://example.com" })
+        .createQURL({ target_url: "https://example.com", name: "Test share" })
         .catch((e: unknown) => e)) as QURLAPIError;
 
       expect(err).toBeInstanceOf(QURLAPIError);
