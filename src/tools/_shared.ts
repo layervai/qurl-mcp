@@ -4,6 +4,19 @@ import { QURLAPIError } from "../client.js";
 // eslint-disable-next-line no-control-regex
 const NO_CONTROL_CHARACTERS = /^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$/;
 
+/**
+ * A public resource name, as qurl-service's ValidatePreviewName accepts it: trimmed,
+ * one line, no control or format (Cf) characters. UTF-16 length is at least the rune count.
+ */
+export function publicName(max: number) {
+  return z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .regex(/^[^\p{Cc}\p{Cf}\u2028\u2029]*$/u, "Must be one line without control characters");
+}
+
 /** Non-empty, bounded text with no control characters or line breaks. */
 export function plainText(max: number) {
   return z

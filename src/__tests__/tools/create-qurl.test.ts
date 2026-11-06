@@ -58,6 +58,7 @@ describe("createQurlTool", () => {
       ["multi-line", "Q3\ndeck"],
       ["tab", "Q3\tdeck"],
       ["line separator", "Q3\u2028deck"],
+      ["zero-width space", "Q3\u200bdeck"],
       ["over 100 chars", "x".repeat(101)],
     ])("rejects a %s name", (_case, name) => {
       const result = createQurlSchema.safeParse({ target_url: "https://example.com", name });
@@ -70,6 +71,13 @@ describe("createQurlTool", () => {
         name: "  Q3 board deck  ",
       });
       expect(result.name).toBe("Q3 board deck");
+    });
+
+    it("checks the length after trimming", () => {
+      const name = "x".repeat(100);
+      expect(
+        createQurlSchema.parse({ target_url: "https://example.com", name: ` ${name} ` }).name,
+      ).toBe(name);
     });
 
     it("accepts valid minimal input", () => {

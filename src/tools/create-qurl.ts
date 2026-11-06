@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import {
   allowsServerApiKeyFallback,
-  plainText,
+  publicName,
   withMissingApiKeyHandler,
   type ToolRuntimeOptions,
 } from "./_shared.js";
@@ -90,15 +90,12 @@ export const createQurlSchema = z.object({
       `Resource type for integrations allowed to mint non-url qURLs (max ${MAX_RESOURCE_TYPE_CHARACTERS} chars). Defaults to url.`,
     ),
   target_url: z.string().url().describe("The URL to protect with qURL"),
-  name: plainText(100)
-    .trim()
-    .min(1)
-    .describe(
-      "Public name recipients see on the qURL page and in link previews; it also names the passkey they save. " +
-        "Write a short, specific, human-readable title for what is shared (e.g. 'Q3 board deck', 'Acme staging dashboard'); never a generic or random string. " +
-        "It is public on qurl.link: never include internal hostnames, IPs, secrets, or recipient details (max 100 chars, one line). Ignored when the target URL reuses an existing resource, which keeps its name. " +
-        "Not the same as `label`, which identifies who one link is for.",
-    ),
+  name: publicName(100).describe(
+    "Public name recipients see on the qURL page and in link previews; it also names the passkey they save. " +
+      "Write a short, specific, human-readable title for what is shared (e.g. 'Q3 board deck', 'Acme staging dashboard'); never a generic or random string. " +
+      "It is public on qurl.link: never include internal hostnames, IPs, secrets, or recipient details (max 100 chars, one line). Ignored when the target URL reuses an existing resource, which keeps its name. " +
+      "Not the same as `label`, which identifies who one link is for.",
+  ),
   label: z
     .string()
     .max(500)

@@ -167,6 +167,13 @@ describe("uploadTextQurlTool", () => {
       expect(log).not.toHaveBeenCalledWith(expect.stringContaining("not the requested"));
     });
 
+    it.each(["   ", "notes\nfinal.pdf"])("rejects file_name %j", (file_name) => {
+      const tool = uploadTextQurlTool(makeMockClient());
+      expect(
+        tool.inputSchema.safeParse({ type: "markdown", content: "# Hi", file_name }).success,
+      ).toBe(false);
+    });
+
     it("requires file_name", () => {
       const tool = uploadTextQurlTool(makeMockClient());
       expect(tool.inputSchema.safeParse({ type: "markdown", content: "# Hello" }).success).toBe(
