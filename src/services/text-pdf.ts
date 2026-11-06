@@ -2,7 +2,7 @@ import PDFDocument from "pdfkit";
 import { Buffer } from "node:buffer";
 import { createWriteStream, existsSync } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
-import { basename, extname, join } from "node:path";
+import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { isControlCodePoint } from "../text.js";
@@ -29,17 +29,14 @@ export function sanitizePdfText(input: string, fallback: string): string {
   return sanitized.trim() || fallback;
 }
 
+// Only the source formats upload_text_qurl renders are replaced, so a title such
+// as "Release 2.5 notes" (the resource's public name) keeps its dots.
+const TEXT_SOURCE_EXTENSION = /\.(?:pdf|txt|md|markdown|html?|json)$/i;
+
 export function ensurePdfFileName(input: string | undefined): string {
   const baseName = basename(sanitizePdfText(input ?? "content", "content")) || "content";
-  const sourceExtension = extname(baseName);
-  // extname(".pdf") is empty because it treats the value as a dotfile. Keep
-  // that one explicit fallback, then use a single original-string slice.
-  const extensionLength =
-    sourceExtension.length || (baseName.toLowerCase().endsWith(".pdf") ? 4 : 0);
-  const withoutExt = extensionLength ? baseName.slice(0, -extensionLength) : baseName;
-  const normalizedStem = withoutExt.replace(/^\.+|\.+$/g, "");
-  const safeStem = normalizedStem || "content";
-  return `${safeStem}.pdf`;
+  const stem = baseName.replace(TEXT_SOURCE_EXTENSION, "").replace(/^\.+|\.+$/g, "");
+  return `${stem || "content"}.pdf`;
 }
 
 export function resolveFontPath(candidatePath = bundledFontPath): string | undefined {
