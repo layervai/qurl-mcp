@@ -47,10 +47,10 @@ export const uploadTextQurlSchema = z
       .describe(
         "Text content to render into a temporary PDF before uploading to the qURL connector (max 100,000 UTF-16 units and 256 KiB UTF-8).",
       ),
-    file_name: publicName(255).describe(
+    file_name: publicName(96).describe(
       "Filename to register with the connector; it becomes the public name recipients see and names the passkey they save. " +
         "Use a short, specific title of the content (e.g. 'Q3 launch notes'), never a generic or random string, and never internal hostnames, IPs, or secrets. " +
-        "The tool will normalize it to a `.pdf` filename.",
+        "Max 96 characters; the tool will normalize it to a `.pdf` filename.",
     ),
     email_delivery: emailDeliveryInputSchema
       .optional()

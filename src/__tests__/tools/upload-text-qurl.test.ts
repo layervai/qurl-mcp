@@ -174,6 +174,16 @@ describe("uploadTextQurlTool", () => {
       ).toBe(false);
     });
 
+    it("trims file_name before use", () => {
+      const tool = uploadTextQurlTool(makeMockClient());
+      const parsed = tool.inputSchema.parse({
+        type: "markdown",
+        content: "# Hi",
+        file_name: " Q3 notes ",
+      });
+      expect(parsed.file_name).toBe("Q3 notes");
+    });
+
     it("requires file_name", () => {
       const tool = uploadTextQurlTool(makeMockClient());
       expect(tool.inputSchema.safeParse({ type: "markdown", content: "# Hello" }).success).toBe(

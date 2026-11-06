@@ -120,6 +120,7 @@ export function secureAServicePrompt() {
         "",
         "Use the create_qurl tool with the following parameters:",
         `- target_url: ${args.target_url}`,
+        "- name: a short, specific title for this service, shown publicly to recipients (no internal hostnames, IPs, or secrets)",
         ...paramLines,
         ...policyLines,
         ...descriptionFollowUp,

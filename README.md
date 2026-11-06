@@ -313,8 +313,8 @@ title recipients see on qurl.link and in link previews, which also names the
 passkey they save. The agent writes a short, specific title for what is shared
 (at most 100 characters, one line; no internal hostnames, IPs, or secrets).
 It is not the per-link `label`. When the target URL reuses an existing resource,
-that resource keeps its stored name. `share_by_crid` and `mint_link` only mint links for existing resources and
-take no name.
+that resource keeps its stored name. `share_by_crid` and `mint_link` only mint
+links for existing resources and take no name.
 
 `share_by_crid` recognizes a standalone `$<CRID>` value as an explicit request
 to mint a temporary link for that CRID. The `$` is a user-facing marker and is
