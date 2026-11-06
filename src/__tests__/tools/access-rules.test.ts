@@ -54,6 +54,13 @@ const extraRules = [
   },
   { id: "broken-public", name: "Broken", mode: "public", link_limits: {} },
   { id: "broken-private", name: "Broken", mode: "review", allowed_emails: "x" },
+  { id: "extra-private", name: "Extra", mode: "review", ip_allowlist: ["10.0.0.0/8"] },
+  {
+    id: "extra-public",
+    name: "Extra",
+    mode: "public",
+    link_limits: { expires_in: "1h", max_sessions: 1 },
+  },
 ];
 const text = (result: { content: Array<{ text?: string }> }) => result.content[0].text ?? "";
 const rulesClient = (overrides = {}) =>
@@ -150,17 +157,16 @@ describe("create_qurl with rule_id", () => {
     [{ rule_id: "builtin.unknown" }, "No access rule"],
     [{ rule_id: publicRule.id, expires_in: "2h" }, "omit them"],
     [{ rule_id: "paid-public" }, "takes payment"],
-    [{ rule_id: "broken-public" }, "unrecognized access rules"],
+    [{ rule_id: "broken-public" }, "cannot apply"],
+    [{ rule_id: "extra-public" }, "cannot apply"],
   ])("refuses %j before creating", async (input, message) => {
     const client = rulesClient({
       getAccessRules: vi.fn().mockResolvedValue({
         ...rules,
-        // A malformed rule fails the whole library, so add one only to its own case.
         items: [
           ...rules.items,
-          ...extraRules.filter(
-            (r) => !r.id.startsWith("broken") || r.id === (input as { rule_id?: string }).rule_id,
-          ),
+          // Malformed rules sit beside the others: only the chosen rule is checked.
+          ...extraRules,
         ],
       }),
     });
@@ -216,19 +222,18 @@ describe("publish_crid with rule_id", () => {
     [{ rule_id: publicRule.id }, "Use create_qurl"],
     [{ rule_id: paidRule.id }, "takes payment"],
     [{ rule_id: "future-rule" }, "cannot publish"],
-    [{ rule_id: "broken-private" }, "unrecognized access rules"],
+    [{ rule_id: "broken-private" }, "cannot apply"],
+    [{ rule_id: "extra-private" }, "cannot apply"],
     [{}, "exactly one"],
     [{ rule_id: reviewRule.id, policy: { mode: "review", version: 1 } }, "exactly one"],
   ])("refuses %j before publishing", async (input, message) => {
     const client = makeMockClient({
       getAccessRules: vi.fn().mockResolvedValue({
         ...rules,
-        // A malformed rule fails the whole library, so add one only to its own case.
         items: [
           ...rules.items,
-          ...extraRules.filter(
-            (r) => !r.id.startsWith("broken") || r.id === (input as { rule_id?: string }).rule_id,
-          ),
+          // Malformed rules sit beside the others: only the chosen rule is checked.
+          ...extraRules,
         ],
       }),
     });

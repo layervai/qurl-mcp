@@ -29,25 +29,28 @@ export const ruleIdSchema = z
     "ID of a saved access rule or built-in choice from list_access_rules. Reading it needs qurl:read.",
   );
 
-const rule = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    mode: z.string(),
-    email_domain: z.string().optional(),
-    allowed_emails: z.array(z.string()).optional(),
-    contract_id: z.string().optional(),
-    link_limits: z
-      .object({
-        expires_in: z.string(),
-        one_time_use: z.boolean().optional(),
-        session_duration: z.string().optional(),
-      })
-      .optional(),
-    approval_expires_in: z.string().optional(),
-    payment: z.object({ price_id: z.string(), access_seconds: z.number() }).optional(),
-  })
-  .strip();
+const linkLimits = z.object({
+  expires_in: z.string(),
+  one_time_use: z.boolean().optional(),
+  session_duration: z.string().optional(),
+});
+const ruleFields = {
+  id: z.string(),
+  name: z.string(),
+  mode: z.string(),
+  email_domain: z.string().optional(),
+  allowed_emails: z.array(z.string()).optional(),
+  contract_id: z.string().optional(),
+  link_limits: linkLimits.optional(),
+  approval_expires_in: z.string().optional(),
+  payment: z.object({ price_id: z.string(), access_seconds: z.number() }).optional(),
+};
+const rule = z.object(ruleFields).strip();
+// Applying a rule fails closed: a setting this server does not know could be a
+// restriction, and dropping it would share more openly than the rule says.
+const appliedRule = z
+  .object({ ...ruleFields, link_limits: linkLimits.strict().optional() })
+  .strict();
 const listOutput = z.object({ items: z.array(rule), built_ins: z.array(rule) });
 
 export function listAccessRulesTool(
@@ -89,11 +92,16 @@ export async function findAccessRule(
   client: IQURLClient,
   id: string,
 ): Promise<AccessRule | ToolResult> {
-  const parsed = listOutput.safeParse(await client.getAccessRules());
-  if (!parsed.success) return errorResult("The service returned unrecognized access rules.");
-  const rules = parsed.data;
+  const rules = await client.getAccessRules();
   const found = [...rules.items, ...rules.built_ins].find((candidate) => candidate.id === id);
-  return found ?? errorResult(`No access rule has ID ${id}. Use list_access_rules to find one.`);
+  if (!found) return errorResult(`No access rule has ID ${id}. Use list_access_rules to find one.`);
+  // Only the chosen rule is checked, so another rule's shape never blocks this one.
+  const parsed = appliedRule.safeParse(found);
+  return parsed.success
+    ? parsed.data
+    : errorResult(
+        `Access rule ${id} uses settings this server cannot apply. Use qURL Desktop or the qURL CLI.`,
+      );
 }
 
 /** The private policy a rule applies at creation, or the tool error to return. */
