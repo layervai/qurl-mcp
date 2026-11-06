@@ -110,6 +110,11 @@ export function withMissingApiKeyHandler<I>(
   };
 }
 
+/** A tool error result with one text message. */
+export function errorResult(text: string): ToolResult {
+  return { isError: true, content: [{ type: "text", text }] };
+}
+
 /**
  * Convert a ZodError into an MCP tool error result.
  *

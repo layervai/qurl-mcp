@@ -31,6 +31,7 @@ export function makeMockClient(overrides: Partial<IQURLClient> = {}): IQURLClien
     approveConsumerGrant: vi.fn(),
     denyConsumerGrant: vi.fn(),
     revokeConsumerGrant: vi.fn(),
+    getAccessRules: vi.fn(),
     createQURL: vi.fn(),
     getQURL: vi.fn(),
     listQURLs: vi.fn(),
