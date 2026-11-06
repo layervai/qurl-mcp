@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { IQURLClient } from "../client.js";
 import {
+  errorResult,
   allowsServerApiKeyFallback,
   withMissingApiKeyHandler,
   type ToolRuntimeOptions,
@@ -12,6 +13,9 @@ import {
   toEmailAugmentedResult,
 } from "./email-delivery.js";
 import { createQurlOutputSchema } from "./output-schemas.js";
+import { findAccessRule, isToolResult, ruleIdSchema } from "./access-rules.js";
+
+const RULE_LIMIT_FIELDS = ["expires_in", "one_time_use", "session_duration"] as const;
 
 export const MAX_ACCESS_POLICY_IP_ITEMS = 100;
 export const MAX_ACCESS_POLICY_GEO_ITEMS = 50;
@@ -125,6 +129,11 @@ export const createQurlSchema = z.object({
       "Custom domain to assign to the auto-created resource (max 253 chars, must be registered/active/owned).",
     ),
   access_policy: accessPolicySchema.optional().describe("Access control policy for the qURL"),
+  rule_id: ruleIdSchema
+    .optional()
+    .describe(
+      "ID of a public access rule from list_access_rules. A rule with link limits sets expires_in, one_time_use and session_duration, so omit those. Reading it needs qurl:read.",
+    ),
   email_delivery: emailDeliveryInputSchema
     .optional()
     .describe(
@@ -143,6 +152,7 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
       "**When NOT to use:** use `mint_link` when you already have a resource identifier and just need an additional access token under it — `create_qurl` identifies the resource by target URL and may return an existing same-type resource grouping. " +
       "Use `batch_create_qurls` to create many in one round-trip. " +
       "Use `update_qurl` to retag or extend an existing resource without minting a new one. " +
+      "To share with a saved public access rule, pass its `rule_id` from `list_access_rules`; private rules use `publish_crid`. " +
       "If the user says 'give me the qURL of this image/file' and the content was uploaded in chat, this is the wrong tool. " +
       "**Behavior:** not idempotent — calling twice produces two distinct qURL tokens, though both may share the same `resource_id` when the target URL groups to an existing same-type resource (this tool doesn't surface the underlying API's `Idempotency-Key` header). " +
       "The returned `qurl_link` is shown ONCE in this response and is never recoverable through `get_qurl` or `list_qurls`; persist or share it immediately. " +
@@ -162,7 +172,26 @@ export function createQurlTool(client: IQURLClient, runtime: ToolRuntimeOptions)
       openWorldHint: true,
     },
     handler: withMissingApiKeyHandler(async (input: z.infer<typeof createQurlSchema>) => {
-      const { email_delivery, ...createInput } = input;
+      const { email_delivery, rule_id, ...createInput } = input;
+      if (rule_id !== undefined) {
+        const rule = await findAccessRule(client, rule_id);
+        if (isToolResult(rule)) return rule;
+        if (rule.mode !== "public") {
+          return errorResult(
+            `Access rule ${rule.id} is private (${rule.mode}). Use publish_crid with this rule_id.`,
+          );
+        }
+        if (rule.link_limits) {
+          if (RULE_LIMIT_FIELDS.some((field) => createInput[field] !== undefined)) {
+            return errorResult(
+              `Access rule ${rule.id} sets ${RULE_LIMIT_FIELDS.join(", ")}; omit them.`,
+            );
+          }
+          const { expires_in, one_time_use = false, session_duration } = rule.link_limits;
+          // Send one_time_use explicitly: some resource types default to one-time links.
+          Object.assign(createInput, { expires_in, one_time_use, session_duration });
+        }
+      }
       const result = await client.createQURL(createInput);
       const emailResult = await maybeDeliverToolEmail({
         allowServerApiKeyFallback: allowsServerApiKeyFallback(runtime),

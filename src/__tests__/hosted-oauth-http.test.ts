@@ -138,7 +138,7 @@ describe("hosted OAuth HTTP boundary", () => {
       }),
     );
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(20);
+    expect(tools).toHaveLength(21);
     for (const tool of tools) {
       if (!tool.annotations?.readOnlyHint)
         expect(tool.annotations?.destructiveHint, tool.name).toBe(true);
@@ -238,6 +238,15 @@ describe("hosted OAuth HTTP boundary", () => {
     });
     expect(invited.isError).not.toBe(true);
     expect(mock.inviteConsumer).toHaveBeenCalledWith("r_abcdefghijk", "recipient@example.com");
+    const ruleShare = await client.callTool({
+      name: "create_qurl",
+      arguments: { target_url: "https://example.com", rule_id: "builtin.public" },
+    });
+    expect(ruleShare.isError).toBe(true);
+    expect(ruleShare._meta?.["mcp/www_authenticate"]).toEqual([
+      expect.stringContaining('scope="qurl:write qurl:read"'),
+    ]);
+    expect(mock.getAccessRules).not.toHaveBeenCalled();
   });
 
   it("fails closed on unsupported mode, resource URL or missing secret", () => {

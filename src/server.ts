@@ -12,6 +12,7 @@ import {
   manageCridAccessWriteTool,
 } from "./tools/consumer-access.js";
 import { createQurlTool } from "./tools/create-qurl.js";
+import { listAccessRulesTool } from "./tools/access-rules.js";
 import { resolveQurlTool } from "./tools/resolve-qurl.js";
 import { listQurlsTool } from "./tools/list-qurls.js";
 import { getQurlTool } from "./tools/get-qurl.js";
@@ -92,6 +93,7 @@ const sharedToolFactories = [
   defineToolFactory(publishCridTool),
   defineToolFactory(manageCridAccessTool),
   defineToolFactory(createQurlTool),
+  defineToolFactory(listAccessRulesTool),
   defineToolFactory(resolveQurlTool),
   defineToolFactory(listQurlsTool),
   defineToolFactory(getQurlTool),
@@ -251,7 +253,7 @@ export function createServer(
           : {}),
       },
       async (input: unknown) => {
-        const required = oauth ? toolScopes(tool.name) : [];
+        const required = oauth ? toolScopes(tool.name, input) : [];
         if (oauth && !required.every((scope) => oauth.scopes.includes(scope))) {
           return {
             isError: true,

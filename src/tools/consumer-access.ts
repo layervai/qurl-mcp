@@ -1,6 +1,15 @@
 import { z } from "zod";
+import type { ConsumerAccessPolicy } from "@layervai/qurl";
 import { QURLAPIError, type IQURLClient } from "../client.js";
 import {
+  PRIVATE_MODES,
+  findAccessRule,
+  isToolResult,
+  ruleIdSchema,
+  rulePolicy,
+} from "./access-rules.js";
+import {
+  errorResult,
   resourceOnlyIdSchema,
   toStructuredContent,
   withMissingApiKeyHandler,
@@ -26,7 +35,15 @@ const resource = z.object({
   resource_id: z.string(),
   crid: z.string(),
   private: z.literal(true),
-  consumer_access: policy.strip(),
+  // Saved access rules can also publish email_domain and approval lifetimes.
+  consumer_access: policy
+    .extend({
+      mode: z.enum(PRIVATE_MODES),
+      email_domain: z.string().optional(),
+      allowed_emails: z.array(z.string()).optional(),
+      approval_expires_in: z.string().optional(),
+    })
+    .strip(),
 });
 const invitation = z.object({
   id: z.string(),
@@ -50,7 +67,13 @@ const grant = z.object({
   expires_at: z.string().optional(),
   session_cleanup: z.enum(["pending", "complete"]).optional(),
 });
-const publishInput = z.object({ target_url: z.string().url(), policy: validPolicy }).strict();
+const publishInput = z
+  .object({
+    target_url: z.string().url(),
+    policy: validPolicy.optional().describe("Private policy. Omit when rule_id is set."),
+    rule_id: ruleIdSchema.optional(),
+  })
+  .strict();
 
 function receipt<T>(schema: z.ZodType<T>, value: unknown, resourceId: string): T {
   const parsed = schema.safeParse(value);
@@ -72,7 +95,7 @@ export function publishCridTool(
     name: "publish_crid",
     title: "Publish a private CRID",
     description:
-      "Publish a URL with private access. Choose keys for approved credentials, invite_only for publisher email invitations with no access requests, email_capture for verified email capture with consent, review for verified email requests, or contract for a publisher backend entitlement receipt. This tool does not verify payment. Use version 1 for creation. Repeating this call creates another resource; after an uncertain result use get_qurl or list_qurls before retrying. For local apps use the qURL CLI. Public sharing uses create_qurl.",
+      "Publish a URL with private access. Choose keys for approved credentials, invite_only for publisher email invitations with no access requests, email_capture for verified email capture with consent, review for verified email requests, or contract for a publisher backend entitlement receipt. This tool does not verify payment. Use version 1 for creation. Or set rule_id to a private rule from list_access_rules instead of policy; paid rules are not supported here. Repeating this call creates another resource; after an uncertain result use get_qurl or list_qurls before retrying. For local apps use the qURL CLI. Public sharing uses create_qurl.",
     inputSchema: publishInput,
     outputSchema: resource,
     annotations: {
@@ -85,9 +108,19 @@ export function publishCridTool(
     handler: withMissingApiKeyHandler(async (raw: z.infer<typeof publishInput>) => {
       const parsed = publishInput.safeParse(raw);
       if (!parsed.success) return zodErrorToToolResult(parsed.error);
-      const handle = await client.protectUrl(parsed.data.target_url, {
-        consumerAccess: parsed.data.policy,
-      });
+      const { target_url, policy: explicit, rule_id } = parsed.data;
+      if ((explicit === undefined) === (rule_id === undefined)) {
+        return errorResult("Set exactly one of policy or rule_id.");
+      }
+      let consumerAccess: ConsumerAccessPolicy | undefined = explicit;
+      if (rule_id !== undefined) {
+        const rule = await findAccessRule(client, rule_id);
+        if (isToolResult(rule)) return rule;
+        const applied = rulePolicy(rule);
+        if (isToolResult(applied)) return applied;
+        consumerAccess = applied;
+      }
+      const handle = await client.protectUrl(target_url, { consumerAccess });
       const data = receipt(resource, handle.details, handle.crid);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(data) }],

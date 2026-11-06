@@ -338,6 +338,7 @@ export interface IQURLClient {
   revokeConsumerGrant(
     ...args: Parameters<SDKQURLClient["revokeConsumerGrant"]>
   ): ReturnType<SDKQURLClient["revokeConsumerGrant"]>;
+  getAccessRules(): ReturnType<SDKQURLClient["getAccessRules"]>;
   /**
    * Create a new qURL. Returns `CreateQURLData` — the ephemeral create-time
    * shape that carries `qurl_link` (shown only once) and `qurl_id`. This is
@@ -593,6 +594,10 @@ export class QURLClient implements IQURLClient {
     ...args: Parameters<SDKQURLClient["revokeConsumerGrant"]>
   ): ReturnType<SDKQURLClient["revokeConsumerGrant"]> {
     return this.call((sdk) => sdk.revokeConsumerGrant(...args));
+  }
+
+  async getAccessRules(): ReturnType<SDKQURLClient["getAccessRules"]> {
+    return this.call((sdk) => sdk.getAccessRules());
   }
 
   async createQURL(input: CreateQURLInput): Promise<{ data: CreateQURLData }> {

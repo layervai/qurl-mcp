@@ -84,6 +84,7 @@ describe("TDQS tool metadata coverage", () => {
       revoke_qurl_token: ["delete_qurl"],
       update_qurl_token: ["update_qurl", "revoke_qurl_token"],
       list_qurl_sessions: ["terminate_qurl_sessions", "get_qurl"],
+      list_access_rules: ["create_qurl", "publish_crid"],
       terminate_qurl_sessions: ["list_qurl_sessions"],
       upload_file_data_qurl: ["upload_file_qurl", "create_qurl", "mint_link"],
       upload_file_qurl: ["create_qurl", "mint_link"],
@@ -275,7 +276,12 @@ describe("TDQS tool metadata coverage", () => {
     const byName = new Map(tools.map((t) => [t.name, t]));
 
     it("marks read-only tools as readOnlyHint", () => {
-      const readOnlyNames = new Set(["list_qurls", "get_qurl", "list_qurl_sessions"]);
+      const readOnlyNames = new Set([
+        "list_qurls",
+        "get_qurl",
+        "list_qurl_sessions",
+        "list_access_rules",
+      ]);
       for (const tool of tools) {
         if (readOnlyNames.has(tool.name)) {
           expect(tool.annotations.readOnlyHint).toBe(true);
@@ -430,6 +436,18 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       clientOverrides: {
         updateQurlToken: vi.fn().mockResolvedValue({
           data: sampleAccessToken({ qurl_id: "q_abcdef12345" }),
+        }),
+      },
+    },
+    list_access_rules: {
+      input: {},
+      clientOverrides: {
+        getAccessRules: vi.fn().mockResolvedValue({
+          account_id: "acct-test",
+          version: 1,
+          items: [{ id: "11111111-1111-4111-8111-111111111111", name: "Team", mode: "review" }],
+          built_ins: [{ id: "builtin.public", name: "Anyone with the link", mode: "public" }],
+          quick_share_rule_id: "review",
         }),
       },
     },
