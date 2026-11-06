@@ -114,6 +114,8 @@ export interface CreateQURLInput {
   /** Resource type for integrations that are allowed to mint non-url qURLs. Defaults to "url". */
   type?: string;
   target_url: string;
+  /** Public resource name recipients see; required when the call creates a resource. */
+  name: string;
   label?: string;
   expires_in?: string;
   one_time_use?: boolean;

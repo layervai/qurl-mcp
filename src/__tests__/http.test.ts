@@ -1014,7 +1014,10 @@ describe("HTTP MCP server", () => {
           jsonrpc: "2.0",
           id: 2,
           method: "tools/call",
-          params: { name: "create_qurl", arguments: { target_url: "https://example.com" } },
+          params: {
+            name: "create_qurl",
+            arguments: { target_url: "https://example.com", name: "Test share" },
+          },
         }),
       });
       expect(validation.status).toBe(200);
@@ -1359,7 +1362,7 @@ describe("HTTP MCP server", () => {
             method: "tools/call",
             params: {
               name: "create_qurl",
-              arguments: { target_url: "https://example.com" },
+              arguments: { target_url: "https://example.com", name: "Test share" },
             },
           }),
         });
@@ -1410,7 +1413,7 @@ describe("HTTP MCP server", () => {
             method: "tools/call",
             params: {
               name: "create_qurl",
-              arguments: { target_url: "https://example.com" },
+              arguments: { target_url: "https://example.com", name: "Test share" },
             },
           },
         ]),
@@ -1570,7 +1573,7 @@ describe("HTTP MCP server", () => {
           method: "tools/call",
           params: {
             name: "create_qurl",
-            arguments: { target_url: "https://example.com" },
+            arguments: { target_url: "https://example.com", name: "Test share" },
           },
         }),
       });
@@ -1815,7 +1818,7 @@ describe("HTTP MCP server", () => {
           method: "tools/call",
           params: {
             name: "create_qurl",
-            arguments: { target_url: "https://example.com" },
+            arguments: { target_url: "https://example.com", name: "Test share" },
           },
         }),
       });
@@ -1886,7 +1889,7 @@ describe("HTTP MCP server", () => {
           method: "tools/call",
           params: {
             name: "create_qurl",
-            arguments: { target_url: "https://example.com" },
+            arguments: { target_url: "https://example.com", name: "Test share" },
           },
         }),
       });
@@ -1953,7 +1956,7 @@ describe("HTTP MCP server", () => {
           method: "tools/call",
           params: {
             name: "create_qurl",
-            arguments: { target_url: "https://example.com" },
+            arguments: { target_url: "https://example.com", name: "Test share" },
           },
         }),
       });
@@ -2020,7 +2023,7 @@ describe("HTTP MCP server", () => {
           method: "tools/call",
           params: {
             name: "create_qurl",
-            arguments: { target_url: "https://example.com" },
+            arguments: { target_url: "https://example.com", name: "Test share" },
           },
         }),
       });
@@ -2281,7 +2284,7 @@ describe("HTTP MCP server", () => {
           method: "tools/call",
           params: {
             name: "create_qurl",
-            arguments: { target_url: "https://example.com" },
+            arguments: { target_url: "https://example.com", name: "Test share" },
           },
         }),
       });
@@ -2338,7 +2341,10 @@ describe("HTTP MCP server", () => {
           jsonrpc: "2.0",
           id: 2,
           method: "tools/call",
-          params: { name: "create_qurl", arguments: { target_url: "https://example.com" } },
+          params: {
+            name: "create_qurl",
+            arguments: { target_url: "https://example.com", name: "Test share" },
+          },
         }),
       });
 
@@ -2443,7 +2449,7 @@ describe("HTTP MCP server", () => {
           method: "tools/call",
           params: {
             name: "create_qurl",
-            arguments: { target_url: "https://example.com" },
+            arguments: { target_url: "https://example.com", name: "Test share" },
           },
         }),
       });

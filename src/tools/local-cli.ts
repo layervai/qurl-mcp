@@ -265,7 +265,8 @@ export function localPublishCridTool(cli: IQurlCli): LocalCliTool {
       }
       const contractProblem = input.policy && contractIdProblem(input.policy);
       if (contractProblem) return errorResult(contractProblem);
-      const args = ["publish", input.target_url];
+      // --name names a new resource; on reuse the CLI keeps the stored name, so preview set below still applies it.
+      const args = ["publish", input.target_url, `--name=${input.app_name}`];
       if (input.allow_requests) args.push("--allow-requests");
       if (input.policy) {
         args.push(`--access=${input.policy.mode}`);
