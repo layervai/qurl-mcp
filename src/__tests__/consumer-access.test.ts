@@ -19,6 +19,19 @@ const resource = {
   expires_at: "2026-10-12T00:00:00Z",
 };
 describe("consumer access publisher tools", () => {
+  it.each([undefined, "", "hidden\u200bname", "two\nlines"])(
+    "refuses an invalid public name before publishing: %s",
+    async (app_name) => {
+      const client = makeMockClient();
+      const result = await publishCridTool(client).handler({
+        target_url: resource.target_url,
+        app_name,
+        policy: resource.consumer_access,
+      } as never);
+      expect(result.isError).toBe(true);
+      expect(client.protectUrl).not.toHaveBeenCalled();
+    },
+  );
   it.each(["list_grants", "approve", "deny", "revoke_grant"] as const)(
     "accepts an email-backed %s receipt without exposing added fields",
     async (action) => {
@@ -77,6 +90,7 @@ describe("consumer access publisher tools", () => {
     });
     const result = await publishCridTool(client).handler({
       target_url: resource.target_url,
+      app_name: "Team dashboard",
       policy: resource.consumer_access,
     });
     expect(result.isError).toBe(true);
@@ -170,6 +184,7 @@ describe("consumer access publisher tools", () => {
       (
         await publishCridTool(client).handler({
           target_url: resource.target_url,
+          app_name: "Team dashboard",
           policy: { mode: "contract", version: 1 },
         })
       ).isError,
@@ -178,6 +193,7 @@ describe("consumer access publisher tools", () => {
       (
         await publishCridTool(client).handler({
           target_url: resource.target_url,
+          app_name: "Team dashboard",
           policy: { ...resource.consumer_access, contract_id: "wrong" },
         })
       ).isError,
@@ -266,9 +282,11 @@ describe("consumer access publisher tools", () => {
     });
     const result = await publishCridTool(client).handler({
       target_url: resource.target_url,
+      app_name: "Team dashboard",
       policy: resource.consumer_access,
     });
     expect(client.protectUrl).toHaveBeenCalledWith(resource.target_url, {
+      name: "Team dashboard",
       consumerAccess: resource.consumer_access,
     });
     expect(result.structuredContent).toEqual({

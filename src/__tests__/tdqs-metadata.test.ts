@@ -347,7 +347,11 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       },
     },
     publish_crid: {
-      input: { target_url: "https://example.com", policy: { mode: "invite_only", version: 1 } },
+      input: {
+        target_url: "https://example.com",
+        app_name: "Team dashboard",
+        policy: { mode: "invite_only", version: 1 },
+      },
       clientOverrides: {
         protectUrl: vi.fn().mockResolvedValue({
           details: {

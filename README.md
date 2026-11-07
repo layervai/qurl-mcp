@@ -253,7 +253,9 @@ and the [LayerV MCP guide](https://layerv.ai/mcp/).
 
 Node.js 22.12 or later is required by the shared qURL SDK.
 
-`publish_crid` creates a private URL resource with keys, invite_only,
+`publish_crid` requires `app_name`, the public title recipients see, in both
+account and local modes. Account mode sends it as the resource's `name` at creation.
+It creates a private URL resource with keys, invite_only,
 email_capture, review, or contract access. `manage_crid_access` changes the
 policy with its current version, sends invitations, lists grants, approves
 or denies requests, and removes access. The tools return resource-scoped

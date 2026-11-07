@@ -59,7 +59,11 @@ const toolCases: ToolCase[] = [
     name: "publish_crid",
     build: publishCridTool,
     stubs: ["protectUrl"],
-    input: { target_url: "https://example.com", policy: { mode: "invite_only", version: 1 } },
+    input: {
+      target_url: "https://example.com",
+      app_name: "Team dashboard",
+      policy: { mode: "invite_only", version: 1 },
+    },
   },
   {
     name: "manage_crid_access",
