@@ -36,7 +36,10 @@ import {
   createHostedOAuth,
   OAUTH_RESOURCE,
   OAUTH_API_AUDIENCE,
+  OAUTH_CLIENT_ID,
   OAUTH_ISSUER,
+  SANDBOX_OAUTH_RESOURCE,
+  SANDBOX_OAUTH_API_AUDIENCE,
   OAUTH_SCOPES,
 } from "./auth/hosted-oauth.js";
 import { runWithRequestAuthContext } from "./auth/request-context.js";
@@ -124,6 +127,7 @@ interface McpResponseLocals {
   usingUnvalidatedBodyLimit?: boolean;
   // Verification hands off to exchange; close waits for the active auth phase.
   oauthWork?: Promise<unknown>;
+  oauthVerified?: boolean;
 }
 
 export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntimeOptions) {
@@ -135,15 +139,43 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
   const defaultQurlApiUrl = config.defaultQurlApiUrl;
   const defaultQurlConnectorUrl = config.defaultQurlConnectorUrl;
   const stateless = config.stateless ?? false;
-  if (
-    config.hostedOAuth &&
-    (!stateless ||
-      defaultQurlApiUrl !== OAUTH_API_AUDIENCE ||
-      `${baseUrl.replace(/\/$/, "")}${MCP_HTTP_PATH}` !== OAUTH_RESOURCE)
-  ) {
-    throw new Error("Hosted OAuth requires stateless mode and the production MCP/API URLs.");
+  const resource = `${baseUrl.replace(/\/$/, "")}${MCP_HTTP_PATH}`;
+  const sandboxOAuth = resource === SANDBOX_OAUTH_RESOURCE;
+  const exchangeClientId = sandboxOAuth ? config.oauthSandboxExchangeClientId : OAUTH_CLIENT_ID;
+  const signInClientId = config.oauthSignInClientId;
+  if (config.hostedOAuth) {
+    if (
+      !stateless ||
+      (sandboxOAuth
+        ? defaultQurlApiUrl !== SANDBOX_OAUTH_API_AUDIENCE
+        : resource !== OAUTH_RESOURCE || defaultQurlApiUrl !== OAUTH_API_AUDIENCE)
+    ) {
+      throw new Error(
+        "Hosted OAuth requires matching stateless Sandbox or production MCP/API URLs.",
+      );
+    }
+    if (
+      !exchangeClientId ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(exchangeClientId) ||
+      (sandboxOAuth && exchangeClientId === OAUTH_CLIENT_ID) ||
+      !signInClientId ||
+      !/^[A-Za-z0-9_-]{1,128}$/.test(signInClientId) ||
+      signInClientId === exchangeClientId ||
+      signInClientId === OAUTH_CLIENT_ID
+    ) {
+      throw new Error(
+        "Hosted OAuth requires separate environment-specific exchange and sign-in clients.",
+      );
+    }
   }
-  const oauth = config.hostedOAuth ? createHostedOAuth(config.oauthClientSecret ?? "") : undefined;
+  const oauth = config.hostedOAuth
+    ? createHostedOAuth(config.oauthClientSecret ?? "", undefined, {
+        resource,
+        apiAudience: defaultQurlApiUrl,
+        exchangeClientId,
+        signInClientId,
+      })
+    : undefined;
   const resourceMetadataUrl = `${new URL(baseUrl).origin}${OAUTH_RESOURCE_METADATA_PATH}/mcp`;
   const maxConcurrentRequests = normalizeMaxConcurrentRequests(config.maxConcurrentRequests);
   assertStatelessParserBudget(stateless, maxConcurrentRequests, config.maxUploadFileDataBytes);
@@ -235,6 +267,10 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     );
     rejectJsonRpc(res, 401, "Invalid or unavailable delegated access. Reconnect your account.");
   }
+  const apiKeyAuth = requireBearerAuth({
+    verifier: createPassthroughBearerVerifier(),
+    requiredScopes: ["mcp:tools"],
+  });
   const verifyBearer: express.RequestHandler = oauth
     ? async (req, res, next) => {
         try {
@@ -246,16 +282,19 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
             );
             return;
           }
+          // Match the qURL API's credential split. JWTs never fall back to API-key passthrough.
+          if (/^lv_(live|test)_[A-Za-z0-9_-]+$/.test(match[1])) {
+            await apiKeyAuth(req, res, next);
+            return;
+          }
           req.auth = await oauth.verifyAccessToken(match[1]);
+          (res.locals as McpResponseLocals).oauthVerified = true;
           if (!res.destroyed) next();
         } catch (error) {
           rejectOAuth(res, error);
         }
       }
-    : requireBearerAuth({
-        verifier: createPassthroughBearerVerifier(),
-        requiredScopes: ["mcp:tools"],
-      });
+    : apiKeyAuth;
   const bearerAuthMiddleware: express.RequestHandler = oauth
     ? (req, res, next) => {
         const work = Promise.resolve(
@@ -382,7 +421,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       publicRouteRateLimiter,
       (_req, res) => {
         res.json({
-          resource: OAUTH_RESOURCE,
+          resource: oauth.resource,
           authorization_servers: [OAUTH_ISSUER],
           scopes_supported: OAUTH_SCOPES,
           bearer_methods_supported: ["header"],
@@ -597,17 +636,18 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
 
     let delegatedScopes: string[] | undefined;
-    if (oauth) {
-      if (res.destroyed) return;
+    if (oauth && (res.locals as McpResponseLocals).oauthVerified) {
+      const auth = req.auth;
+      if (!auth || res.destroyed) return;
       try {
-        const work = oauth.delegate(req.auth!);
+        const work = oauth.delegate(auth);
         (res.locals as McpResponseLocals).oauthWork = work;
         const delegated = await work;
         if (res.destroyed) return;
         bearerToken = delegated.token;
         delegatedScopes = delegated.scopes;
         const redactionScope = `http-oauth:${randomUUID()}`;
-        registerSensitiveLogValues(redactionScope, [req.auth!.token, bearerToken]);
+        registerSensitiveLogValues(redactionScope, [auth.token, bearerToken]);
         const clearRedaction = () => clearSensitiveLogValues(redactionScope);
         res.once("finish", clearRedaction);
         res.once("close", clearRedaction);
@@ -627,8 +667,8 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
       config.maxUploadFileDataBytes,
       {
         ...getToolCapabilities(bearerToken),
-        ...(oauth
-          ? { email: false, oauth: { scopes: delegatedScopes!, resourceMetadataUrl } }
+        ...(delegatedScopes
+          ? { email: false, oauth: { scopes: delegatedScopes, resourceMetadataUrl } }
           : {}),
       },
     );
@@ -1037,7 +1077,7 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     const httpServer = app.listen(port, host, () => {
       logInfo(`qURL MCP HTTP server listening on ${sanitizeLogValue(host)}:${port}`);
       logInfo(
-        `HTTP MCP auth mode: ${oauth ? "Auth0 OAuth with per-user delegation" : "qURL API-key passthrough"}`,
+        `HTTP MCP auth mode: ${oauth ? "qURL API keys and Auth0 per-user OAuth" : "qURL API-key passthrough"}`,
       );
       if (config.maxUploadFileDataBytes > DEFAULT_MAX_UPLOAD_FILE_DATA_BYTES) {
         console.warn(

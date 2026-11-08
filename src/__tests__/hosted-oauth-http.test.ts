@@ -15,6 +15,8 @@ import {
   OAUTH_RESOURCE,
   OAUTH_API_AUDIENCE,
   OAUTH_CLIENT_ID,
+  SANDBOX_OAUTH_RESOURCE,
+  SANDBOX_OAUTH_API_AUDIENCE,
 } from "../auth/hosted-oauth.js";
 import { createHttpRuntime } from "../http.js";
 import type { HttpServerConfig } from "../http-config.js";
@@ -40,6 +42,7 @@ const config: HttpServerConfig = {
   trustProxyHops: 0,
   stateless: true,
   hostedOAuth: true,
+  oauthSignInClientId: "openaiClient",
   oauthClientSecret: "fixture-client-secret",
   maxConcurrentRequests: 2,
   maxSessions: 100,
@@ -71,22 +74,33 @@ afterEach(async () => {
   listener = undefined;
   vi.unstubAllGlobals();
 });
-async function token(downstream = false, scope = "qurl:read", subject = "auth0|customer-a") {
+async function token(
+  downstream = false,
+  scope = "qurl:read",
+  subject = "auth0|customer-a",
+  {
+    audience = downstream ? OAUTH_API_AUDIENCE : OAUTH_RESOURCE,
+    clientId = downstream ? OAUTH_CLIENT_ID : "openaiClient",
+  } = {},
+) {
   return new SignJWT({
-    azp: downstream ? OAUTH_CLIENT_ID : "openai-client",
+    azp: clientId,
     scope,
     "https://layerv.ai/email_verified": true,
-    ...(downstream ? { act: { sub: OAUTH_CLIENT_ID }, permissions: ["qurl:admin"] } : {}),
+    ...(downstream ? { act: { sub: clientId }, permissions: ["qurl:admin"] } : {}),
   })
     .setProtectedHeader({ alg: "RS256", kid: "fixture" })
     .setSubject(subject)
     .setIssuer(OAUTH_ISSUER)
-    .setAudience(downstream ? OAUTH_API_AUDIENCE : OAUTH_RESOURCE)
+    .setAudience(audience)
     .setExpirationTime("5m")
     .sign(privateKey);
 }
-async function start(clientFactory?: Parameters<typeof createHttpRuntime>[1]["clientFactory"]) {
-  runtime = createHttpRuntime(config, { version: "oauth-fixture", clientFactory });
+async function start(
+  clientFactory?: Parameters<typeof createHttpRuntime>[1]["clientFactory"],
+  settings = config,
+) {
+  runtime = createHttpRuntime(settings, { version: "oauth-fixture", clientFactory });
   listener = createNodeServer(runtime.app);
   await new Promise<void>((resolve) => listener!.listen(0, "127.0.0.1", resolve));
   const address = listener.address();
@@ -95,6 +109,14 @@ async function start(clientFactory?: Parameters<typeof createHttpRuntime>[1]["cl
 }
 
 describe("hosted OAuth HTTP boundary", () => {
+  it("fails closed when the production sign-in client is missing or is the exchange client", () => {
+    for (const oauthSignInClientId of [undefined, OAUTH_CLIENT_ID, "bad client id"]) {
+      expect(() =>
+        createHttpRuntime({ ...config, oauthSignInClientId }, { version: "test" }),
+      ).toThrow("separate environment-specific exchange and sign-in clients");
+    }
+  });
+
   it("publishes resource discovery and challenges unauthenticated callers without exchange", async () => {
     const exchange = vi.fn();
     vi.stubGlobal("fetch", exchange);
@@ -111,6 +133,100 @@ describe("hosted OAuth HTTP boundary", () => {
     expect(denied.headers.get("www-authenticate")).toContain("resource_metadata=");
     expect(denied.headers.get("www-authenticate")).not.toContain("error=");
     expect(exchange).not.toHaveBeenCalled();
+  });
+
+  it.each(["lv_live_fixture", "lv_test_fixture"])(
+    "keeps the API-key catalog and forwards %s unchanged with OAuth enabled",
+    async (key) => {
+      const exchange = vi.fn();
+      vi.stubGlobal("fetch", exchange);
+      const mock = makeMockClient({
+        listQURLs: vi.fn(async () => ({ data: [], meta: { has_more: false } })),
+      });
+      const factory = vi.fn((_bearer: string) => mock);
+      const base = await start(factory);
+      client = new Client({ name: "api-key-test", version: "1" });
+      await client.connect(
+        new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+          fetch: realFetch,
+          requestInit: { headers: { authorization: `Bearer ${key}` } },
+        }),
+      );
+      const { tools } = await client.listTools();
+      expect(
+        tools.find((tool) => tool.name === "delete_qurl")?._meta?.securitySchemes,
+      ).toBeUndefined();
+      expect((await client.callTool({ name: "list_qurls", arguments: {} })).isError).not.toBe(true);
+      expect(factory.mock.calls.every(([bearer]) => bearer === key)).toBe(true);
+      expect(exchange).not.toHaveBeenCalled();
+    },
+  );
+
+  it("pins the Sandbox resource, login client, API audience and exchange actor", async () => {
+    const settings = {
+      ...config,
+      baseUrl: new URL(SANDBOX_OAUTH_RESOURCE).origin,
+      defaultQurlApiUrl: SANDBOX_OAUTH_API_AUDIENCE,
+      oauthSandboxExchangeClientId: "sandboxExchange",
+      oauthSignInClientId: "sandboxSignIn",
+    };
+    expect(() =>
+      createHttpRuntime(
+        { ...settings, oauthSandboxExchangeClientId: OAUTH_CLIENT_ID },
+        { version: "test" },
+      ),
+    ).toThrow("separate environment-specific exchange and sign-in clients");
+    const input = await token(false, "qurl:read", undefined, {
+      audience: SANDBOX_OAUTH_RESOURCE,
+      clientId: "sandboxSignIn",
+    });
+    const output = await token(true, "qurl:read", undefined, {
+      audience: SANDBOX_OAUTH_API_AUDIENCE,
+      clientId: "sandboxExchange",
+    });
+    const exchange = vi.fn(async (..._args: Parameters<typeof fetch>) =>
+      Response.json({
+        access_token: output,
+        token_type: "Bearer",
+        issued_token_type: "urn:ietf:params:oauth:token-type:access_token",
+      }),
+    );
+    vi.stubGlobal("fetch", exchange);
+    const mock = makeMockClient({
+      listQURLs: vi.fn(async () => ({ data: [], meta: { has_more: false } })),
+    });
+    const factory = vi.fn((_bearer: string) => mock);
+    const base = await start(factory, settings);
+    expect(
+      await (await realFetch(`${base}/.well-known/oauth-protected-resource`)).json(),
+    ).toMatchObject({ resource: SANDBOX_OAUTH_RESOURCE });
+    for (const wrong of [
+      await token(false, "qurl:read", undefined, { clientId: "sandboxSignIn" }),
+      await token(false, "qurl:read", undefined, { audience: SANDBOX_OAUTH_RESOURCE }),
+    ]) {
+      const response = await realFetch(`${base}/mcp`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${wrong}` },
+      });
+      expect(response.status).toBe(401);
+    }
+    expect(exchange).not.toHaveBeenCalled();
+    client = new Client({ name: "sandbox-oauth-test", version: "1" });
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${base}/mcp`), {
+        fetch: realFetch,
+        requestInit: { headers: { authorization: `Bearer ${input}` } },
+      }),
+    );
+    expect((await client.callTool({ name: "list_qurls", arguments: {} })).isError).not.toBe(true);
+    expect(factory.mock.calls.every(([bearer]) => bearer === output)).toBe(true);
+    expect(exchange).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(exchange.mock.calls[0][1]?.body as string)).toMatchObject({
+      audience: SANDBOX_OAUTH_API_AUDIENCE,
+      client_id: "sandboxExchange",
+      subject_token: input,
+      scope: "qurl:read",
+    });
   });
 
   it("runs signed OAuth through the real MCP transport, forwards only token B and denies a write", async () => {
