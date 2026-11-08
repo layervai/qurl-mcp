@@ -7,6 +7,8 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 export const OAUTH_ISSUER = "https://auth.layerv.ai/";
 export const OAUTH_RESOURCE = "https://mcp.connector.layerv.ai/mcp";
 export const OAUTH_API_AUDIENCE = "https://api.layerv.ai";
+export const SANDBOX_OAUTH_RESOURCE = "https://mcp.connector.layerv.xyz/mcp";
+export const SANDBOX_OAUTH_API_AUDIENCE = "https://api.layerv.xyz";
 export const OAUTH_CLIENT_ID = "qH003Rwgjj1wvRXs2iFHthczmJs0fGjr";
 export const OAUTH_SCOPES = ["qurl:read", "qurl:write", "qurl:resolve"];
 const TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token";
@@ -21,10 +23,21 @@ function scopes(value: unknown): string[] {
   return [...new Set(value.split(" ").filter((scope) => OAUTH_SCOPES.includes(scope)))];
 }
 
-// This is the existing production Auth0 integration, not a general OAuth proxy.
+// Both environments use the same Auth0 issuer but separate audiences and exchange clients.
 export function createHostedOAuth(
   secret: string,
   dependencies: { key?: JWTVerifyGetKey; fetch?: typeof fetch } = {},
+  {
+    resource = OAUTH_RESOURCE,
+    apiAudience = OAUTH_API_AUDIENCE,
+    exchangeClientId = OAUTH_CLIENT_ID,
+    signInClientId,
+  }: {
+    resource?: string;
+    apiAudience?: string;
+    exchangeClientId?: string;
+    signInClientId?: string;
+  } = {},
 ) {
   if (!secret.trim()) throw new Error("MCP_OAUTH_CLIENT_SECRET is required for hosted OAuth.");
   const key =
@@ -60,14 +73,16 @@ export function createHostedOAuth(
   }
 
   return {
+    resource,
     async verifyAccessToken(token: string): Promise<AuthInfo> {
       try {
-        const claims = await verify(token, OAUTH_RESOURCE);
+        const claims = await verify(token, resource);
         const granted = scopes(claims.scope);
         if (
           granted.length === 0 ||
           typeof claims.azp !== "string" ||
           !claims.azp.trim() ||
+          (signInClientId !== undefined && claims.azp !== signInClientId) ||
           claims["https://layerv.ai/email_verified"] !== true
         ) {
           throw new Error("Missing client or scopes");
@@ -77,7 +92,7 @@ export function createHostedOAuth(
           clientId: claims.azp,
           scopes: granted,
           expiresAt: claims.exp!,
-          resource: new URL(OAUTH_RESOURCE),
+          resource: new URL(resource),
           extra: { subject: claims.sub },
         };
       } catch (error) {
@@ -103,13 +118,13 @@ export function createHostedOAuth(
             signal: globalThis.AbortSignal.timeout(5_000),
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              client_id: OAUTH_CLIENT_ID,
+              client_id: exchangeClientId,
               client_secret: secret,
               subject_token: auth.token,
               subject_token_type: TOKEN_TYPE,
               requested_token_type: TOKEN_TYPE,
               grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
-              audience: OAUTH_API_AUDIENCE,
+              audience: apiAudience,
               scope: auth.scopes.join(" "),
             }),
           }).catch(() => {
@@ -148,16 +163,16 @@ export function createHostedOAuth(
           ) {
             throw new Error("Unsupported token response");
           }
-          const claims = await verify(result.access_token, OAUTH_API_AUDIENCE);
+          const claims = await verify(result.access_token, apiAudience);
           // API1978 must ignore broad RBAC/custom permissions on tokens with act.
           const actor = claims.act;
           if (
             claims.sub !== auth.extra?.subject ||
-            claims.azp !== OAUTH_CLIENT_ID ||
+            claims.azp !== exchangeClientId ||
             typeof actor !== "object" ||
             actor === null ||
             !("sub" in actor) ||
-            actor.sub !== OAUTH_CLIENT_ID
+            actor.sub !== exchangeClientId
           )
             throw new Error("Invalid delegated identity");
           const granted = scopes(claims.scope);
