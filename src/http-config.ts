@@ -28,6 +28,7 @@ export interface HttpServerConfig {
   stateless?: boolean;
   hostedOAuth?: boolean;
   oauthClientSecret?: string;
+  googleConnectedAppsVerificationToken?: string;
   maxConcurrentRequests?: number;
   credentialRateLimitStore?: "memory" | "dynamodb";
   rateLimitDynamoDbTable?: string;
@@ -354,6 +355,7 @@ export function loadHttpServerConfig(configPath = getDefaultHttpConfigPath()): H
       "MCP_HOSTED_OAUTH/hostedOAuth",
     ),
     oauthClientSecret: process.env.MCP_OAUTH_CLIENT_SECRET,
+    googleConnectedAppsVerificationToken: process.env.MCP_GOOGLE_CONNECTED_APPS_VERIFICATION_TOKEN,
     credentialRateLimitStore,
     rateLimitDynamoDbTable,
     metricsNamespace,

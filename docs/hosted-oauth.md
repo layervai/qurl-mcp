@@ -97,3 +97,32 @@ Do not let issued delegated tokens regain account-permission fallback.
 References: [OpenAI auth](https://developers.openai.com/plugins/build/auth),
 [Auth0 OBO](https://auth0.com/docs/secure/call-apis-on-users-behalf/on-behalf-of-token-exchange),
 [tool metadata](https://developers.openai.com/plugins/reference#tool-descriptor-parameters).
+
+## Google Connected Apps
+
+The preview application and MCP registration are separate. After preview access,
+create the Connected App and use the MCP HTTPS URL ending in `/mcp`. In Google
+Connected Console, download the domain challenge for the MCP host. Set
+`MCP_GOOGLE_CONNECTED_APPS_VERIFICATION_TOKEN` to the token from that file.
+Confirm that `GET /.well-known/google-connected-apps` on that host returns the
+matching JSON directly, without authentication or a redirect. The route is off
+when the variable is absent. This public token is not an OAuth credential.
+Domain verification can run before OAuth activation.
+
+In Access credentials, select user-delegated authorization with a pre-registered
+client. Use a separate Auth0 sign-in client for Google and allow only the exact
+app-specific redirect URIs from the console. Do not give Google the server's
+token exchange client or its secret. Use authorization code with PKCE S256.
+Confirm Auth0 maps the resource indicator to the MCP audience; do not change the
+tenant's default audience to make the test pass.
+
+Apply the release gates above to this client. Check both protected-resource
+metadata URLs, the 401 discovery challenge, and live Auth0 discovery. In Gemini
+Developer Mode, prove sign-in, tool sync and a tool call with a verified test
+user. Check that a second user cannot access the first user's resources and that
+read-only consent cannot authorize a write. Confirm that refresh maintains the
+same user, audience and scope limits if it is enabled. Keep API-key clients on
+their compatibility deployment and use only seeded test data for Google review.
+
+References: [Google OAuth guide](https://developers.google.com/connected-apps/mcp/oauth)
+and [Connected Console setup](https://developers.google.com/connected-apps/gpc/perform-the-steps).

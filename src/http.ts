@@ -63,7 +63,12 @@ import {
   normalizeRateLimitDynamoDbTable,
   type HttpServerConfig,
 } from "./http-config.js";
-import { HEALTH_HTTP_PATH, MCP_HTTP_PATH, OAUTH_RESOURCE_METADATA_PATH } from "./http-routes.js";
+import {
+  GOOGLE_CONNECTED_APPS_VERIFICATION_PATH,
+  HEALTH_HTTP_PATH,
+  MCP_HTTP_PATH,
+  OAUTH_RESOURCE_METADATA_PATH,
+} from "./http-routes.js";
 import { createServer } from "./server.js";
 import {
   DynamoDbCredentialRateLimitStore,
@@ -360,6 +365,16 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     app.use(hostHeaderValidation(config.allowedHosts));
   } else {
     app.use(localhostHostValidation());
+  }
+  const googleVerificationToken = config.googleConnectedAppsVerificationToken;
+  if (googleVerificationToken !== undefined) {
+    if (!/^[!-~]{1,4096}$/.test(googleVerificationToken)) {
+      throw new Error("MCP_GOOGLE_CONNECTED_APPS_VERIFICATION_TOKEN must be a single token.");
+    }
+    app.get(GOOGLE_CONNECTED_APPS_VERIFICATION_PATH, publicRouteRateLimiter, (_req, res) => {
+      res.set("Cache-Control", "no-store");
+      res.json({ verification_tokens: [googleVerificationToken] });
+    });
   }
   if (oauth) {
     app.get(
