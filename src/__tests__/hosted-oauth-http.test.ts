@@ -109,6 +109,14 @@ async function start(
 }
 
 describe("hosted OAuth HTTP boundary", () => {
+  it("fails closed when the production sign-in client is missing or is the exchange client", () => {
+    for (const oauthSignInClientId of [undefined, OAUTH_CLIENT_ID, "bad client id"]) {
+      expect(() =>
+        createHttpRuntime({ ...config, oauthSignInClientId }, { version: "test" }),
+      ).toThrow("separate environment-specific exchange and sign-in clients");
+    }
+  });
+
   it("publishes resource discovery and challenges unauthenticated callers without exchange", async () => {
     const exchange = vi.fn();
     vi.stubGlobal("fetch", exchange);

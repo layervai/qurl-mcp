@@ -127,6 +127,7 @@ interface McpResponseLocals {
   usingUnvalidatedBodyLimit?: boolean;
   // Verification hands off to exchange; close waits for the active auth phase.
   oauthWork?: Promise<unknown>;
+  oauthVerified?: boolean;
 }
 
 export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntimeOptions) {
@@ -283,10 +284,11 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
           }
           // Match the qURL API's credential split. JWTs never fall back to API-key passthrough.
           if (/^lv_(live|test)_[A-Za-z0-9_-]+$/.test(match[1])) {
-            apiKeyAuth(req, res, next);
+            await apiKeyAuth(req, res, next);
             return;
           }
           req.auth = await oauth.verifyAccessToken(match[1]);
+          (res.locals as McpResponseLocals).oauthVerified = true;
           if (!res.destroyed) next();
         } catch (error) {
           rejectOAuth(res, error);
@@ -634,17 +636,18 @@ export function createHttpRuntime(config: HttpServerConfig, options: HttpRuntime
     }
 
     let delegatedScopes: string[] | undefined;
-    if (oauth && req.auth?.resource) {
-      if (res.destroyed) return;
+    if (oauth && (res.locals as McpResponseLocals).oauthVerified) {
+      const auth = req.auth;
+      if (!auth || res.destroyed) return;
       try {
-        const work = oauth.delegate(req.auth!);
+        const work = oauth.delegate(auth);
         (res.locals as McpResponseLocals).oauthWork = work;
         const delegated = await work;
         if (res.destroyed) return;
         bearerToken = delegated.token;
         delegatedScopes = delegated.scopes;
         const redactionScope = `http-oauth:${randomUUID()}`;
-        registerSensitiveLogValues(redactionScope, [req.auth!.token, bearerToken]);
+        registerSensitiveLogValues(redactionScope, [auth.token, bearerToken]);
         const clearRedaction = () => clearSensitiveLogValues(redactionScope);
         res.once("finish", clearRedaction);
         res.once("close", clearRedaction);
