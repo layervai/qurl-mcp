@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { describe, it, expect, vi } from "vitest";
 import { MISSING_API_KEY_MESSAGE, QURLAPIError, type IQURLClient } from "../client.js";
 import { publishCridTool, manageCridAccessTool } from "../tools/consumer-access.js";
+import { listAccessRulesTool } from "../tools/access-rules.js";
 import { batchCreateTool } from "../tools/batch-create.js";
 import { createQurlTool } from "../tools/create-qurl.js";
 import { deleteQurlTool } from "../tools/delete-qurl.js";
@@ -127,6 +128,12 @@ const toolCases: ToolCase[] = [
     build: batchCreateTool,
     stubs: ["batchCreate"],
     input: { items: [{ target_url: "https://example.com" }] },
+  },
+  {
+    name: "list_access_rules",
+    build: listAccessRulesTool,
+    stubs: ["getAccessRules"],
+    input: {},
   },
   {
     name: "revoke_qurl_token",

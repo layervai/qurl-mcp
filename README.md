@@ -307,6 +307,13 @@ is no longer supported.
 | `update_qurl_token`       | Update a specific token                             |
 | `list_qurl_sessions`      | List active access sessions                         |
 | `terminate_qurl_sessions` | Terminate one or all active sessions                |
+| `list_access_rules`       | List saved access rules and built-in choices        |
+
+`list_access_rules` (`qurl:read`) lists the account's saved access rules,
+which are edited in qURL Desktop or the qURL CLI. Pass a rule's `id` as
+`rule_id` to `create_qurl` for a public rule, which applies its link limits, or
+to `publish_crid` for a private rule, which publishes its policy. Using a rule
+also needs `qurl:read`. Paid rules are not supported here.
 
 `share_by_crid` recognizes a standalone `$<CRID>` value as an explicit request
 to mint a temporary link for that CRID. The `$` is a user-facing marker and is

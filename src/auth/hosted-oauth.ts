@@ -204,6 +204,7 @@ const TOOL_SCOPES: Record<string, string[]> = {
   manage_crid_access: ["qurl:write"],
   list_crid_access: ["qurl:read"],
   create_qurl: ["qurl:write"],
+  list_access_rules: ["qurl:read"],
   resolve_qurl: ["qurl:resolve"],
   list_qurls: ["qurl:read"],
   get_qurl: ["qurl:read"],
@@ -223,7 +224,17 @@ const TOOL_SCOPES: Record<string, string[]> = {
   upload_text_qurl: ["qurl:write"],
 };
 
-export function toolScopes(name: string): string[] {
+// Applying a saved access rule (rule_id) also reads the account's rules. An empty
+// rule_id counts as none; the tools' input schemas refuse it before the handler runs.
+const RULE_READING_TOOLS = new Set(["create_qurl", "publish_crid"]);
+
+export function toolScopes(name: string, input?: unknown): string[] {
   if (!Object.hasOwn(TOOL_SCOPES, name)) throw new Error(`Missing OAuth scope policy for ${name}`);
-  return TOOL_SCOPES[name];
+  const readsRule =
+    RULE_READING_TOOLS.has(name) &&
+    typeof input === "object" &&
+    input !== null &&
+    "rule_id" in input &&
+    !!input.rule_id;
+  return readsRule ? [...TOOL_SCOPES[name], "qurl:read"] : TOOL_SCOPES[name];
 }

@@ -73,6 +73,7 @@ qurl-mcp/
 │   │   ├── upload-mint-options.ts # Shared upload link options and descriptions
 │   │   ├── create-qurl.ts
 │   │   ├── consumer-access.ts # Private publishing, invitations, and consumer grants
+│   │   ├── access-rules.ts  # Saved access rules: listing and applying a rule
 │   │   ├── local-cli.ts     # No-account tools that run the local qURL CLI
 │   │   ├── resolve-qurl.ts
 │   │   ├── list-qurls.ts
@@ -184,8 +185,9 @@ OAuth separates access reads from writes. Existing API-key and local clients kee
 
 | Tool                      | OAuth Scope Required | Description                                             |
 | ------------------------- | -------------- | ------------------------------------------------------- |
-| `create_qurl`             | `qurl:write`   | Create a protected link                                 |
-| `publish_crid`            | `qurl:write`   | Publish a private URL CRID                              |
+| `create_qurl`             | `qurl:write`   | Create a protected link; `rule_id` also needs `qurl:read` |
+| `list_access_rules`       | `qurl:read`    | List saved access rules and built-in choices            |
+| `publish_crid`            | `qurl:write`   | Publish a private URL CRID; `rule_id` also needs `qurl:read` |
 | `submit_feedback`         | None           | Send a brief report to LayerV Slack for human review     |
 | `manage_crid_access`      | `qurl:write` | Change private policy, invitations and grants (OAuth) |
 | `list_crid_access`        | `qurl:read` | List private invitations and grants (OAuth only) |
