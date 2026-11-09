@@ -153,6 +153,24 @@ describe("HTTP MCP server", () => {
     expect((await fetch(`${baseUrl}/legal/terms`)).status).toBe(404);
   });
 
+  it("serves the Google domain challenge directly only when configured", async () => {
+    const path = "/.well-known/google-connected-apps";
+    const disabled = await start(createHttpRuntime(testConfig, { version: "test" }).app);
+    expect((await fetch(disabled + path)).status).toBe(404);
+
+    const enabled = await start(
+      createHttpRuntime(
+        { ...testConfig, googleConnectedAppsVerificationToken: "google-fixture" },
+        { version: "test" },
+      ).app,
+    );
+    const response = await fetch(enabled + path, { redirect: "manual" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toMatch(/^application\/json/);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toEqual({ verification_tokens: ["google-fixture"] });
+  });
+
   it("fails fast when a directly constructed DynamoDB runtime lacks a table", () => {
     expect(() =>
       createHttpRuntime(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FEEDBACK_HTTP_PATH,
+  GOOGLE_CONNECTED_APPS_VERIFICATION_PATH,
   HEALTH_HTTP_PATH,
   LEGAL_HTTP_PATH_PREFIX,
   MCP_HTTP_PATH,
@@ -16,6 +17,7 @@ describe("HTTP route constants", () => {
       HEALTH_HTTP_PATH,
       LEGAL_HTTP_PATH_PREFIX,
       OAUTH_RESOURCE_METADATA_PATH,
+      GOOGLE_CONNECTED_APPS_VERIFICATION_PATH,
     ]);
     expect(new Set(RESERVED_PUBLIC_PATH_PREFIXES).size).toBe(RESERVED_PUBLIC_PATH_PREFIXES.length);
   });
