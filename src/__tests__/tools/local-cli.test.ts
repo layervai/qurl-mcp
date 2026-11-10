@@ -86,7 +86,7 @@ describe("CLI-backed tools", () => {
       );
 
       expect(argv()).toEqual([
-        ["publish", "http://127.0.0.1:3000", "--output=json"],
+        ["publish", "http://127.0.0.1:3000", "--name=TipSplit", "--output=json"],
         ["preview", "set", CRID, "--name=TipSplit", "--output=json"],
       ]);
       expect(result.isError).toBeUndefined();
@@ -153,7 +153,7 @@ describe("CLI-backed tools", () => {
       const tool = localPublishCridTool({ runJson });
       const result = await tool.handler({ target_url: "http://127.0.0.1:3000", app_name: name });
       expect(runJson.mock.calls.map((call) => call[0])).toEqual([
-        ["publish", "http://127.0.0.1:3000"],
+        ["publish", "http://127.0.0.1:3000", `--name=${name}`],
         ["preview", "set", CRID, `--name=${name}`],
       ]);
       expect(result.isError).toBeUndefined();
@@ -193,7 +193,7 @@ describe("CLI-backed tools", () => {
       },
     );
 
-    it.each([" ", "x".repeat(101), "name\nsecret"])(
+    it.each([" ", "x".repeat(101), "name\nsecret", "hidden\u200Bname"])(
       "rejects invalid public names before publication",
       async (app_name) => {
         const runJson = vi.fn();
@@ -222,6 +222,7 @@ describe("CLI-backed tools", () => {
         [
           "publish",
           "https://docs.example.com/handbook",
+          "--name=TipSplit",
           "--allow-requests",
           "--description=Team -- handbook",
           "--alias=-handbook",
@@ -245,6 +246,7 @@ describe("CLI-backed tools", () => {
         [
           "publish",
           "https://api.example.com",
+          "--name=TipSplit",
           "--access=contract",
           "--contract=c-1",
           "--output=json",

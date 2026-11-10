@@ -53,9 +53,19 @@ describe("batchCreateTool", () => {
       expect(result.success).toBe(false);
     });
 
+    it("requires a name on every item", () => {
+      const result = batchCreateSchema.safeParse({
+        items: [
+          { target_url: "https://a.example.com", name: "A" },
+          { target_url: "https://b.example.com" },
+        ],
+      });
+      expect(result.success).toBe(false);
+    });
+
     it("accepts single item", () => {
       const result = batchCreateSchema.safeParse({
-        items: [{ target_url: "https://example.com" }],
+        items: [{ target_url: "https://example.com", name: "Test share" }],
       });
       expect(result.success).toBe(true);
     });
@@ -63,8 +73,13 @@ describe("batchCreateTool", () => {
     it("accepts multiple items with optional fields", () => {
       const result = batchCreateSchema.safeParse({
         items: [
-          { target_url: "https://app1.example.com", expires_in: "7d" },
-          { target_url: "https://app2.example.com", one_time_use: true, label: "Test" },
+          { target_url: "https://app1.example.com", name: "Test share", expires_in: "7d" },
+          {
+            target_url: "https://app2.example.com",
+            name: "Test share",
+            one_time_use: true,
+            label: "Test",
+          },
         ],
       });
       expect(result.success).toBe(true);
@@ -75,6 +90,7 @@ describe("batchCreateTool", () => {
         items: [
           {
             target_url: "https://example.com",
+            name: "Test share",
             session_duration: "1h",
             custom_domain: "app.example.com",
             access_policy: { geo_allowlist: ["US"] },
@@ -110,8 +126,8 @@ describe("batchCreateTool", () => {
 
       const input = {
         items: [
-          { target_url: "https://app1.example.com" },
-          { target_url: "https://app2.example.com" },
+          { target_url: "https://app1.example.com", name: "Test share" },
+          { target_url: "https://app2.example.com", name: "Test share" },
         ],
       };
       await tool.handler(input);
@@ -127,7 +143,7 @@ describe("batchCreateTool", () => {
       const tool = batchCreateTool(client);
 
       const result = await tool.handler({
-        items: [{ target_url: "https://example.com" }],
+        items: [{ target_url: "https://example.com", name: "Test share" }],
       });
 
       expect(result.content).toHaveLength(1);
@@ -169,8 +185,8 @@ describe("batchCreateTool", () => {
 
       const result = await tool.handler({
         items: [
-          { target_url: "https://valid.example.com" },
-          { target_url: "https://invalid.example.com" },
+          { target_url: "https://valid.example.com", name: "Test share" },
+          { target_url: "https://invalid.example.com", name: "Test share" },
         ],
       });
 
@@ -187,7 +203,7 @@ describe("batchCreateTool", () => {
       const tool = batchCreateTool(client);
 
       const result = await tool.handler({
-        items: [{ target_url: "https://example.com" }],
+        items: [{ target_url: "https://example.com", name: "Test share" }],
       });
 
       const parsed = JSON.parse(result.content[0].text);
@@ -220,7 +236,10 @@ describe("batchCreateTool", () => {
       const tool = batchCreateTool(client);
 
       const result = await tool.handler({
-        items: [{ target_url: "http://a.example.com" }, { target_url: "http://b.example.com" }],
+        items: [
+          { target_url: "http://a.example.com", name: "Test share" },
+          { target_url: "http://b.example.com", name: "Test share" },
+        ],
       });
 
       expect(result.isError).toBe(true);
@@ -237,7 +256,7 @@ describe("batchCreateTool", () => {
       const tool = batchCreateTool(client);
 
       await expect(
-        tool.handler({ items: [{ target_url: "https://example.com" }] }),
+        tool.handler({ items: [{ target_url: "https://example.com", name: "Test share" }] }),
       ).rejects.toThrow("Rate limited");
     });
 
@@ -254,7 +273,7 @@ describe("batchCreateTool", () => {
       const tool = batchCreateTool(client);
 
       const result = await tool.handler({
-        items: [{ target_url: "https://example.com" }],
+        items: [{ target_url: "https://example.com", name: "Test share" }],
       });
 
       expect(result.isError).toBe(true);

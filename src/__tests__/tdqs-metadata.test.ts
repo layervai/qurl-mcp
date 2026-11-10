@@ -347,7 +347,11 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       },
     },
     publish_crid: {
-      input: { target_url: "https://example.com", policy: { mode: "invite_only", version: 1 } },
+      input: {
+        target_url: "https://example.com",
+        app_name: "Team dashboard",
+        policy: { mode: "invite_only", version: 1 },
+      },
       clientOverrides: {
         protectUrl: vi.fn().mockResolvedValue({
           details: {
@@ -366,7 +370,7 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       },
     },
     create_qurl: {
-      input: { target_url: "https://example.com" },
+      input: { target_url: "https://example.com", name: "Test share" },
       clientOverrides: {
         createQURL: vi.fn().mockResolvedValue({ data: sampleCreateQURLData() }),
       },
@@ -418,7 +422,7 @@ describe("structuredContent ↔ outputSchema round-trip", () => {
       },
     },
     batch_create_qurls: {
-      input: { items: [{ target_url: "https://example.com" }] },
+      input: { items: [{ target_url: "https://example.com", name: "Test share" }] },
       clientOverrides: { batchCreate: vi.fn().mockResolvedValue(sampleBatchCreateOutput()) },
     },
     revoke_qurl_token: {

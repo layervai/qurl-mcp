@@ -1,6 +1,19 @@
 import { z, type ZodError } from "zod";
 import { QURLAPIError } from "../client.js";
 
+/**
+ * A public resource name, as qurl-service's ValidatePreviewName accepts it: trimmed,
+ * one line, no control or format (Cf) characters. UTF-16 length is at least the rune count.
+ */
+export function publicName(max: number) {
+  return z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .regex(/^[^\p{Cc}\p{Cf}\u2028\u2029]*$/u, "Must be one line without control characters");
+}
+
 // Public API resource IDs are bounded base64url public keys or base32 CRIDs.
 // Public keys encode 80–160 DER bytes: 107–214 base64url chars, excluding length % 4 === 1.
 // CRIDs are the API-registered 47- or 60-character base32 forms.
@@ -98,6 +111,7 @@ export function withMissingApiKeyHandler<I>(
         err instanceof QURLAPIError &&
         (err.code === "missing_api_key" ||
           err.code === "upload_mint_failed" ||
+          err.code === "name_required" ||
           err.code === "access_receipt_unconfirmed")
       ) {
         return {

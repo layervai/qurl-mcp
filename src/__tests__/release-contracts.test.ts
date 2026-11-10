@@ -65,7 +65,7 @@ async function connect() {
 
 describe("release contract regressions", () => {
   it.each([
-    ["create_qurl", { target_url: "https://example.com" }],
+    ["create_qurl", { target_url: "https://example.com", name: "Test share" }],
     ["get_qurl", { resource_id: "r_abcdefghijk" }],
     ["list_qurls", {}],
     ["update_qurl", { resource_id: "r_abcdefghijk", extend_by: "1h" }],
@@ -109,7 +109,13 @@ describe("release contract regressions", () => {
   it("does not advertise or forward batch email_delivery", () => {
     expect(batchCreateSchema.shape.items.element.shape).not.toHaveProperty("email_delivery");
     const parsed = batchCreateSchema.parse({
-      items: [{ target_url: "https://example.com", email_delivery: { to: ["a@example.com"] } }],
+      items: [
+        {
+          target_url: "https://example.com",
+          name: "Test share",
+          email_delivery: { to: ["a@example.com"] },
+        },
+      ],
     });
     expect(parsed.items[0]).not.toHaveProperty("email_delivery");
   });

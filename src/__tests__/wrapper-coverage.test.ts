@@ -59,7 +59,11 @@ const toolCases: ToolCase[] = [
     name: "publish_crid",
     build: publishCridTool,
     stubs: ["protectUrl"],
-    input: { target_url: "https://example.com", policy: { mode: "invite_only", version: 1 } },
+    input: {
+      target_url: "https://example.com",
+      app_name: "Team dashboard",
+      policy: { mode: "invite_only", version: 1 },
+    },
   },
   {
     name: "manage_crid_access",
@@ -71,7 +75,7 @@ const toolCases: ToolCase[] = [
     name: "create_qurl",
     build: createQurlTool,
     stubs: ["createQURL"],
-    input: { target_url: "https://example.com" },
+    input: { target_url: "https://example.com", name: "Test share" },
   },
   {
     name: "resolve_qurl",
@@ -126,7 +130,7 @@ const toolCases: ToolCase[] = [
     name: "batch_create_qurls",
     build: batchCreateTool,
     stubs: ["batchCreate"],
-    input: { items: [{ target_url: "https://example.com" }] },
+    input: { items: [{ target_url: "https://example.com", name: "Test share" }] },
   },
   {
     name: "revoke_qurl_token",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { QURLAPIError, type IQURLClient } from "../client.js";
 import {
+  publicName,
   resourceOnlyIdSchema,
   toStructuredContent,
   withMissingApiKeyHandler,
@@ -50,7 +51,9 @@ const grant = z.object({
   expires_at: z.string().optional(),
   session_cleanup: z.enum(["pending", "complete"]).optional(),
 });
-const publishInput = z.object({ target_url: z.string().url(), policy: validPolicy }).strict();
+const publishInput = z
+  .object({ target_url: z.string().url(), app_name: publicName(100), policy: validPolicy })
+  .strict();
 
 function receipt<T>(schema: z.ZodType<T>, value: unknown, resourceId: string): T {
   const parsed = schema.safeParse(value);
@@ -72,7 +75,7 @@ export function publishCridTool(
     name: "publish_crid",
     title: "Publish a private CRID",
     description:
-      "Publish a URL with private access. Choose keys for approved credentials, invite_only for publisher email invitations with no access requests, email_capture for verified email capture with consent, review for verified email requests, or contract for a publisher backend entitlement receipt. This tool does not verify payment. Use version 1 for creation. Repeating this call creates another resource; after an uncertain result use get_qurl or list_qurls before retrying. For local apps use the qURL CLI. Public sharing uses create_qurl.",
+      "Publish a URL with private access. Supply app_name: a short public title recipients see, without secrets or hidden origin details. It names a new resource; reuse keeps the stored name. Choose keys for approved credentials, invite_only for publisher email invitations with no access requests, email_capture for verified email capture with consent, review for verified email requests, or contract for a publisher backend entitlement receipt. This tool does not verify payment. Use version 1 for creation. Repeating this call creates another resource; after an uncertain result use get_qurl or list_qurls before retrying. For local apps use the qURL CLI. Public sharing uses create_qurl.",
     inputSchema: publishInput,
     outputSchema: resource,
     annotations: {
@@ -86,6 +89,7 @@ export function publishCridTool(
       const parsed = publishInput.safeParse(raw);
       if (!parsed.success) return zodErrorToToolResult(parsed.error);
       const handle = await client.protectUrl(parsed.data.target_url, {
+        name: parsed.data.app_name,
         consumerAccess: parsed.data.policy,
       });
       const data = receipt(resource, handle.details, handle.crid);
