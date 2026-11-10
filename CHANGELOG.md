@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.10.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.9.0...qurl-mcp-v0.10.0) (2026-11-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **tools:** create_qurl, batch_create_qurls and upload_text_qurl calls without a name fail validation. Local publish_crid needs a qURL CLI that supports `publish --name`.
+
+### Features
+
+* **http:** add per-user OAuth beside hosted API keys ([#384](https://github.com/layervai/qurl-mcp/issues/384)) ([ba05373](https://github.com/layervai/qurl-mcp/commit/ba05373a4aefd86a8539d0cae44304cac8273f75))
+* **http:** serve Google Connected Apps domain challenge ([#383](https://github.com/layervai/qurl-mcp/issues/383)) ([e81461d](https://github.com/layervai/qurl-mcp/commit/e81461df375e02624ae19a065447472ce0f5d93f))
+* **tools:** require a public resource name on creates ([#380](https://github.com/layervai/qurl-mcp/issues/380)) ([b7592aa](https://github.com/layervai/qurl-mcp/commit/b7592aa4f97f1d9c5f2fa26cdbd8708f82adc461))
+
+
+### Bug Fixes
+
+* **tools:** show tool purposes first in compact catalogs ([#370](https://github.com/layervai/qurl-mcp/issues/370)) ([e3d6d6b](https://github.com/layervai/qurl-mcp/commit/e3d6d6b33a4360603b5338c4e60530e98d6e8e32))
+
 ## [0.9.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.8.3...qurl-mcp-v0.9.0) (2026-10-31)
 
 
