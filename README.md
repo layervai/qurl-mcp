@@ -260,8 +260,8 @@ email_capture, review, or contract access. `manage_crid_access` changes the
 policy with its current version, sends invitations, lists grants, approves
 or denies requests, and removes access. The tools return resource-scoped
 receipts and omit invitation secrets and bearer links. Local apps use the
-qURL CLI on the publisher machine. In local mode, `app_name` is required and sets and confirms
-the public preview name through `qurl preview set` (requires a CLI with that command).
+qURL CLI 4.0.1 or later on the publisher machine. In local mode, `app_name` names the
+resource at publish time. The tool confirms the name through `qurl preview set`.
 If naming fails, the tool returns an error with the published CRID and recovery
 instructions. It does not delete or republish the resource. Callers must now
 provide `app_name`; use the user's app name or a short neutral name without

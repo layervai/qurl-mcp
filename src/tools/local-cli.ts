@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { QurlCliError, type IQurlCli } from "../qurl-cli.js";
-import { toStructuredContent, zodErrorToToolResult, type ToolAnnotations } from "./_shared.js";
+import { publicName, toStructuredContent, zodErrorToToolResult, type ToolAnnotations } from "./_shared.js";
 import { normalizeCRID, parseTTLSeconds } from "./share-by-crid.js";
 
 /**
@@ -170,9 +170,7 @@ const publishInput = z
       .describe(
         "What to publish: a local app as http://127.0.0.1:PORT, http://localhost:PORT, or http://[::1]:PORT (no path), or a remote http(s) URL. A local app must already be running.",
       ),
-    app_name: plainText(100)
-      .trim()
-      .min(1)
+    app_name: publicName(100)
       .describe(
         "Public app name shown before access. Always provide a short name; use the requested name or choose a neutral one. Keep secrets and recipient details out.",
       ),

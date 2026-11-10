@@ -193,7 +193,7 @@ describe("CLI-backed tools", () => {
       },
     );
 
-    it.each([" ", "x".repeat(101), "name\nsecret"])(
+    it.each([" ", "x".repeat(101), "name\nsecret", "hidden\u200Bname"])(
       "rejects invalid public names before publication",
       async (app_name) => {
         const runJson = vi.fn();
