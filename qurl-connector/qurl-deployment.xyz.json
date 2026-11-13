@@ -1,0 +1,10 @@
+{
+  "issuers": [
+    {
+      "kid": "qurl-issuer-sandbox-2026-07",
+      "spki_der_b64": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENFdduoxTKKqu1ofCbYljF9Y-dbjYZvz424EzoO0xfmIK4sHCi8HbM7-nBb9BTXxHRFdh3dXIcSuaWBRmXxtnmw"
+    }
+  ],
+  "cells": [],
+  "relay_allowlist": ["relay.qurl.link.layerv.xyz"]
+}
