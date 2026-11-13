@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.10.0...qurl-mcp-v0.11.0) (2026-11-13)
+
+
+### Features
+
+* add session-aware qURL MCP connector ([#336](https://github.com/layervai/qurl-mcp/issues/336)) ([5fa4f9b](https://github.com/layervai/qurl-mcp/commit/5fa4f9b2dc68b32ed5893d1688eb97a58dd33c63))
+
+
+### Bug Fixes
+
+* document actual resource list defaults ([#359](https://github.com/layervai/qurl-mcp/issues/359)) ([b193a09](https://github.com/layervai/qurl-mcp/commit/b193a0976a99e5e400c51e04a74456bcb77d2db4))
+
 ## [0.10.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.9.0...qurl-mcp-v0.10.0) (2026-11-10)
 
 
