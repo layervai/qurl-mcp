@@ -46,7 +46,8 @@ deployment, replace `deploymentPath` and allow its link host explicitly.
 `listenAddr` defaults to `127.0.0.1:3100`. The connector does not authenticate
 its clients and spends the configured qURL credential on their behalf, so bind
 it to a non-loopback address only behind a network boundary or an
-authenticating proxy.
+authenticating proxy. The MCP endpoint rejects requests with an `Origin` header.
+Connect with a native MCP client.
 
 `deploymentPath` is resolved relative to the JSON configuration file. If it is
 omitted, the connector uses `QURL_DEPLOYMENT`. `apiBaseUrl` and `apiKey` are

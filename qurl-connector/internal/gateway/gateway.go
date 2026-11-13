@@ -121,6 +121,11 @@ func (g *Gateway) handleHealth(writer http.ResponseWriter, _ *http.Request) {
 }
 
 func (g *Gateway) handleMCP(writer http.ResponseWriter, request *http.Request) {
+	// This unauthenticated endpoint is for native MCP clients only.
+	if len(request.Header.Values("Origin")) != 0 {
+		http.Error(writer, "browser origins are not allowed", http.StatusForbidden)
+		return
+	}
 	if request.Method != http.MethodPost && request.Method != http.MethodGet && request.Method != http.MethodDelete {
 		writer.Header().Set("Allow", "POST, GET, DELETE")
 		http.Error(writer, "method not allowed", http.StatusMethodNotAllowed)

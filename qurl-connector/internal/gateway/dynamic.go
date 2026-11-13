@@ -115,6 +115,7 @@ type dynamicBackend struct {
 	resourceURL *url.URL
 	conn        *backendConn
 	nextID      atomic.Int64
+	closed      bool
 }
 
 type backendConn struct {
@@ -537,6 +538,9 @@ func (s *dynamicSession) backend(crid string) (*dynamicBackend, error) {
 func (g *Gateway) ensureBackend(ctx context.Context, session *dynamicSession, backend *dynamicBackend) (*backendConn, error) {
 	backend.mu.Lock()
 	defer backend.mu.Unlock()
+	if backend.closed {
+		return nil, &backendError{public: "MCP session is closed", err: errors.New("dynamic backend closed")}
+	}
 	if backend.conn != nil {
 		return backend.conn, nil
 	}
@@ -739,6 +743,7 @@ func (g *Gateway) closeDynamicSession(ctx context.Context, session *dynamicSessi
 	for _, backend := range backends {
 		backend.mu.Lock()
 		conn := backend.conn
+		backend.closed = true
 		backend.conn, backend.portal, backend.resourceURL = nil, nil, nil
 		backend.mu.Unlock()
 		if conn == nil || conn.sessionID == "" {

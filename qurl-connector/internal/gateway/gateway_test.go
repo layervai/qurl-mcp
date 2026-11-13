@@ -428,3 +428,33 @@ func TestGatewayStreamsMCPSSE(t *testing.T) {
 		t.Fatalf("SSE was not streamed: flushed=%t body=%q", recorder.Flushed, recorder.Body.String())
 	}
 }
+
+func TestGatewayRejectsBrowserOriginBeforeSharing(t *testing.T) {
+	resolver := &recordingResolver{}
+	gateway := NewWithResolver(Config{}, resolver)
+	request := httptest.NewRequest(http.MethodPost, "/mcp?crid=resource", nil)
+	request.Header.Set("Origin", "null")
+	response := httptest.NewRecorder()
+
+	gateway.Handler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusForbidden || resolver.called != 0 {
+		t.Fatalf("status=%d share calls=%d", response.Code, resolver.called)
+	}
+}
+
+func TestClosedDynamicSessionDoesNotReopenBackend(t *testing.T) {
+	resolver := &recordingResolver{}
+	gateway := NewWithResolver(Config{}, resolver)
+	session := &dynamicSession{backends: make(map[string]*dynamicBackend)}
+	backend, err := session.backend("resource")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gateway.closeDynamicSession(context.Background(), session)
+
+	_, err = gateway.ensureBackend(context.Background(), session, backend)
+	if err == nil || resolver.called != 0 {
+		t.Fatalf("error=%v share calls=%d", err, resolver.called)
+	}
+}
