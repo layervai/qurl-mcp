@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.0...qurl-mcp-v0.11.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* document locked dependencies for MCP source installs ([#394](https://github.com/layervai/qurl-mcp/issues/394)) ([42cb181](https://github.com/layervai/qurl-mcp/commit/42cb181c975b33b68008b5059f52ffd1be84f7b0))
+
 ## [0.11.0](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.10.0...qurl-mcp-v0.11.0) (2026-11-13)
 
 
