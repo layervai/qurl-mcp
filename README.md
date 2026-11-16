@@ -426,6 +426,8 @@ boundary.
 npm install
 ```
 
+For a reproducible source installation, run `npm ci` to use the dependency versions in `package-lock.json`.
+
 For a local stdio-only source install, use `npm install --omit=optional`; this
 omits the AWS SDK. HTTP deployments using the DynamoDB credential quota must use
 the ordinary install so the optional SDK is packaged.
