@@ -1,10 +1,19 @@
-# qURL MCP server for temporary access links
+# qURL MCP — share your app. Keep it invisible by default.
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
-Give an AI agent tools to share localhost web apps, private APIs, and selected
-files through expiring [qURL™ by LayerV](https://layerv.ai/qurl/) access links.
-This repository implements the Model Context Protocol server for that workflow.
+**Zero public port exposure.** Powered by OpenNHP, [qURL™ by LayerV](https://layerv.ai/qurl/)
+keeps the route to your app invisible by default. AI scanners have no public app
+port to find, probe, or attack.
+
+This is qURL’s **cryptographic default invisibility posture**. A valid
+cryptographic knock opens a temporary private route to the app running on your
+machine.
+
+Ask your coding agent: **“Give Maya a qURL to try the checkout flow running on my laptop.”**
+Your agent creates an expiring qURL. Maya opens it in her browser, and your app
+stays on your machine.
+
 The `@layervai/qurl-mcp` package runs as a local stdio server backed by the
 qURL CLI or API, or as an authenticated remote HTTP server backed by the API.
 
