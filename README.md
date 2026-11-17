@@ -2,9 +2,9 @@
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
-**Zero public port exposure.** Powered by OpenNHP, [qURL™ by LayerV](https://layerv.ai/qurl/)
-keeps the route to your app invisible by default. AI scanners have no public app
-port to find, probe, or attack.
+**Zero public port exposure.** When you share a localhost app, OpenNHP-powered
+[qURL™ by LayerV](https://layerv.ai/qurl/) keeps the route to your app invisible
+by default. AI scanners have no public app port to find, probe, or attack.
 
 This is qURL’s **cryptographic default invisibility posture**. A valid
 cryptographic knock opens a temporary private route to the app running on your
