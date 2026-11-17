@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.4](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.3...qurl-mcp-v0.11.4) (2026-11-17)
+
+
+### Bug Fixes
+
+* keep the qURL MCP description within npm's display limit ([#406](https://github.com/layervai/qurl-mcp/issues/406)) ([6920411](https://github.com/layervai/qurl-mcp/commit/692041175f0344c01f54488b758042e268ed7d9c))
+
 ## [0.11.3](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.2...qurl-mcp-v0.11.3) (2026-11-17)
 
 
