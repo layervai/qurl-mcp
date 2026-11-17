@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.1...qurl-mcp-v0.11.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* link MCP Registry visitors to qURL setup ([76babcb](https://github.com/layervai/qurl-mcp/commit/76babcbefe94ba47e40415b794c981180c77ed6a))
+
 ## [0.11.1](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.0...qurl-mcp-v0.11.1) (2026-11-16)
 
 
