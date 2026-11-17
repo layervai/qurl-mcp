@@ -1,7 +1,7 @@
 {
   "name": "@layervai/qurl-mcp",
   "version": "0.11.2",
-  "description": "MCP server for qURL™ — secure link management for AI agents. Quantum URL is how you enter the hidden layer of the internet.",
+  "description": "qURL’s world-changing innovation: default invisibility posture. Powered by OpenNHP, qURL keeps the route to an app invisible by default. Zero port exposure means AI scanners have no app port to find or probe. Expiring links and MCP make that innovation easy to use.",
   "mcpName": "io.github.layervai/qurl-mcp",
   "type": "module",
   "bin": {
