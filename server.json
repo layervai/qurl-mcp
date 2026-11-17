@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.layervai/qurl-mcp",
   "title": "qURL",
-  "description": "Mint, resolve, audit, and rotate scope-limited expiring access links (qURLs) for AI agents.",
+  "description": "Share local apps with approved reviewers. Identity before connection; zero public inbound app ports.",
   "websiteUrl": "https://qurl.link/?utm_source=mcp-registry&utm_medium=referral&utm_campaign=first-share-pilot#mcp",
   "repository": {
     "url": "https://github.com/layervai/qurl-mcp",
