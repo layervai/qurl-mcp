@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.3](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.2...qurl-mcp-v0.11.3) (2026-11-17)
+
+
+### Bug Fixes
+
+* explain qURL's default invisibility in the MCP listing ([#404](https://github.com/layervai/qurl-mcp/issues/404)) ([a3778c1](https://github.com/layervai/qurl-mcp/commit/a3778c177d46f00f6ba112a16767485b7e2a08a7))
+
 ## [0.11.2](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.1...qurl-mcp-v0.11.2) (2026-11-17)
 
 
