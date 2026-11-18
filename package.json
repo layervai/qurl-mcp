@@ -1,6 +1,6 @@
 {
   "name": "@layervai/qurl-mcp",
-  "version": "0.11.4",
+  "version": "0.11.5",
   "description": "Share local apps with approved reviewers and AI agents: identity first, then connection. qURL’s world-changing innovation: default invisibility posture. Powered by OpenNHP, qURL keeps the route to an app invisible by default. Zero port exposure means AI scanners have no app port to find or probe. Expiring links and MCP make it easy to use.",
   "mcpName": "io.github.layervai/qurl-mcp",
   "type": "module",

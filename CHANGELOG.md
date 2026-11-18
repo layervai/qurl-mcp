@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.5](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.4...qurl-mcp-v0.11.5) (2026-11-18)
+
+
+### Bug Fixes
+
+* lead npm discovery with the local sharing task ([#409](https://github.com/layervai/qurl-mcp/issues/409)) ([03d0c14](https://github.com/layervai/qurl-mcp/commit/03d0c142dedafca95d842692af64f3176a4f2e9c))
+
 ## [0.11.4](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.3...qurl-mcp-v0.11.4) (2026-11-17)
 
 
