@@ -1,6 +1,6 @@
 {
   "name": "@layervai/qurl-mcp",
-  "version": "0.11.5",
+  "version": "0.11.6",
   "description": "Share local apps with approved people and agents. qURL uses OpenNHP for cryptographic invisibility: identity first, then connection. Unauthorized AI scans cannot reach the app through qURL. No public inbound app ports; no account or domain setup needed.",
   "mcpName": "io.github.layervai/qurl-mcp",
   "type": "module",
