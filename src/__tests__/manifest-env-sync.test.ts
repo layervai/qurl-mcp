@@ -14,6 +14,15 @@ describe("published stdio environment manifests", () => {
   const gitignore = readFileSync(".gitignore", "utf8");
   const publishedVariables = serverManifest.packages[0]?.environmentVariables ?? [];
 
+  it("keeps npm discovery copy within the published description limit", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { description: string };
+    expect(pkg.description).toBeTypeOf("string");
+    expect(
+      pkg.description.length,
+      "npm truncates descriptions beyond 255 characters",
+    ).toBeLessThanOrEqual(255);
+  });
+
   it("keeps every server.json variable in the Smithery command mapping", () => {
     for (const variable of publishedVariables) {
       expect(smitheryManifest).toContain(`${variable.name}:`);
