@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.6](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.5...qurl-mcp-v0.11.6) (2026-11-18)
+
+
+### Bug Fixes
+
+* keep npm discovery copy complete within its display limit ([#411](https://github.com/layervai/qurl-mcp/issues/411)) ([e1231d2](https://github.com/layervai/qurl-mcp/commit/e1231d255caa38b816849af61012dd8c937d68a8))
+
 ## [0.11.5](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.4...qurl-mcp-v0.11.5) (2026-11-18)
 
 
