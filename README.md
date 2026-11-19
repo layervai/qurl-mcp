@@ -15,6 +15,9 @@ qURL does not close other public routes you have already opened to the app.
 
 ## What you can do in two minutes
 
+The local app and invitation flow below uses no-account mode with the local qURL CLI.
+Uploads use account mode; see [upload tools](#upload-tools).
+
 | You want to… | Tool |
 | --- | --- |
 | Publish a local app privately | `publish_crid` with `target_url`, `app_name`, and `policy: { "mode": "invite_only" }` |
@@ -40,12 +43,14 @@ Then ask: "Share the app on localhost:3000 with maya@example.com."
 - Package: `@layervai/qurl-mcp` · binaries `qurl-mcp` (stdio) and `qurl-mcp-http` (remote HTTP) · Node.js 22.12 or later
 - No-account mode (no `QURL_API_KEY`): the server drives the local `qurl` CLI, and
   the first publish creates this machine's identity
-- Account mode: set `QURL_API_KEY` for the full tool set, including links, sessions, and uploads
-- Core flow: `publish_crid` with `policy: { "mode": "invite_only" }` returns `consumer_access` and `resource_url` →
+- Account mode: set `QURL_API_KEY` for API tools, including links, sessions, and uploads.
+  For local app publishing and sharing controls, use no-account mode.
+  See [account-backed client configuration](#mcp-client-example).
+- Local CLI flow: `publish_crid` with `policy: { "mode": "invite_only" }` returns `consumer_access` and `resource_url` →
   `manage_crid_access` `invite` → `list_grants` to review who has access.
   Include `resource_url` in your answer.
 - `app_name` is required: a short public name, with no secrets or recipient details
-- New resources are published private; a target that was already public stays public
+- Local CLI publishing: new resources are published private; a target that was already public stays public
   (see the `kept_public` warning).
 - Related: [qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli) ·
   [Python SDK](https://github.com/layervai/qurl-python) ·
@@ -243,8 +248,7 @@ ask for access.
 The tools follow the same rules as the qURL agent skill
 (<https://layerv.ai/skills/qurl/SKILL.md>):
 
-- New resources are published private; a target that was already public stays public
-  (see the `kept_public` warning).. These tools have no option to publish
+- Everything is published private. These tools have no option to publish
   publicly.
 - A pending access request is approved only with the six-digit code the
   person gives you. No listing shows a code, and no tool approves by name:
