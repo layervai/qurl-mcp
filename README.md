@@ -20,8 +20,11 @@ qURL does not close other public routes you have already opened to the app.
 | Publish a local app privately | `publish_crid` with `target_url`, `app_name`, and `policy: { "mode": "invite_only" }` |
 | Invite someone by email | `manage_crid_access` with `action: "invite"` and `email` |
 | See who has access, or remove someone | `manage_crid_access` with `action: "list_grants"` or `"revoke_grant"` |
-| Pause, resume, or restart sharing | `set_crid_sharing` |
+| Stop, start, or restart local app sharing | `set_crid_sharing` with `action: "stop"`, `"start"`, or `"restart"` |
 | Share a PDF or image (account key + connector; see [upload tools](#upload-tools)) | `upload_file_qurl` or `upload_file_data_qurl` |
+
+For pending invitations, use `list_invitations` or `revoke_invitation` with
+`manage_crid_access`. Both revoke actions need `id` and `expected_version` from a listing.
 
 Quickest start: [install the qURL CLI](#quick-start-no-account-needed), then add the server.
 In Claude Code:
@@ -38,11 +41,12 @@ Then ask: "Share the app on localhost:3000 with maya@example.com."
 - No-account mode (no `QURL_API_KEY`): the server drives the local `qurl` CLI, and
   the first publish creates this machine's identity
 - Account mode: set `QURL_API_KEY` for the full tool set, including links, sessions, and uploads
-- Core flow: `publish_crid` returns `consumer_access` and `resource_url` →
+- Core flow: `publish_crid` with `policy: { "mode": "invite_only" }` returns `consumer_access` and `resource_url` →
   `manage_crid_access` `invite` → `list_grants` to review who has access.
   Include `resource_url` in your answer.
 - `app_name` is required: a short public name, with no secrets or recipient details
-- Everything is published private
+- New resources are published private; a target that was already public stays public
+  (see the `kept_public` warning).
 - Related: [qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli) ·
   [Python SDK](https://github.com/layervai/qurl-python) ·
   [TypeScript SDK](https://github.com/layervai/qurl-typescript) ·
@@ -239,7 +243,8 @@ ask for access.
 The tools follow the same rules as the qURL agent skill
 (<https://layerv.ai/skills/qurl/SKILL.md>):
 
-- Everything is published private. These tools have no option to publish
+- New resources are published private; a target that was already public stays public
+  (see the `kept_public` warning).. These tools have no option to publish
   publicly.
 - A pending access request is approved only with the six-digit code the
   person gives you. No listing shows a code, and no tool approves by name:
