@@ -1,13 +1,17 @@
-# qURL MCP server
+# qURL MCP — share apps that stay invisible by default
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
-**Ask your AI agent to share the app on your laptop with exactly the people you name.**
-Say "share the checkout flow on localhost:3000 with maya@example.com" and your
-agent publishes the app privately through qURL and invites Maya by email.
-Only the people you invite get in. Maya just clicks the link, and your app
-stays on your machine with no open inbound port. Works in Claude Code, Claude
-Desktop, Cursor, Codex, and any MCP client, with no account needed to start.
+**Default invisibility. Zero public app-port exposure.**
+qURL lets your AI agent share your app without exposing a public app port.
+AI scanners have no app port to find or probe.
+
+Ask your agent: **“Share the checkout flow on localhost:3000 with maya@example.com.”**
+Your agent publishes the app privately through qURL and sends Maya an invitation.
+Maya follows the emailed invitation to get access. Your app stays on your machine.
+Works in Claude Code, Claude Desktop, Cursor, and Codex, with no account needed to start.
+
+qURL does not close other public routes you have already opened to the app.
 
 ## What you can do in two minutes
 
@@ -17,7 +21,7 @@ Desktop, Cursor, Codex, and any MCP client, with no account needed to start.
 | Invite someone by email | `manage_crid_access` with `action: "invite"` and `email` |
 | See who has access, or remove someone | `manage_crid_access` with `action: "list_grants"` or `"revoke_grant"` |
 | Pause, resume, or restart sharing | `set_crid_sharing` |
-| Share a PDF or image (account key) | `upload_file_qurl` or `upload_file_data_qurl` |
+| Share a PDF or image (account key + connector; see [upload tools](#upload-tools)) | `upload_file_qurl` or `upload_file_data_qurl` |
 
 Quickest start: [install the qURL CLI](#quick-start-no-account-needed), then add the server.
 In Claude Code:
@@ -26,7 +30,7 @@ In Claude Code:
 claude mcp add qurl -- npx -y @layervai/qurl-mcp
 ```
 
-Then ask: "Share the app on localhost:3000 with ana@example.com."
+Then ask: "Share the app on localhost:3000 with maya@example.com."
 
 ### For AI agents and tools
 
@@ -34,8 +38,9 @@ Then ask: "Share the app on localhost:3000 with ana@example.com."
 - No-account mode (no `QURL_API_KEY`): the server drives the local `qurl` CLI, and
   the first publish creates this machine's identity
 - Account mode: set `QURL_API_KEY` for the full tool set, including links, sessions, and uploads
-- Core flow: `publish_crid` → read `consumer_access` with `list_crids` →
-  `manage_crid_access` `invite` → `list_grants` to review who has access
+- Core flow: `publish_crid` returns `consumer_access` and `resource_url` →
+  `manage_crid_access` `invite` → `list_grants` to review who has access.
+  Include `resource_url` in your answer.
 - `app_name` is required: a short public name, with no secrets or recipient details
 - Everything is published private
 - Related: [qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli) ·
