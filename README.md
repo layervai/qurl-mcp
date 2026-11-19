@@ -1,30 +1,61 @@
-# qURL MCP — default invisibility posture
+# qURL MCP — share apps that stay invisible by default
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
-qURL’s world-changing innovation: **default invisibility posture**. Powered by
-OpenNHP, qURL keeps the route to an app invisible by default. **Zero port
-exposure** means AI scanners have no app port to find or probe. Expiring links
-and MCP make that innovation easy to use.
+**Default invisibility. Zero public app-port exposure.**
+qURL lets your AI agent share your app without exposing a public app port.
+AI scanners have no app port to find or probe.
 
-Ask your coding agent: **“Give Maya a qURL to try the checkout flow running on my laptop.”**
-Your agent publishes the localhost app through qURL and creates an expiring
-qURL. Maya opens it in her browser, and your app stays on your machine.
+Ask your agent: **“Share the checkout flow on localhost:3000 with maya@example.com.”**
+Your agent publishes the app privately through qURL and sends Maya an invitation.
+Maya follows the emailed invitation to get access. Your app stays on your machine.
+Works in Claude Code, Claude Desktop, Cursor, and Codex, with no account needed to start.
 
-The `@layervai/qurl-mcp` package runs as a local stdio server backed by the
-qURL CLI or API, or as an authenticated remote HTTP server backed by the API.
+qURL does not close other public routes you have already opened to the app.
 
-Start with the [no-account local quickstart](#quick-start-no-account-needed)
-or [account-backed client configuration](#mcp-client-example), then choose
-the tools for your task. In local mode, `publish_crid` runs the installed
-CLI to publish an app that is already running; `share_by_crid` issues its
-access link. Creating a link alone does not publish an app or restrict an
-existing public URL. Uploads require the account-backed tool set and use a separate connector lifecycle;
-see [upload tools](#upload-tools) for their supported options and limits.
+## What you can do in two minutes
 
-[Local app sharing](#let-an-ai-agent-share-a-localhost-preview) ·
-[File sharing](#let-an-ai-agent-share-a-pdf-or-image) ·
-[Sharing questions](#mcp-sharing-questions) · [Private links](https://qurl.link/)
+The local app and invitation flow below uses no-account mode with the local qURL CLI.
+Uploads use account mode; see [upload tools](#upload-tools).
+
+| You want to… | Tool |
+| --- | --- |
+| Publish a local app privately | `publish_crid` with `target_url`, `app_name`, and `policy: { "mode": "invite_only" }` |
+| Invite someone by email | `manage_crid_access` with `action: "invite"` and `email` |
+| See who has access, or remove someone | `manage_crid_access` with `action: "list_grants"` or `"revoke_grant"` |
+| Stop, start, or restart local app sharing | `set_crid_sharing` with `action: "stop"`, `"start"`, or `"restart"` |
+| Share a PDF or image (account key + connector; see [upload tools](#upload-tools)) | `upload_file_qurl` or `upload_file_data_qurl` |
+
+For pending invitations, use `list_invitations` or `revoke_invitation` with
+`manage_crid_access`. Both revoke actions need `id` and `expected_version` from a listing.
+
+Quickest start: [install the qURL CLI](#quick-start-no-account-needed), then add the server.
+In Claude Code:
+
+```bash
+claude mcp add qurl -- npx -y @layervai/qurl-mcp
+```
+
+Then ask: "Share the app on localhost:3000 with maya@example.com."
+
+### For AI agents and tools
+
+- Package: `@layervai/qurl-mcp` · binaries `qurl-mcp` (stdio) and `qurl-mcp-http` (remote HTTP) · Node.js 22.12 or later
+- No-account mode (no `QURL_API_KEY`): the server drives the local `qurl` CLI, and
+  the first publish creates this machine's identity
+- Account mode: set `QURL_API_KEY` for API tools, including links, sessions, and uploads.
+  For local app publishing and sharing controls, use no-account mode.
+  See [account-backed client configuration](#mcp-client-example).
+- Local CLI flow: `publish_crid` with `policy: { "mode": "invite_only" }` returns `consumer_access` and `resource_url` →
+  `manage_crid_access` `invite` → `list_grants` to review who has access.
+  Include `resource_url` in your answer.
+- `app_name` is required: a short public name, with no secrets or recipient details
+- Local CLI publishing: new resources are published private; a target that was already public stays public
+  (see the `kept_public` warning).
+- Related: [qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli) ·
+  [Python SDK](https://github.com/layervai/qurl-python) ·
+  [TypeScript SDK](https://github.com/layervai/qurl-typescript) ·
+  [LayerV MCP guide](https://layerv.ai/mcp/)
 
 > **⚠️ Renamed from `@layerv/qurl-mcp` in v0.4.0.** The old package is deprecated and will not receive further updates. If you're using `@layerv/qurl-mcp@0.3.x`, swap the scope in your MCP client config — same binary, same API key, no other changes.
 
