@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.7](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.6...qurl-mcp-v0.11.7) (2026-11-19)
+
+
+### Bug Fixes
+
+* **client:** identify MCP requests in usage metrics ([#414](https://github.com/layervai/qurl-mcp/issues/414)) ([90c5e4d](https://github.com/layervai/qurl-mcp/commit/90c5e4d95ded06b54c0d810fd7efc04fbc23a82c))
+
 ## [0.11.6](https://github.com/layervai/qurl-mcp/compare/qurl-mcp-v0.11.5...qurl-mcp-v0.11.6) (2026-11-18)
 
 
