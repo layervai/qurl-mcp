@@ -10,6 +10,7 @@
  */
 
 import { QURLClient as SDKQURLClient, QURLError } from "@layervai/qurl";
+import { MCP_CLIENT_PRODUCT } from "./client-product.js";
 import { markRequestCredentialValidated } from "./auth/request-context.js";
 import type {
   ConsumerAccessPolicy,
@@ -513,7 +514,11 @@ export class QURLClient implements IQURLClient {
       throw new QURLAPIError(0, "missing_api_key", MISSING_API_KEY_MESSAGE);
     }
     if (!this._sdk) {
-      this._sdk = new SDKQURLClient({ apiKey: this.apiKey, baseUrl: this.baseURL });
+      this._sdk = new SDKQURLClient({
+        apiKey: this.apiKey,
+        baseUrl: this.baseURL,
+        userAgent: MCP_CLIENT_PRODUCT,
+      });
     }
     return this._sdk;
   }
@@ -665,6 +670,7 @@ export class QURLClient implements IQURLClient {
           method: "POST",
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
+            "User-Agent": MCP_CLIENT_PRODUCT,
             Accept: "application/json",
             "Content-Type": "application/json",
           },

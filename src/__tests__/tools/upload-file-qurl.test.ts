@@ -1,3 +1,4 @@
+import { MCP_CLIENT_PRODUCT } from "../../client-product.js";
 import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { resolve, join } from "node:path";
@@ -136,6 +137,13 @@ describe("uploadFileQurlTool", () => {
         expires_in: "2h",
         session_duration: "15m",
       });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://connector.test/api/upload",
+        expect.objectContaining({
+          headers: expect.objectContaining({ "User-Agent": MCP_CLIENT_PRODUCT }),
+        }),
+      );
 
       // Regression (qurl-mcp#278): the upload resource's own qURL is not a
       // viewable page, so the link must come from the connector's mint route.

@@ -11,6 +11,7 @@ import {
   sanitizeCliText,
 } from "../qurl-cli.js";
 import { makeFakeQurl, type FakeQurl } from "./fake-qurl.js";
+import { MCP_CLIENT_PRODUCT } from "../client-product.js";
 
 describe("QurlCli", () => {
   let fake: FakeQurl;
@@ -58,6 +59,25 @@ describe("QurlCli", () => {
     await cli.runJson(["list"]);
 
     expect(fake.calls()[0]?.hasApiKey).toBe(false);
+  });
+
+  it("identifies the MCP host in the child without changing the parent environment", async () => {
+    const dir = emptyDir();
+    const binary = join(dir, "qurl");
+    writeFileSync(
+      binary,
+      `#!${process.execPath}\nprocess.stdout.write(JSON.stringify({ product: process.env.QURL_CLIENT_PRODUCT, hasApiKey: "QURL_API_KEY" in process.env }));\n`,
+    );
+    chmodSync(binary, 0o755);
+    const env = { PATH: dir, QURL_CLIENT_PRODUCT: "other-host/1.0.0", QURL_API_KEY: "" };
+    const cli = new QurlCli({ env, fallbackDirs: [] });
+
+    await expect(cli.runJson(["list"])).resolves.toEqual({
+      product: MCP_CLIENT_PRODUCT,
+      hasApiKey: false,
+    });
+    expect(env.QURL_CLIENT_PRODUCT).toBe("other-host/1.0.0");
+    expect(env.QURL_API_KEY).toBe("");
   });
 
   it("returns the install instruction when qurl is not on PATH or in the fallback dirs", async () => {
