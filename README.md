@@ -1,30 +1,47 @@
-# qURL MCP — default invisibility posture
+# qURL MCP server
 
 [![npm version](https://img.shields.io/npm/v/@layervai/qurl-mcp.svg)](https://www.npmjs.com/package/@layervai/qurl-mcp)
 
-qURL’s world-changing innovation: **default invisibility posture**. Powered by
-OpenNHP, qURL keeps the route to an app invisible by default. **Zero port
-exposure** means AI scanners have no app port to find or probe. Expiring links
-and MCP make that innovation easy to use.
+**Ask your AI agent to share the app on your laptop with exactly the people you name.**
+Say "share the checkout flow on localhost:3000 with maya@example.com" and your
+agent publishes the app privately through qURL and invites Maya by email.
+Only the people you invite get in. Maya just clicks the link, and your app
+stays on your machine with no open inbound port. Works in Claude Code, Claude
+Desktop, Cursor, Codex, and any MCP client, with no account needed to start.
 
-Ask your coding agent: **“Give Maya a qURL to try the checkout flow running on my laptop.”**
-Your agent publishes the localhost app through qURL and creates an expiring
-qURL. Maya opens it in her browser, and your app stays on your machine.
+## What you can do in two minutes
 
-The `@layervai/qurl-mcp` package runs as a local stdio server backed by the
-qURL CLI or API, or as an authenticated remote HTTP server backed by the API.
+| You want to… | Tool |
+| --- | --- |
+| Publish a local app privately | `publish_crid` with `target_url`, `app_name`, and `policy: { "mode": "invite_only" }` |
+| Invite someone by email | `manage_crid_access` with `action: "invite"` and `email` |
+| See who has access, or remove someone | `manage_crid_access` with `action: "list_grants"` or `"revoke_grant"` |
+| Pause, resume, or restart sharing | `set_crid_sharing` |
+| Share a PDF or image (account key) | `upload_file_qurl` or `upload_file_data_qurl` |
 
-Start with the [no-account local quickstart](#quick-start-no-account-needed)
-or [account-backed client configuration](#mcp-client-example), then choose
-the tools for your task. In local mode, `publish_crid` runs the installed
-CLI to publish an app that is already running; `share_by_crid` issues its
-access link. Creating a link alone does not publish an app or restrict an
-existing public URL. Uploads require the account-backed tool set and use a separate connector lifecycle;
-see [upload tools](#upload-tools) for their supported options and limits.
+Quickest start: [install the qURL CLI](#quick-start-no-account-needed), then add the server.
+In Claude Code:
 
-[Local app sharing](#let-an-ai-agent-share-a-localhost-preview) ·
-[File sharing](#let-an-ai-agent-share-a-pdf-or-image) ·
-[Sharing questions](#mcp-sharing-questions) · [Private links](https://qurl.link/)
+```bash
+claude mcp add qurl -- npx -y @layervai/qurl-mcp
+```
+
+Then ask: "Share the app on localhost:3000 with ana@example.com."
+
+### For AI agents and tools
+
+- Package: `@layervai/qurl-mcp` · binaries `qurl-mcp` (stdio) and `qurl-mcp-http` (remote HTTP) · Node.js 22.12 or later
+- No-account mode (no `QURL_API_KEY`): the server drives the local `qurl` CLI, and
+  the first publish creates this machine's identity
+- Account mode: set `QURL_API_KEY` for the full tool set, including links, sessions, and uploads
+- Core flow: `publish_crid` → read `consumer_access` with `list_crids` →
+  `manage_crid_access` `invite` → `list_grants` to review who has access
+- `app_name` is required: a short public name, with no secrets or recipient details
+- Everything is published private
+- Related: [qURL CLI](https://github.com/layervai/qurl-integrations/tree/main/apps/cli) ·
+  [Python SDK](https://github.com/layervai/qurl-python) ·
+  [TypeScript SDK](https://github.com/layervai/qurl-typescript) ·
+  [LayerV MCP guide](https://layerv.ai/mcp/)
 
 > **⚠️ Renamed from `@layerv/qurl-mcp` in v0.4.0.** The old package is deprecated and will not receive further updates. If you're using `@layerv/qurl-mcp@0.3.x`, swap the scope in your MCP client config — same binary, same API key, no other changes.
 
