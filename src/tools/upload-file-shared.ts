@@ -1,3 +1,4 @@
+import { MCP_CLIENT_PRODUCT } from "../client-product.js";
 import { Buffer } from "node:buffer";
 import { basename, extname } from "node:path";
 import {
@@ -629,6 +630,7 @@ export async function mintUploadedFileLink(
       method: "POST",
       headers: {
         Authorization: `Bearer ${connectorConfig.apiKey}`,
+        "User-Agent": MCP_CLIENT_PRODUCT,
         Accept: "application/json",
         "Content-Type": "application/json",
       },
@@ -819,6 +821,7 @@ export async function uploadToConnector(
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
+      "User-Agent": MCP_CLIENT_PRODUCT,
       Accept: "application/json",
     },
     body: form, // lgtm[js/file-access-to-http]

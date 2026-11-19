@@ -56,6 +56,7 @@ vi.mock("@layervai/qurl", async (importOriginal) => {
 
 import { QURLClient, QURLAPIError, MISSING_API_KEY_MESSAGE } from "../client.js";
 import { createQurlClientFromBearerToken } from "../auth/static-bearer.js";
+import { MCP_CLIENT_PRODUCT } from "../client-product.js";
 import { runWithRequestAuthContext } from "../auth/request-context.js";
 import {
   AuthenticationError,
@@ -109,6 +110,7 @@ describe("QURLClient adapter", () => {
       expect(SDKClientMock).toHaveBeenCalledWith({
         apiKey: "lv_live_key",
         baseUrl: "https://api.test.layerv.ai",
+        userAgent: MCP_CLIENT_PRODUCT,
       });
     });
 
@@ -127,10 +129,12 @@ describe("QURLClient adapter", () => {
       expect(SDKClientMock).toHaveBeenNthCalledWith(1, {
         apiKey: "lv_live_caller_a",
         baseUrl: "https://api.test.layerv.ai",
+        userAgent: MCP_CLIENT_PRODUCT,
       });
       expect(SDKClientMock).toHaveBeenNthCalledWith(2, {
         apiKey: "lv_live_caller_b",
         baseUrl: "https://api.test.layerv.ai",
+        userAgent: MCP_CLIENT_PRODUCT,
       });
     });
 
@@ -172,7 +176,10 @@ describe("QURLClient adapter", () => {
         expect.objectContaining({
           method: "POST",
           body: "{}",
-          headers: expect.objectContaining({ Authorization: "Bearer lv_live_key" }),
+          headers: expect.objectContaining({
+            Authorization: "Bearer lv_live_key",
+            "User-Agent": MCP_CLIENT_PRODUCT,
+          }),
         }),
       );
       expect(out.data.qurl).toBe("https://qurl.link/#at_share");

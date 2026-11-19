@@ -1,3 +1,4 @@
+import { MCP_CLIENT_PRODUCT } from "../../client-product.js";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -36,7 +37,10 @@ it("uses the HTTP caller credential and marks it validated only after minting", 
     "https://connector.test/api/mint_link/r_upload12345",
     expect.objectContaining({
       method: "POST",
-      headers: expect.objectContaining({ Authorization: "Bearer lv_caller_key" }),
+      headers: expect.objectContaining({
+        Authorization: "Bearer lv_caller_key",
+        "User-Agent": MCP_CLIENT_PRODUCT,
+      }),
       redirect: "error",
     }),
   );

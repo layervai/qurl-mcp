@@ -1,3 +1,4 @@
+import { MCP_CLIENT_PRODUCT } from "./client-product.js";
 import { Buffer } from "node:buffer";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { spawn } from "node:child_process";
@@ -264,6 +265,7 @@ export class QurlCli implements IQurlCli {
     // environment must not reach the CLI, where it reads as a bad credential.
     const env = { ...this.env };
     delete env.QURL_API_KEY;
+    env.QURL_CLIENT_PRODUCT = MCP_CLIENT_PRODUCT;
     return env;
   }
 
