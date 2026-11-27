@@ -9,6 +9,7 @@ import { registerFeedbackRoute } from "../http-feedback.js";
 import {
   deliverFeedback,
   feedbackWebhookUrl,
+  feedbackSlackMessage,
   redactFeedbackMessage,
   FEEDBACK_URL,
 } from "../services/feedback.js";
@@ -87,8 +88,10 @@ describe("feedback delivery", () => {
     expect(url).toBe(webhook);
     expect(init.redirect).toBe("error");
     const body = JSON.parse(init.body);
-    expect(body.blocks[0].text.type).toBe("plain_text");
-    expect(body.blocks[0].text.text).toContain(receipt.feedback_id);
+    expect(body.blocks[1].text.type).toBe("plain_text");
+    expect(body.blocks[1].text.text).toContain("[link removed] [email removed]");
+    expect(body.blocks[2].elements[0].text).toContain(`Ref ${receipt.feedback_id.slice(0, 8)}`);
+    expect(body.text).toMatch(/^Bug report from AI agent \(MCP\): &lt;!channel&gt; /);
     for (const secret of [
       "test-account-secret",
       "lv_live_secret",
@@ -230,6 +233,57 @@ describe("feedback delivery", () => {
     ])
       expect((await submitFeedbackTool().handler(invalid)).isError).toBe(true);
     expect(mock).not.toHaveBeenCalled();
+  });
+});
+describe("feedback Slack message", () => {
+  const id = "bfe11a3f-c118-4efe-9495-09ed4a232d6e";
+  it.each([
+    ["[qURL Desktop] ", "qURL Desktop", false],
+    ["[qURL Desktop Staging] ", "qURL Desktop", true],
+    ["[qURL Mobile] ", "qURL Mobile", false],
+    ["[qURL Mobile Sandbox] ", "qURL Mobile", true],
+  ] as const)("labels %j reports and strips the prefix", (prefix, source, sandbox) => {
+    const msg = feedbackSlackMessage("bug", undefined, `${prefix}Copy link does nothing`, id);
+    expect(msg.text).toBe(`Bug report from ${source}: Copy link does nothing`);
+    expect(msg.blocks[0].text!.text).toBe(
+      `*:beetle: Bug report*  ·  ${source}${sandbox ? "  ·  Sandbox" : ""}`,
+    );
+    expect(msg.blocks[1].text).toEqual({
+      type: "plain_text",
+      emoji: false,
+      text: "Copy link does nothing",
+    });
+    expect(msg.blocks[2].elements![0].text).toBe("Sent from the app · Ref bfe11a3f");
+  });
+  it.each([
+    ["bug", "*:beetle: Bug report*", "Bug report"],
+    ["feature", "*:bulb: Feature request*", "Feature request"],
+    ["friction", "*:confused: Hard to use*", "Hard to use"],
+    ["other", "*:speech_balloon: Feedback*", "Feedback"],
+  ] as const)("labels agent %s reports as agent-written", (category, header, plain) => {
+    const msg = feedbackSlackMessage(category, "publish_crid", "[qURL Mobile]x", id);
+    expect(msg.text).toBe(`${plain} from AI agent (MCP): [qURL Mobile]x`);
+    expect(msg.blocks[0].text!.text).toBe(`${header}  ·  AI agent (MCP)`);
+    expect(msg.blocks[1].text!.text).toBe("[qURL Mobile]x");
+    expect(msg.blocks[2].elements![0].text).toBe(
+      "Written by an AI agent, not a person · check before acting · Tool: `publish_crid` · Ref bfe11a3f",
+    );
+  });
+  it("names a missing tool, truncates the fallback, and keeps user text out of mrkdwn", () => {
+    const body = `<!channel> *bold* <https://x|y> ${"z".repeat(100)}`;
+    const msg = feedbackSlackMessage("other", undefined, `[qURL Mobile] ${body}`, id);
+    expect(msg.blocks[1].text!.text).toBe(body);
+    expect(msg.text).toBe(
+      `Feedback from qURL Mobile: &lt;!channel&gt; *bold* &lt;https://x|y&gt; ${"z".repeat(47)}…`,
+    );
+    for (const block of [msg.blocks[0].text!, msg.blocks[2].elements![0]]) {
+      expect(block.type).toBe("mrkdwn");
+      expect(block.text).not.toContain("channel");
+      expect(block.text).not.toContain("bold");
+    }
+    expect(
+      feedbackSlackMessage("other", undefined, "agent text", id).blocks[2].elements![0].text,
+    ).toContain("Tool: none ·");
   });
 });
 describe("MCP feedback journey", () => {

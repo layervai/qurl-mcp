@@ -93,17 +93,7 @@ export async function deliverFeedback(input: unknown) {
       signal: globalThis.AbortSignal.timeout(5_000),
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        text: `LayerV MCP feedback ${feedback_id}`,
-        blocks: [
-          {
-            type: "section",
-            text: {
-              type: "plain_text",
-              emoji: false,
-              text: `Untrusted agent feedback - human review required\nID: ${feedback_id}\nCategory: ${report.category}\nTool: ${sanitizeLogValue(report.tool_name ?? "unspecified")}\n${message}`,
-            },
-          },
-        ],
+        ...feedbackSlackMessage(report.category, report.tool_name, message, feedback_id),
         unfurl_links: false,
         unfurl_media: false,
       }),
@@ -124,6 +114,66 @@ export async function deliverFeedback(input: unknown) {
     );
   }
   return { feedback_id, status: "sent_for_human_review" as const };
+}
+
+const CATEGORY_LABELS = {
+  bug: ":beetle: Bug report",
+  feature: ":bulb: Feature request",
+  friction: ":confused: Hard to use",
+  other: ":speech_balloon: Feedback",
+} as const;
+// App clients prefix their reports. The endpoint is public, so a prefix only labels the
+// message; anyone (including an agent) can claim one, and it grants nothing.
+const APP_SOURCES: Record<string, { source: string; sandbox: boolean }> = {
+  "[qURL Desktop] ": { source: "qURL Desktop", sandbox: false },
+  "[qURL Desktop Staging] ": { source: "qURL Desktop", sandbox: true },
+  "[qURL Mobile] ": { source: "qURL Mobile", sandbox: false },
+  "[qURL Mobile Sandbox] ": { source: "qURL Mobile", sandbox: true },
+};
+
+// Only server-chosen strings reach mrkdwn; report text stays plain_text so it cannot mention, link, or format.
+export function feedbackSlackMessage(
+  category: keyof typeof CATEGORY_LABELS,
+  toolName: string | undefined,
+  redactedMessage: string,
+  feedbackId: string,
+) {
+  const prefix = Object.keys(APP_SOURCES).find((p) => redactedMessage.startsWith(p));
+  const app = prefix ? APP_SOURCES[prefix] : undefined;
+  const source = app?.source ?? "AI agent (MCP)";
+  const body = prefix ? redactedMessage.slice(prefix.length) : redactedMessage;
+  const label = CATEGORY_LABELS[category];
+  const ref = `Ref ${feedbackId.slice(0, 8)}`;
+  // Slack parses <, >, & in top-level text even when blocks are present.
+  const preview = (body.length > 80 ? `${body.slice(0, 79)}…` : body)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return {
+    text: `${label.replace(/^:[a-z_]+: /, "")} from ${source}: ${preview}`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*${label}*  ·  ${source}${app?.sandbox ? "  ·  Sandbox" : ""}`,
+        },
+      },
+      { type: "section", text: { type: "plain_text", emoji: false, text: body } },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: app
+              ? `Sent from the app · ${ref}`
+              : // tool_name is schema-limited to [a-z0-9_]; the code span keeps "_" from italicizing.
+                `Written by an AI agent, not a person · check before acting · Tool: ${toolName ? `\`${toolName}\`` : "none"} · ${ref}`,
+          },
+        ],
+      },
+    ],
+  };
 }
 
 export async function readFeedbackResponseText(response: Response, limit: number): Promise<string> {

@@ -1173,8 +1173,11 @@ to 500 characters. `tool_name` is optional. Send only reports the user authorize
 for sharing. Do not include secrets, private links, personal data, or conversation
 history. The service removes known active credentials, qURL API keys, bearer
 credentials, HTTP links, bare qurl.link/www links, and email addresses as a best-effort safeguard. This is
-not a general secret or personal-data detector. Reports are plain text in Slack,
-with link previews disabled. No account identity, client IP, transcript, or
+not a general secret or personal-data detector. Report text is plain text in Slack,
+with link previews disabled. The Slack message labels the category and source:
+qURL Desktop or qURL Mobile when the report starts with that app's prefix
+(for example `[qURL Mobile] `, or `[qURL Mobile Sandbox] ` for a Sandbox tag),
+otherwise an AI agent. The label is unverified, like the rest of the report. No account identity, client IP, transcript, or
 resource content is added to the Slack message.
 
 For the LayerV-operated HTTP service, create a channel-specific Slack incoming
